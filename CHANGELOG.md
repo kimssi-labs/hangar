@@ -3,6 +3,23 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.13.0
+
+- **The CPU clock moves.** It read 3.0 GHz whatever the machine was doing: the processor's base
+  clock was asked of Windows through a slow query that gave up under load, and the fallback was the
+  figure recorded at boot. The base clock is now read from the power manager directly, in an instant,
+  so the live clock is there from the first sample and follows the load.
+- **"This PC" and "Claude usage" are separate.** The CPU, memory and clock gauges belong to the PC
+  monitor; the 5h and 1w gauges belong to Claude usage. Each panel follows its own setting in every
+  shape of the window — before, turning the PC monitor off took the Claude usage gauges, and the whole
+  side panel, down with it. The settings sections are named for what they are.
+- **Quitting always quits.** Closing the window could end the process the way a crash does — measured
+  on one exit in three: the measuring thread was cut off in the middle of a system call — and a
+  process could stay behind with no window at all, which, since only one Hangar runs at a time, made
+  the next launch hand over to the ghost and look as if Hangar would not start. The measuring thread
+  now finishes its sample before the app leaves, every way out goes through the same door, and a
+  watchdog ends a process that is still there ten seconds after its window closed.
+
 ## v2.12.2
 
 - **Minimising a band gives its edge back.** The space a docked band takes is released while the
