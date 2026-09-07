@@ -7,6 +7,7 @@
  * `src/core`, which is why this file is mostly wiring: the parts worth testing are tested without
  * Electron.
  */
+import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, Menu, Notification, screen, shell } from "electron";
 
@@ -188,7 +189,7 @@ const settingsFeature = registerSettings(context, wiring, {
     if (patch.launch) clipboardFeature.rearm();   // the shortcut, and the automatic path, may have changed
     if (patch.ui) {
       if (config.ui().monitor) metricsFeature.start();
-      else metricsFeature.stop();
+      else void metricsFeature.stop();
       chrome?.theme(config.ui().theme);            // Chromium's frame and a band's border follow the page
     }
   },
@@ -284,8 +285,10 @@ async function createWindow(): Promise<void> {
   window.on("restore", pushWindowState);
 
   // `close` and not `closed`: the reservation is removed while the window still exists, and
-  // synchronously, because nothing waits for us once the process starts shutting down.
+  // without waiting, because nothing waits for us once the process starts shutting down. Closing the
+  // window is leaving, and `leave` goes first so its watchdog covers a stall anywhere from here on.
   window.on("close", () => {
+    if (process.platform === "win32") void leave();
     // Docked, the bounds are the band's, not the user's choice — do not remember those.
     if (window && !dockFeature.isDocked() && !window.isMinimized()) {
       config.saveUi({ ...config.ui(), window: window.getNormalBounds() });
@@ -447,20 +450,87 @@ app.on("render-process-gone", (_event, _contents, details) =>
 app.on("child-process-gone", (_event, details) =>
   console.error("[hangar] child gone:", details.type, details.reason, details.exitCode));
 
+/** How long the sampler may take to finish the sample in flight before the app leaves without it. */
+const SAMPLER_STOP_CAP_MS = 5000;
+/** How long a process may take to be gone after its window closed; the watchdog kills it after that. */
+const EXIT_GRACE_MS = 10_000;
+
+/**
+ * Whoever is still here ten seconds after its window closed is killed from outside.
+ *
+ * Main processes were measured alive for hours after their window was gone: a shell call that never
+ * answered kept a worker thread, and process teardown waited for it — past the point where any
+ * JavaScript runs, so nothing in-process can promise the exit. Since one Hangar holds the
+ * single-instance lock, the next launch handed over to the zombie and left; Hangar "would not start".
+ * A detached PowerShell holds our process handle (PID reuse cannot mislead it) and kills us if we
+ * are still here when its wait ends. Config writes are synchronous and done by then; the renderer
+ * keeps nothing in browser storage; Chromium's own caches survive a kill.
+ */
+let watchdogArmed = false;
+function armExitWatchdog(): void {
+  if (watchdogArmed) return;
+  watchdogArmed = true;
+  const script = `$p = Get-Process -Id ${process.pid} -ErrorAction Stop; if (-not $p.WaitForExit(${EXIT_GRACE_MS})) { $p.Kill() }`;
+  try {
+    spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    }).unref();
+  } catch (error) {
+    console.error("[hangar] exit watchdog:", (error as Error).message);
+  }
+}
+
+let leaving: Promise<void> | null = null;
+
+/**
+ * The one way out on Windows, whichever door was used: the window's close button, Quit in the menu
+ * (`app.quit()`, turned into a window close by `before-quit` below), an update installing itself.
+ *
+ * Own cleanup first — the sampler finishes the sample in flight (MetricsFeature.stop says why),
+ * capped so a stuck sampler cannot hold us — then `app.exit(0)` rather than the quit rounds:
+ * everything of ours is released by then, and Windows reclaims the reservation of a dead process.
+ * The watchdog covers whatever teardown may still wait on.
+ */
+function leave(): Promise<void> {
+  if (leaving) return leaving;
+  armExitWatchdog();
+  const asked = Date.now();
+  const sampler = Promise.race([metricsFeature.stop(), new Promise<void>((resolve) => setTimeout(resolve, SAMPLER_STOP_CAP_MS))]);
+  leaving = sampler.then(() => {
+    console.log(`[hangar] leaving, ${Date.now() - asked} ms after the window closed`);
+    clipboardFeature.dispose();
+    app.exit(0);
+  });
+  return leaving;
+}
+
 app.on("window-all-closed", () => {
   console.log("[hangar] window-all-closed -> quitting");
-  metricsFeature.stop();
+  if (process.platform === "win32") {
+    void leave();                               // under way already when the window's `close` ran
+    return;
+  }
+  void metricsFeature.stop();
   dockFeature.releaseSync();
-  app.quit();
+  app.quit();                                   // X11 struts need the quit events (`before-quit`)
 });
 
 app.on("will-quit", () => {
   clipboardFeature.dispose();
 });
 
-// Dock decides whether the quit has to wait (X11 struts need an `xprop` call); the shell only holds
-// the door, and exactly once.
+// Windows: every `app.quit()` becomes a window close, so there is one way out (`leave`) and the
+// sampler is never terminated mid-call. Elsewhere the dock decides whether the quit has to wait
+// (X11 struts need an `xprop` call); the shell only holds the door, and exactly once.
 app.on("before-quit", (event) => {
+  if (process.platform === "win32") {
+    event.preventDefault();
+    if (window && !window.isDestroyed()) window.close();
+    else void leave();
+    return;
+  }
   const pending = dockFeature.releaseOnQuit();
   if (!pending) return;
   event.preventDefault();
