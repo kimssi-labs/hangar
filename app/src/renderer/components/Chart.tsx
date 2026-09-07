@@ -1,15 +1,18 @@
 /**
- * The two chart shapes this app needs, drawn on a canvas.
+ * The chart primitives this app needs, drawn on a canvas — and nothing about what they show.
  *
  * A charting library would be a dependency and a bundle for two shapes: a sparkline in a row and
  * one area chart per resource. Canvas keeps it to a few lines and, more importantly, keeps the
  * drawing pixel-exact at any DPI, which a stretched SVG does not.
+ *
+ * What is drawn here belongs to the features: the machine gauges are `features/metrics`, the
+ * Claude usage gauges `features/usage`. This file knows neither, so a change to one cannot reach
+ * the other through it (pinned by the boundaries test).
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import type { MetricSample, RateWindow } from "@core/types";
+import type { MetricSample } from "@core/types";
 
-import { formatClock, formatPercent, resetLabel, resetRemaining, usageTone } from "../format";
 import { useText } from "../useText";
 import { Truncated } from "./Truncated";
 
@@ -138,7 +141,7 @@ export function isNarrow(width: number, wasNarrow: boolean): boolean {
 }
 
 /** The upright bar a card falls back to when it is too narrow to read across. */
-function UprightBar({ percent, tone }: { percent: number; tone: string }) {
+export function UprightBar({ percent, tone }: { percent: number; tone: string }) {
   return (
     <div className="mt-1 flex justify-center">
       <div className="h-14 w-3 rounded-full bg-ink-600 overflow-hidden flex items-end">
@@ -234,70 +237,6 @@ export function AreaChart({ samples, field, max, label, value, total, short, cla
         </span>
       </div>
       <canvas ref={ref} className={`${compact ? "mt-1 h-7" : "mt-2 h-16"} w-full`} />
-    </div>
-  );
-}
-
-/**
- * One rate-limit window, in the same card as the machine graphs.
- *
- * It used to live in the title bar, where a narrow window cut it off — and a percentage you cannot
- * read is worse than none. Here it sits with CPU and memory, which is what it is: a gauge.
- */
-export function UsageCard({ window: usage, className = "", compact = false }: {
-  window: RateWindow;
-  className?: string;
-  compact?: boolean;
-}) {
-  const t = useText();
-  const [box, boxWidth] = useElementWidth<HTMLDivElement>();
-  const [narrow, setNarrow] = useState(false);
-  useLayoutEffect(() => setNarrow((was) => isNarrow(boxWidth, was)), [boxWidth]);
-  const tone = usage.usedPercent >= 80 ? "bg-bad" : usage.usedPercent >= 50 ? "bg-warn" : "bg-ok";
-  const reset = usage.resetsAt ? resetLabel(usage.resetsAt) : "";
-  const title = usage.resetsAt
-    ? t("tip.usageResets", {
-      label: usage.label,
-      percent: formatPercent(usage.usedPercent),
-      left: resetRemaining(usage.resetsAt),
-      clock: formatClock(usage.resetsAt),
-    })
-    : t("tip.usage", { label: usage.label, percent: formatPercent(usage.usedPercent) });
-
-  if (narrow) {
-    return (
-      <div ref={box} className={`card p-1 ${className}`} title={title}>
-        <div className="text-[10px] text-bone-400 text-center whitespace-nowrap">{usage.short}</div>
-        <UprightBar percent={usage.usedPercent} tone={tone} />
-        <div className={`mt-1 text-[10px] font-medium tabular-nums text-center ${usageTone(usage.usedPercent)}`}>
-          {formatPercent(usage.usedPercent)}
-        </div>
-        {/* Standing the card up must not cost the only thing the gauge is asked: how long until it frees up. */}
-        {usage.resetsAt ? (
-          <div data-testid="usage-reset" className="text-[10px] text-bone-400 tabular-nums text-center whitespace-nowrap">
-            ↻ {resetRemaining(usage.resetsAt)}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  return (
-    <div ref={box} className={`card ${compact ? "p-1.5" : "p-3"} ${className}`} title={title}>
-      <div className="flex items-baseline justify-between gap-2">
-        <Truncated as="span" className={`${compact ? "text-[11px]" : "text-xs"} text-bone-400`}>{usage.label}</Truncated>
-        <span className={`${compact ? "text-xs" : "text-sm"} font-semibold tabular-nums ${usageTone(usage.usedPercent)}`}>
-          {formatPercent(usage.usedPercent)}
-        </span>
-      </div>
-      <div className={`${compact ? "mt-1" : "mt-2"} h-2.5 rounded-full bg-ink-600 overflow-hidden`}>
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(2, Math.min(100, usage.usedPercent))}%` }} />
-      </div>
-      {reset ? (
-        <Truncated testId="usage-reset" className={`${compact ? "mt-0.5" : "mt-1"} text-[11px] text-bone-400 tabular-nums`}>
-          ↻ {reset}
-        </Truncated>
-      ) : null}
     </div>
   );
 }

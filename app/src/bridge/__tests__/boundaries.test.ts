@@ -77,6 +77,14 @@ describe("feature boundaries", () => {
     expect(specs.filter((spec) => !/^(electron|node:|\.\.\/core\/)/.test(spec))).toEqual([]);
   });
 
+  it("keeps the chart primitives (renderer/components/Chart.tsx) free of every feature", () => {
+    // The machine gauges are metrics', the Claude usage gauges are usage's; the canvas they share
+    // knows neither, so a reading added to one cannot reach the other through it.
+    const text = readFileSync(join(SRC, "renderer", "components", "Chart.tsx"), "utf8");
+    const into = [...text.matchAll(IMPORT)].map((m) => m[1]!).filter((spec) => /features\//.test(spec));
+    expect(into).toEqual([]);
+  });
+
   it("lets the bridge registry import contracts only", () => {
     const text = readFileSync(join(SRC, "bridge", "registry.ts"), "utf8");
     const specs = [...text.matchAll(IMPORT)].map((m) => m[1]!);
