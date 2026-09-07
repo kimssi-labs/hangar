@@ -8,13 +8,18 @@
  * Task Manager's own figure is the base clock times the `% Processor Performance` counter, and that
  * counter does move: 106.9 % and 119.4 % two seconds apart on an idle machine here. So:
  *
- *   - the base clock comes from `Win32_Processor.MaxClockSpeed`, read ONCE (WMI costs a process),
- *   - the performance percentage comes from PDH, which is a handful of microseconds per sample.
+ *   - the base clock is `MaxMhz` from `CallNtPowerInformation(ProcessorInformation)` — instant, in
+ *     process, and the same 1400 MHz `Win32_Processor.MaxClockSpeed` reports for this Core Ultra
+ *     (its `CurrentMhz` is NOT live: 1400/900 flat while the counter swung, so it is not used);
+ *   - the performance percentage comes from PDH, a handful of microseconds per sample.
  *
- * Until the base clock arrives, and on any machine where either source is missing, this reports
- * null and the caller falls back to the nominal figure.
+ * The base used to come from a PowerShell WMI query: five to ten seconds on this machine, asked once
+ * with a ten-second limit and never again — so under load the answer never arrived, the nominal
+ * figure stood in for it for the life of the process, and the user saw the clock "fixed at 3 GHz".
+ * On any machine where either source is missing this reports null and the caller falls back to
+ * the nominal figure.
  */
-import { execFile } from "node:child_process";
+import os from "node:os";
 
 /** PDH's "give me a double" format. */
 const PDH_FMT_DOUBLE = 0x00000200;
@@ -29,8 +34,7 @@ interface Pdh {
 let pdh: Pdh | null | undefined;
 let query: number | null = null;
 let counter: number | null = null;
-let baseMhz: number | null = null;
-let baseAsked = false;
+let baseMhz: number | null | undefined;
 
 function loadPdh(): Pdh | null {
   if (pdh !== undefined) return pdh;
@@ -81,20 +85,33 @@ function loadPdh(): Pdh | null {
   }
 }
 
-/** The processor's nominal clock, asked for once — a WMI query costs a process, a sample must not. */
-function askBaseClock(): void {
-  if (baseAsked || process.platform !== "win32") return;
-  baseAsked = true;
-  execFile(
-    "powershell",
-    ["-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_Processor | Select-Object -First 1).MaxClockSpeed"],
-    { windowsHide: true, timeout: 10_000 },
-    (error, stdout) => {
-      if (error) return;
-      const mhz = Number(String(stdout).trim());
-      if (Number.isFinite(mhz) && mhz > 0) baseMhz = mhz;
-    },
-  );
+/** POWER_INFORMATION_LEVEL for CallNtPowerInformation: one PROCESSOR_POWER_INFORMATION per processor. */
+const PROCESSOR_INFORMATION = 11;
+
+/**
+ * The processor's base clock in MHz, read once through powrprof — or null where it cannot be read.
+ * Enough room is passed for every logical processor; only the first entry is used.
+ */
+function baseClockMhz(): number | null {
+  if (baseMhz !== undefined) return baseMhz;
+  if (process.platform !== "win32") return (baseMhz = null);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const koffi = require("koffi") as typeof import("koffi");
+    const INFO = koffi.struct("PROCESSOR_POWER_INFORMATION", {
+      Number: "uint32", MaxMhz: "uint32", CurrentMhz: "uint32", MhzLimit: "uint32", MaxIdleState: "uint32", CurrentIdleState: "uint32",
+    });
+    const CallNtPowerInformation = koffi.load("powrprof.dll").func("__stdcall", "CallNtPowerInformation", "long",
+      ["int", "void *", "uint32", koffi.out(koffi.pointer(INFO)), "uint32"]);
+    const count = Math.max(1, os.cpus().length);
+    const out = Array.from({ length: count }, () => ({ Number: 0, MaxMhz: 0, CurrentMhz: 0, MhzLimit: 0, MaxIdleState: 0, CurrentIdleState: 0 }));
+    if (CallNtPowerInformation(PROCESSOR_INFORMATION, null, 0, out, count * koffi.sizeof(INFO)) !== 0) return (baseMhz = null);
+    const mhz = out[0]?.MaxMhz ?? 0;
+    return (baseMhz = mhz > 0 ? mhz : null);
+  } catch (error) {
+    console.error("[hangar] base clock unavailable:", (error as Error).message);
+    return (baseMhz = null);
+  }
 }
 
 /**
@@ -105,10 +122,11 @@ function askBaseClock(): void {
 export function liveClockGhz(): number | null {
   const api = loadPdh();
   if (!api) return null;
-  askBaseClock();
+  const base = baseClockMhz();
+  if (base === null) return null;
   if (query === null) query = api.open();
-  if (query === null || baseMhz === null) return null;
+  if (query === null) return null;
   const percent = api.read();
   if (percent === null || percent <= 0) return null;
-  return (baseMhz * percent) / 100 / 1000;
+  return (base * percent) / 100 / 1000;
 }
