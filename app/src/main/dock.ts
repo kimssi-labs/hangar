@@ -707,9 +707,13 @@ export class Dock {
     if (process.platform !== "win32" || !this.registered) return;
     const api = loadWin32();
     if (!api) return;
-    // Not beside a shell call in flight (see `shell` in chrome.ts): the process is leaving anyway,
-    // and Windows reclaims the reservation of a window that is gone — measured, a forced kill leaks nothing.
-    if (!nativeBusy()) withNative(() => api.SHAppBarMessage(ABM.remove, api.make(this.hwnd, ABE.top)));
+    // Sent, not awaited, and on koffi's worker thread: a shell that does not answer — another appbar
+    // mid-teardown was enough — must not keep the window open or the process alive. Main processes
+    // were measured alive for hours after their window was gone, holding the single-instance lock,
+    // so the next launch handed over to a zombie and Hangar "would not start". Windows reclaims the
+    // reservation of a window that is gone in any case (measured: a forced kill leaks nothing).
+    const hwnd = this.hwnd;
+    void withShell(() => api.SHAppBarMessageAsync(ABM.remove, api.make(hwnd, ABE.top))).catch(() => undefined);
     this.registered = false;
     this.reserved = null;
     this.current = null;

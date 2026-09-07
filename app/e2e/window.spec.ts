@@ -932,6 +932,27 @@ test("a docked band survives being minimised and restored, giving its edge back 
 });
 
 /**
+ * Closing the window ends the process. Measured otherwise, three times in one day: a main process
+ * alive for hours after its window was gone — a shell call that never answered kept it — and, since
+ * one Hangar holds the single-instance lock, the next launch handed over to the zombie and left.
+ * On Windows the app now leaves at once after its own cleanup; the reservation dies with it.
+ */
+test("closing the window ends the process", async () => {
+  const { app, page } = await launch(fixture({ theme: "dark" }, { enabled: true, edge: "right", percent: 15 }));
+  const exited = new Promise<number | null>((resolve) => app.process().once("exit", (code) => resolve(code)));
+  let code: number | null | "still running" = "still running";
+  try {
+    await page.waitForTimeout(2500);                          // docked, and past the settle window
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.close());
+    code = await Promise.race([exited, new Promise<"still running">((resolve) => setTimeout(() => resolve("still running"), 10_000))]);
+    expect(code, "the process is gone within ten seconds of its window").toBe(0);
+  } finally {
+    if (code === "still running") await app.close().catch(() => undefined);
+  }
+});
+
+/**
  * The one side of a band you may resize is a strip in the page, not the window frame. It has to be
  * there — a real strip with a size, since a 0 × 0 element cannot be grabbed — and dragging it has to
  * change the band. The strip lost its size once when its component moved to a folder the stylesheet

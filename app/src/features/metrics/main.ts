@@ -32,7 +32,8 @@ export interface MetricsDeps {
 export interface MetricsFeature {
   /** Start measuring, if the monitor setting says so. Safe to call when already running. */
   start(): void;
-  stop(): void;
+  /** Stop measuring. Resolves once the sampler thread has ended — see `stop` for why that is waited for. */
+  stop(): Promise<void>;
   /** The project rows changed; the running set may have with them. */
   retarget(): void;
 }
@@ -59,16 +60,24 @@ export function register(ctx: MainContext, wire: Wire, deps: MetricsDeps): Metri
     worker?.postMessage({ targets: deps.targets() });
   }
 
-  function stop(): void {
-    if (worker) {
-      worker.postMessage({ stop: true });
-      void worker.terminate();
-      worker = null;
-    }
+  /**
+   * Asked, never terminated. `worker.terminate()` lands on a sample mid-way through a native call
+   * and koffi dies throwing into a terminating isolate — `FATAL ERROR: Error::ThrowAsJavaScriptException
+   * napi_throw`, exit code 134, the whole process; measured on one exit in three. The worker ends
+   * itself once the sample in flight is done, and the promise is that moment.
+   */
+  function stop(): Promise<void> {
     if (inline) {
       clearInterval(inline);
       inline = null;
     }
+    const running = worker;
+    worker = null;
+    if (!running) return Promise.resolve();
+    return new Promise((resolve) => {
+      running.once("exit", () => resolve());
+      running.postMessage({ stop: true });
+    });
   }
 
   // The in-process sampler, used only if the worker cannot start. Packaging can put the worker
