@@ -198,6 +198,35 @@ test("stacked: entering a project shows its sessions, even with a tall remembere
  * four places, and the stacked strip — the shape this app is usually left in — was the one that got
  * missed: the window showed CPU and memory and no usage at all.
  */
+/**
+ * The two halves of the gauge strip are independent: "This PC" (CPU, memory, clock) comes and goes
+ * with monitoring; "Claude usage" comes and goes with the usage settings. Monitoring off used to
+ * take the Claude gauges — and the whole side panel — down with it.
+ */
+test("monitoring off hides the machine gauges and leaves the Claude usage gauges", async () => {
+  const home = fixture();
+  mkdirSync(join(home, "cache"), { recursive: true });
+  mkdirSync(join(home, "config"), { recursive: true });
+  const now = Math.floor(Date.now() / 1000);
+  writeFileSync(join(home, "cache", "rate-limits.json"), JSON.stringify({ five_hour: { used_percentage: 16, resets_at: now + 3600 } }));
+  writeFileSync(join(home, "config", "manager.json"), JSON.stringify({ ui: { monitor: false } }));
+
+  const { app, page } = await launch(home);
+  try {
+    const labels = async (): Promise<string[]> =>
+      page.evaluate(() => [...document.querySelectorAll(".card")]
+        .map((c) => ((c as HTMLElement).innerText.trim().split(String.fromCharCode(10))[0] ?? "")));
+    for (const [width, height] of [[430, 900], [1200, 800]] as const) {
+      await resize(app, page, width, height);
+      await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
+      await expect.poll(labels, { timeout: 8000 }).toEqual(expect.arrayContaining(["5h"]));
+      expect((await labels()).filter((label) => /cpu|memory/i.test(label)), `${width}x${height}: no machine gauge while monitoring is off`).toEqual([]);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
 test("every shape draws the usage gauges beside the machine graphs", async () => {
   const home = fixture();
   mkdirSync(join(home, "cache"), { recursive: true });

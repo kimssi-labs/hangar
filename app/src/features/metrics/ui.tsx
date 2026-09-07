@@ -2,15 +2,19 @@
  * CPU and memory — the page side.
  *
  * Owns the series the graphs are drawn from: the machine's, and one per running session. Filled
- * once from the history at first paint, then extended on every sample the main process pushes. The
- * graphs themselves (AreaChart) and the gauge row stay in the screens that lay them out.
+ * once from the history at first paint, then extended on every sample the main process pushes — and
+ * the machine gauges themselves (`MachineGauges`): CPU with its clock, memory with its total. A
+ * screen places one component; adding a reading (a disk, a GPU) is a change here and nowhere else.
  */
 import { useCallback, useEffect, useState } from "react";
 
 import type { MetricSample, MetricsSnapshot } from "@core/types";
 
 import { api } from "../../renderer/api";
+import { AreaChart } from "../../renderer/components/Chart";
 import { Choice } from "../../renderer/components/SettingsCard";
+import { formatBytes } from "../../renderer/format";
+import { useText } from "../../renderer/useText";
 
 /** Samples a series keeps; older ones fall off the left of the graph. */
 const HISTORY_LIMIT = 300;
@@ -79,6 +83,38 @@ export function MonitorSettings({ on, onChange }: { on: boolean; onChange(on: bo
         note="no sampling at all — the graphs disappear and nothing is measured"
         selected={!on}
         onSelect={() => onChange(false)}
+      />
+    </>
+  );
+}
+
+/**
+ * The machine's gauges: CPU and memory, each the share first and the quantity behind it — a load
+ * without its clock, or a percentage of memory without the gigabytes, is half a reading.
+ * `wide` uses the longer labels a side panel has room for.
+ */
+export function MachineGauges({ metrics, compact = false, wide = false }: { metrics: Metrics; compact?: boolean; wide?: boolean }) {
+  const t = useText();
+  const { systemHistory, cpuGhz, memoryTotal, totalMemory, latestSystem } = metrics;
+  const cpuValue = latestSystem
+    ? `${latestSystem.cpu.toFixed(0)}%${cpuGhz ? ` · ${cpuGhz.toFixed(1)} GHz` : ""}`
+    : "\u2014";
+  const memoryPercent = latestSystem && totalMemory ? Math.round((latestSystem.memoryBytes / totalMemory) * 100) : null;
+  const memoryValue = latestSystem
+    ? `${memoryPercent === null ? "" : `${memoryPercent}% · `}${formatBytes(latestSystem.memoryBytes)}`
+    : "\u2014";
+  return (
+    <>
+      <AreaChart compact={compact} samples={systemHistory} field="cpu" max={100} label={t(wide ? "gauge.cpuMachine" : "gauge.cpu")} value={cpuValue} />
+      <AreaChart
+        compact={compact}
+        samples={systemHistory}
+        field="memoryBytes"
+        max={totalMemory}
+        label={t(wide ? "gauge.memoryMachine" : "gauge.memory")}
+        short={t("gauge.memoryShort")}
+        value={memoryValue}
+        total={memoryTotal ? formatBytes(memoryTotal) : undefined}
       />
     </>
   );

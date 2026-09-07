@@ -16,19 +16,17 @@ import {
 } from "../features/projects/ui";
 import { useSettings } from "../features/settings/ui";
 import { useUpdates } from "../features/updates/ui";
-import { useUsage } from "../features/usage/ui";
-import { useMetrics } from "../features/metrics/ui";
+import { UsageGauges, useUsage } from "../features/usage/ui";
+import { MachineGauges, useMetrics } from "../features/metrics/ui";
 import { usePasteResults } from "../features/clipboard/ui";
 import type { ProjectInfo, SessionInfo, ThemeMode } from "@core/types";
 
 import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
 import { DockButton, DockGrip, useDock } from "../features/dock/ui";
-import { AreaChart, UsageCard } from "./components/Chart";
 import { ProjectDetail, SessionDetail } from "./components/Lists";
 import { SETTINGS_SECTIONS, SettingsView, type SettingsSection } from "./components/Settings";
 import { Modal, type Ask, type AskResult } from "./components/Modal";
 import { TitleBar } from "./components/TitleBar";
-import { formatBytes } from "./format";
 import { Splitter } from "./components/Splitter";
 import { Truncated } from "./components/Truncated";
 import { WindowControls } from "./components/WindowControls";
@@ -86,7 +84,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   // The graphs' series and their readings live with the metrics feature; destructured so the
   // markup below reads as it did.
   const metrics = useMetrics();
-  const { systemHistory, sessionHistory, cpuGhz, memoryTotal, totalMemory, latestSystem } = metrics;
+  const { sessionHistory } = metrics;
   // Docked counts as maximised: the band is the window at its full extent, so the middle caption
   // button offers to restore, and restoring is what gives the edge back.
   const [windowState, setWindowState] = useState({ maximized: false });
@@ -404,17 +402,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   }, [rowUi]);
 
   const usageWindows = usage.status?.windows ?? [];
-  // Both machine gauges read the same way: the share first, then the quantity behind it — a load
-  // without its clock, or a percentage of memory without the gigabytes, is half a reading.
-  const cpuValue = latestSystem
-    ? `${latestSystem.cpu.toFixed(0)}%${cpuGhz ? ` · ${cpuGhz.toFixed(1)} GHz` : ""}`
-    : "\u2014";
-  const memoryPercent = latestSystem && totalMemory
-    ? Math.round((latestSystem.memoryBytes / totalMemory) * 100)
-    : null;
-  const memoryValue = latestSystem
-    ? `${memoryPercent === null ? "" : `${memoryPercent}% · `}${formatBytes(latestSystem.memoryBytes)}`
-    : "—";
 
   // Monitoring off means there is nothing to draw — and nothing being measured, which is the point.
   const monitoring = settings?.ui.monitor ?? true;
@@ -433,17 +420,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   // across a row when it is short.
   const machineCards = (
     <>
-      {usageWindows.map((usage) => <UsageCard key={usage.key} window={usage} compact />)}
-      <AreaChart samples={systemHistory} field="cpu" max={100} label={t("gauge.cpu")} value={cpuValue} />
-      <AreaChart
-        samples={systemHistory}
-        field="memoryBytes"
-        max={totalMemory}
-        label={t("gauge.memory")}
-        short={t("gauge.memoryShort")}
-        value={memoryValue}
-        total={memoryTotal ? formatBytes(memoryTotal) : undefined}
-      />
+      <UsageGauges windows={usageWindows} compact />
+      {monitoring ? <MachineGauges metrics={metrics} /> : null}
     </>
   );
 
@@ -612,7 +590,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                     onCommit={(width) => void api.saveUi({ asideWidth: windowWidth ? width / windowWidth : 0 })}
                   />
                 )}
-                {column || !monitoring ? null : showDetail ? (
+                {column ? null : showDetail ? (
                 <aside
                   className={`${asideWidth ? "" : "w-80"} shrink-0 border-l border-ink-600 overflow-auto`}
                   style={asideWidth ? { width: asideWidth } : undefined}
@@ -624,23 +602,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                   ) : null}
 
                   <div className="p-3 space-y-2 border-t border-ink-600">
-                    {usageWindows.map((usage) => <UsageCard key={usage.key} window={usage} />)}
-                    <AreaChart
-                      samples={systemHistory}
-                      field="cpu"
-                      max={100}
-                      label={t("gauge.cpuMachine")}
-                      value={cpuValue}
-                    />
-                    <AreaChart
-                      samples={systemHistory}
-                      field="memoryBytes"
-                      max={totalMemory}
-                      label={t("gauge.memoryMachine")}
-                      short={t("gauge.memoryShort")}
-                      value={memoryValue}
-                      total={memoryTotal ? formatBytes(memoryTotal) : undefined}
-                    />
+                    <UsageGauges windows={usageWindows} />
+                    {monitoring ? <MachineGauges metrics={metrics} wide /> : null}
                     <div className="text-[11px] text-bone-500">
                       {liveSessions.length === 0
                         ? t("app.noSessionRunning")
@@ -677,27 +640,10 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
 
               {/* Everything shares the strip and shrinks to fit: scrolling some of it out of
                   sight is the same as not showing it. */}
-              {column && monitoring ? (
+              {column && (monitoring || usageWindows.length > 0) ? (
                 <div className="shrink-0 border-t border-ink-600 p-1 flex gap-1 [&>*]:min-w-0 [&>*]:flex-1">
-                  {usageWindows.map((usage) => <UsageCard key={usage.key} window={usage} compact />)}
-                  <AreaChart
-                    compact
-                    samples={systemHistory}
-                    field="cpu"
-                    max={100}
-                    label={t("gauge.cpu")}
-                    value={cpuValue}
-                  />
-                  <AreaChart
-                    compact
-                    samples={systemHistory}
-                    field="memoryBytes"
-                    max={totalMemory}
-                    label={t("gauge.memory")}
-                    short={t("gauge.memoryShort")}
-                    value={memoryValue}
-                    total={memoryTotal ? formatBytes(memoryTotal) : undefined}
-                  />
+                  <UsageGauges windows={usageWindows} compact />
+                  {monitoring ? <MachineGauges metrics={metrics} compact /> : null}
                 </div>
               ) : null}
             </>

@@ -3,17 +3,18 @@
  *
  * Owns the snapshot the gauges draw from and the two ways it changes: a re-read, and the hook
  * being switched on or off. The two settings card bodies are here too — which windows the strip
- * shows, and the collection switch. The gauges themselves (UsageCard) stay with the screens that
- * lay them out.
+ * shows, and the collection switch — and the gauges themselves (`UsageGauges`): what a screen
+ * places is one component, and what it shows is this feature's business alone.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 
 import { RATE_WINDOWS } from "@core/constants";
-import type { StatusConfig, StatusSnapshot } from "@core/types";
+import type { RateWindow, StatusConfig, StatusSnapshot } from "@core/types";
 
 import { api, type SettingsPayload } from "../../renderer/api";
+import { isNarrow, UprightBar, useElementWidth } from "../../renderer/components/Chart";
 import { Truncated } from "../../renderer/components/Truncated";
-import { formatTime, sinceParts } from "../../renderer/format";
+import { formatClock, formatPercent, formatTime, resetLabel, resetRemaining, sinceParts, usageTone } from "../../renderer/format";
 import { useText } from "../../renderer/useText";
 import type { UsageState } from "./contract";
 
@@ -133,4 +134,77 @@ export function UsageSettings({ usage, onCollect }: { usage: UsageState; onColle
       ) : null}
     </>
   );
+}
+
+/**
+ * One rate-limit window as a gauge — the same card shape as the machine gauges beside it.
+ *
+ * It used to live in the title bar, where a narrow window cut it off — and a percentage you cannot
+ * read is worse than none.
+ */
+export function UsageCard({ window: usage, className = "", compact = false }: {
+  window: RateWindow;
+  className?: string;
+  compact?: boolean;
+}) {
+  const t = useText();
+  const [box, boxWidth] = useElementWidth<HTMLDivElement>();
+  const [narrow, setNarrow] = useState(false);
+  useLayoutEffect(() => setNarrow((was) => isNarrow(boxWidth, was)), [boxWidth]);
+  const tone = usage.usedPercent >= 80 ? "bg-bad" : usage.usedPercent >= 50 ? "bg-warn" : "bg-ok";
+  const reset = usage.resetsAt ? resetLabel(usage.resetsAt) : "";
+  const title = usage.resetsAt
+    ? t("tip.usageResets", {
+      label: usage.label,
+      percent: formatPercent(usage.usedPercent),
+      left: resetRemaining(usage.resetsAt),
+      clock: formatClock(usage.resetsAt),
+    })
+    : t("tip.usage", { label: usage.label, percent: formatPercent(usage.usedPercent) });
+
+  if (narrow) {
+    return (
+      <div ref={box} className={`card p-1 ${className}`} title={title}>
+        <div className="text-[10px] text-bone-400 text-center whitespace-nowrap">{usage.short}</div>
+        <UprightBar percent={usage.usedPercent} tone={tone} />
+        <div className={`mt-1 text-[10px] font-medium tabular-nums text-center ${usageTone(usage.usedPercent)}`}>
+          {formatPercent(usage.usedPercent)}
+        </div>
+        {/* Standing the card up must not cost the only thing the gauge is asked: how long until it frees up. */}
+        {usage.resetsAt ? (
+          <div data-testid="usage-reset" className="text-[10px] text-bone-400 tabular-nums text-center whitespace-nowrap">
+            ↻ {resetRemaining(usage.resetsAt)}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={box} className={`card ${compact ? "p-1.5" : "p-3"} ${className}`} title={title}>
+      <div className="flex items-baseline justify-between gap-2">
+        <Truncated as="span" className={`${compact ? "text-[11px]" : "text-xs"} text-bone-400`}>{usage.label}</Truncated>
+        <span className={`${compact ? "text-xs" : "text-sm"} font-semibold tabular-nums ${usageTone(usage.usedPercent)}`}>
+          {formatPercent(usage.usedPercent)}
+        </span>
+      </div>
+      <div className={`${compact ? "mt-1" : "mt-2"} h-2.5 rounded-full bg-ink-600 overflow-hidden`}>
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(2, Math.min(100, usage.usedPercent))}%` }} />
+      </div>
+      {reset ? (
+        <Truncated testId="usage-reset" className={`${compact ? "mt-0.5" : "mt-1"} text-[11px] text-bone-400 tabular-nums`}>
+          ↻ {reset}
+        </Truncated>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Every window Claude Code reports and the settings let through, as gauges. Nothing when there is
+ * none — which is also how the segment is turned off. Independent of the machine gauges: those
+ * come and go with monitoring, these with the usage settings.
+ */
+export function UsageGauges({ windows, compact = false }: { windows: RateWindow[]; compact?: boolean }) {
+  return <>{windows.map((usage) => <UsageCard key={usage.key} window={usage} compact={compact} />)}</>;
 }
