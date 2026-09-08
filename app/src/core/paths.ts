@@ -29,7 +29,10 @@ export interface HomePaths {
   config: string;
   managerConfig: string;
   aliases: string;
+  /** The usage figures as Claude Code's own writers publish them: the Stop hook, a status line. */
   rateLimits: string;
+  /** This app's own copy of the figures, written here from the usage endpoint and by nothing else — the only source of the model-scoped window (status.ts says why two files). */
+  hangarUsage: string;
   /** Where a pasted screenshot is written, so a terminal session can be given its path. */
   clips: string;
   /** Claude Code's own settings file — where a hook has to be registered to run at all. */
@@ -52,6 +55,7 @@ export function homePaths(root = claudeHome()): HomePaths {
     managerConfig: join(root, "config", "manager.json"),
     aliases: join(root, "config", "project-aliases.json"),
     rateLimits: join(root, "cache", "rate-limits.json"),
+    hangarUsage: join(root, "cache", "hangar-usage.json"),
     clips: join(root, "cache", "hangar-clips"),
     settings: join(root, "settings.json"),
     hooks: join(root, "hooks"),

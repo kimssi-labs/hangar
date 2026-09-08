@@ -4,8 +4,8 @@
  * The hook (usageHook.ts) is the first source: free, and current to the last turn. It has to be
  * switched on, though, and a machine where it never was — or where no session has ended since —
  * showed blank gauges with no way to tell why. Claude Code's own /usage reads the same figures from
- * an endpoint with the login it keeps in .credentials.json; so does this, when the cache is missing
- * or older than STALE_MS, never more than once a minute, and only with a token that has not
+ * an endpoint with the login it keeps in .credentials.json; so does this, when its last answer is
+ * missing or older than STALE_MS, never more than once a minute, and only with a token that has not
  * expired. The token goes to api.anthropic.com and nowhere else, and is never refreshed here: that
  * is Claude Code's job, done whenever it runs. The pure parts are here so they can be tested; the
  * request itself is the feature's.
