@@ -3,6 +3,19 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.14.1
+
+- **On a 125 % display, a band docked to the right no longer sits one pixel off the screen.**
+  Converting the band's rectangle to pixels rounded its position and its size separately, and for
+  some widths the two roundings added up to a right edge one column past the screen; the reservation
+  followed suit. The band is now cut to the monitor before anything else is decided.
+- **A band docked to the bottom of a 125 % display no longer shows two rows of desktop above the
+  taskbar.** The two-row correction for how such a display draws a window was applied to a band that
+  did not need it; it now applies only where the window's top is not a whole DIP.
+- **The remembered window size no longer grows on every launch at 125 %.** The size was saved with
+  the frame in it and restored without, two DIP wider each time; the frame is taken off before
+  remembering.
+
 ## v2.14.0
 
 - **Double-clicking a running session shows it.** Until now the app only said the session was
