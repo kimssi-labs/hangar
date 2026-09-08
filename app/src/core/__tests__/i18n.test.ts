@@ -71,7 +71,7 @@ describe("the Korean dictionary", () => {
     expect(t("settings.git")).toBe("Git");
     expect(t("gauge.cpu")).toBe("CPU");
     expect(t("settings.git.base.placeholder")).toContain("origin/main");
-    expect(t("settings.usage.writes")).toContain("settings.json");
+    expect(t("settings.usage.what")).toContain("api.anthropic.com");
     expect(t("settings.git.note")).toContain("git status");
   });
 });

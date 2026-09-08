@@ -296,3 +296,35 @@ test("the + button adds a folder as a project and lands on it", async () => {
     await app.close();
   }
 });
+
+/**
+ * Versions up to 2.15.1 could add a Stop hook to Claude Code's settings.json. It never received the
+ * figures it was written for, so the app takes it back out at start-up — that entry and its script,
+ * and nothing else in a file that is the user's.
+ */
+test("an older version's usage hook is taken back out of settings.json at start-up", async () => {
+  const { home } = fixture();
+  const others = {
+    hooks: {
+      Stop: [{ hooks: [{ type: "command", command: "bash ~/.claude/hooks/stop/mine.sh", shell: "bash" }] }],
+      PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "guard.sh" }] }],
+    },
+    statusLine: { type: "command", command: "bash ~/.claude/statusline/command.sh", refreshInterval: 30 },
+  };
+  const script = join(home, "hooks", process.platform === "win32" ? "hangar-usage.cmd" : "hangar-usage.sh");
+  mkdirSync(join(home, "hooks"), { recursive: true });
+  writeFileSync(script, "rem the old hook");
+  writeFileSync(join(home, "settings.json"), JSON.stringify({
+    ...others,
+    hooks: { ...others.hooks, Stop: [...others.hooks.Stop, { hooks: [{ type: "command", command: `"${script}"` }] }] },
+  }, null, 2));
+
+  const { app, page } = await launch(home);
+  try {
+    await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
+    await expect.poll(() => existsSync(script), { timeout: 8000 }).toBe(false);
+    expect(JSON.parse(readFileSync(join(home, "settings.json"), "utf8"))).toEqual(others);
+  } finally {
+    await app.close();
+  }
+});

@@ -127,7 +127,7 @@ test("every shape says when the usage window resets", async () => {
   const home = fixture();
   mkdirSync(join(home, "cache"), { recursive: true });
   const resetsAt = Math.floor(Date.now() / 1000) + 2 * 3600 + 15 * 60;   // 2h 15m from now
-  writeFileSync(join(home, "cache", "rate-limits.json"), JSON.stringify({
+  writeFileSync(join(home, "cache", "hangar-usage.json"), JSON.stringify({
     five_hour: { used_percentage: 19, resets_at: resetsAt },
     seven_day: { used_percentage: 100, resets_at: resetsAt + 86400 },
   }));
@@ -208,7 +208,7 @@ test("monitoring off hides the machine gauges and leaves the Claude usage gauges
   mkdirSync(join(home, "cache"), { recursive: true });
   mkdirSync(join(home, "config"), { recursive: true });
   const now = Math.floor(Date.now() / 1000);
-  writeFileSync(join(home, "cache", "rate-limits.json"), JSON.stringify({ five_hour: { used_percentage: 16, resets_at: now + 3600 } }));
+  writeFileSync(join(home, "cache", "hangar-usage.json"), JSON.stringify({ five_hour: { used_percentage: 16, resets_at: now + 3600 } }));
   writeFileSync(join(home, "config", "manager.json"), JSON.stringify({ ui: { monitor: false } }));
 
   const { app, page } = await launch(home);
@@ -231,7 +231,7 @@ test("every shape draws the usage gauges beside the machine graphs", async () =>
   const home = fixture();
   mkdirSync(join(home, "cache"), { recursive: true });
   const now = Math.floor(Date.now() / 1000);
-  writeFileSync(join(home, "cache", "rate-limits.json"), JSON.stringify({
+  writeFileSync(join(home, "cache", "hangar-usage.json"), JSON.stringify({
     five_hour: { used_percentage: 16, resets_at: now + 3600 },
     seven_day: { used_percentage: 7, resets_at: now + 500_000 },
   }));

@@ -1,9 +1,9 @@
 /**
  * Claude Code's usage figures — the page side.
  *
- * Owns the snapshot the gauges draw from and the two ways it changes: a re-read, and the hook
- * being switched on or off. The settings card's two halves are here too — which windows the strip
- * shows, and the collection switch — and the gauges themselves (`UsageGauges`): what a screen
+ * Owns the snapshot the gauges draw from and the way it changes: a re-read, on a poll or when the
+ * main side says fresh figures landed. The settings card's two halves are here too — which windows
+ * the strip shows, and how the reading stands — and the gauges themselves (`UsageGauges`): what a screen
  * places is one component, and what it shows is this feature's business alone.
  */
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
@@ -11,7 +11,7 @@ import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { RATE_WINDOWS } from "@core/constants";
 import type { RateWindow, StatusConfig, StatusSnapshot } from "@core/types";
 
-import { api, type SettingsPayload } from "../../renderer/api";
+import { api } from "../../renderer/api";
 import { isNarrow, UprightBar, useElementWidth } from "../../renderer/components/Chart";
 import { Truncated } from "../../renderer/components/Truncated";
 import { formatClock, formatPercent, formatTime, resetLabel, resetRemaining, sinceParts, usageTone } from "../../renderer/format";
@@ -23,11 +23,6 @@ export interface Usage {
   status: StatusSnapshot | null;
   /** Read the figures again. Stable, so a caller may list it as a dependency. */
   refresh(): Promise<void>;
-  /**
-   * Turn collection on or off, then read what it did or did not find. Answers with the result and
-   * the settings payload the toggle came back with — the settings state belongs to the caller.
-   */
-  collect(on: boolean): Promise<{ ok: boolean; message?: string; settings: SettingsPayload }>;
 }
 
 export function useUsage(): Usage {
@@ -35,16 +30,8 @@ export function useUsage(): Usage {
   const refresh = useCallback(async () => { setStatus(await api.status()); }, []);
   // Figures the endpoint fetched after a poll answered arrive here rather than a poll later.
   useEffect(() => api.onStatus(setStatus), []);
-  const collect = useCallback(async (on: boolean) => {
-    const result = await api.setUsageHook(on);
-    await refresh();
-    return result;
-  }, [refresh]);
-  return { status, refresh, collect };
+  return { status, refresh };
 }
-
-/** Named here so the screen can say exactly which file it writes. */
-const HOOK_SCRIPT_NAME = navigator.userAgent.includes("Windows") ? "hangar-usage.cmd" : "hangar-usage.sh";
 
 /** When the figures were last written, in the language on screen. */
 function usageWhen(t: ReturnType<typeof useText>, ms: number): string {
@@ -99,15 +86,15 @@ export function StatusSettings({ status, onChange }: { status: StatusConfig; onC
   );
 }
 
-/** The bottom half of the usage card: where the figures come from, how that stands, and the switch. */
-export function UsageSettings({ usage, onCollect }: { usage: UsageState; onCollect(on: boolean): void }) {
+/** The bottom half of the usage card: where the figures come from, and how current they are. */
+export function UsageSettings({ usage }: { usage: UsageState }) {
   const t = useText();
   return (
     <>
       <div className="text-xs text-bone-300">{t("settings.usage.what")}</div>
       <div className="flex items-center gap-2">
-        <span className={`chip ${usage.collecting ? "text-ok" : ""}`}>
-          {usage.collecting ? t("settings.usage.collecting") : t("settings.usage.off")}
+        <span className={`chip ${usage.live ? "text-ok" : ""}`}>
+          {usage.live ? t("settings.usage.live") : t("settings.usage.idle")}
         </span>
         <span className="text-[11px] text-bone-500">
           {usage.updatedAt
@@ -115,37 +102,15 @@ export function UsageSettings({ usage, onCollect }: { usage: UsageState; onColle
             : t("settings.usage.never")}
         </span>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className={`btn ${usage.collecting ? "" : "btn-accent"}`}
-          onClick={() => onCollect(!usage.collecting)}
-        >
-          {usage.collecting ? t("settings.usage.stop") : t("settings.usage.start")}
-        </button>
-      </div>
-      {/* Saying exactly what is written where: this edits a file the user owns. */}
-      <div className="text-[11px] text-bone-500">
-        {t("settings.usage.writes", { file: HOOK_SCRIPT_NAME })}
-      </div>
-      {usage.source === "endpoint" ? (
-        <div className="text-[11px] text-bone-500">{t("settings.usage.endpoint")}</div>
-      ) : null}
       {/* Why the endpoint has nothing to show, when it has nothing: the login, or a refusal. */}
       {usage.login === "absent" && !usage.updatedAt ? (
         <div className="text-[11px] text-warn">{t("settings.usage.login.absent")}</div>
       ) : null}
-      {(usage.login === "expired" || usage.endpointFailure === "stale-token") && !usage.collecting ? (
+      {usage.login === "expired" || usage.endpointFailure === "stale-token" ? (
         <div className="text-[11px] text-warn">{t("settings.usage.login.expired")}</div>
       ) : null}
       {usage.endpointFailure === "rate-limited" ? (
         <div className="text-[11px] text-warn">{t("settings.usage.rateLimited")}</div>
-      ) : null}
-      {usage.portable && usage.collecting ? (
-        <div className="text-[11px] text-warn">{t("settings.usage.portable")}</div>
-      ) : null}
-      {usage.collecting && !usage.updatedAt && usage.source !== "endpoint" ? (
-        <div className="text-[11px] text-warn">{t("settings.usage.waiting")}</div>
       ) : null}
     </>
   );

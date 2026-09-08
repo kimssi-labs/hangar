@@ -26,7 +26,7 @@ export interface SettingsPayload {
   minPercent: number;
   /** Whether the system-wide paste shortcut is actually held right now. */
   pasteHotkeyActive: boolean;
-  /** How usage collection stands right now — the answer to "why are the gauges blank". */
+  /** How the usage reading stands right now — the answer to "why are the gauges blank". */
   usage: UsageState;
   updates: import("../core/types.js").UpdateConfig;
   git: import("../core/types.js").GitConfig;

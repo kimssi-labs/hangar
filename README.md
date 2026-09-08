@@ -149,16 +149,20 @@ Everything comes from files Claude Code maintains under `~/.claude` (override wi
 | `config/manager.json` | this app's own settings: dock (per monitor), status line, launch, appearance |
 | `config/project-aliases.json` | display aliases for projects |
 
-The usage gauges read `cache/rate-limits.json`. **Nothing in a stock Claude Code install writes that
-file**: the figures are handed to a session's own status line and hook, and to nothing else. So
-**Settings · Usage** offers to add a small Stop hook that writes them down as each turn ends — off
-until you ask for it, and removed again when you turn it off. Without it the gauges simply do not
-appear, which is the honest answer rather than a zero.
+The usage gauges are read the way Claude Code's own `/usage` reads them: from the usage endpoint at
+api.anthropic.com, with the login Claude Code keeps in `.credentials.json`. Nothing to set up and no
+separate key — and it is a reading, not a model call, so it spends no tokens. The app asks every
+minute while a Claude Code session is running and every ten minutes otherwise, never twice within a
+minute, and writes the answer to `cache/hangar-usage.json`, a file of its own. The token goes to
+api.anthropic.com and nowhere else and is never refreshed or stored by the app; once it has run out
+the gauges wait for Claude Code's next run to renew it, and the settings screen says so. On a machine
+signed in with an API key rather than a Claude subscription there are no five-hour or weekly windows
+to report, and the screen says that too.
 
-The hook writes one file and sends nothing anywhere. It reads no credentials: the usage endpoint that
-would need them rate-limits polling, so the figures Claude Code already hands out for free are the
-better source. On a machine signed in with an API key rather than a Claude subscription there are no
-five-hour or weekly windows to report, and the screen says so.
+Nothing else in Claude Code hands these figures out: no hook event carries them (checked against
+2.1.263), and the one place they do go — the status line's stdin — is the user's own. Versions up to
+2.15.1 installed a Stop hook meant to read them there; it could not, and a hook an older version
+left in `settings.json` is removed at start-up.
 
 Each window shows how much is used and how long until it resets — in every shape, the docked band
 included. Wide enough and the clock time it resets at is printed beside it; upright it moves to the
