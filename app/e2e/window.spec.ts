@@ -457,7 +457,10 @@ test("remembers where the window was left", async () => {
 
   const second = await launch(home);
   try {
-    const restored = await bounds(second.app);
+    // Measured as the content, which is what setBounds() was given: since Electron 43 getBounds()
+    // reports the frame DWM paints, two DIP wider at 125 % — the very difference that made a saved
+    // size grow on every launch until the app took the frame off before remembering it.
+    const restored = await second.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getContentBounds());
     samePixels(restored.x, 220, "x");
     samePixels(restored.y, 160, "y");
     samePixels(restored.width, 940, "width");

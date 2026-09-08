@@ -16,7 +16,7 @@ import type { MainContext } from "../bridge/context.js";
 import { ConfigStore } from "../core/config.js";
 import { CLAUDE_HOME_ENV, claudeHome } from "../core/paths.js";
 import { Store } from "../core/store.js";
-import { followTheme, resolveTheme, surfaceFor, WindowChrome } from "./chrome.js";
+import { followTheme, resolveTheme, surfaceFor, WindowChrome, withoutFrame } from "./chrome.js";
 import { register as registerClipboard } from "../features/clipboard/main.js";
 import { register as registerDock } from "../features/dock/main.js";
 import { register as registerGit } from "../features/git/main.js";
@@ -289,9 +289,10 @@ async function createWindow(): Promise<void> {
   // window is leaving, and `leave` goes first so its watchdog covers a stall anywhere from here on.
   window.on("close", () => {
     if (process.platform === "win32") void leave();
-    // Docked, the bounds are the band's, not the user's choice — do not remember those.
+    // Docked, the bounds are the band's, not the user's choice — do not remember those. Remembered
+    // without the frame (see withoutFrame): measured otherwise, the window grew two DIP a launch at 125 %.
     if (window && !dockFeature.isDocked() && !window.isMinimized()) {
-      config.saveUi({ ...config.ui(), window: window.getNormalBounds() });
+      config.saveUi({ ...config.ui(), window: withoutFrame(window.getNormalBounds(), window.getBounds(), window.getContentBounds()) });
     }
     dockFeature.releaseSync();
   });

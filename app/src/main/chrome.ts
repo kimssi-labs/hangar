@@ -25,7 +25,7 @@
  * Guards: the unit tests beside this file, the boundaries test (this module imports no feature and
  * not dock), and the e2e pixel tests — "every monitor, every edge" and "restored at start-up".
  */
-import { nativeTheme, type BrowserWindow } from "electron";
+import { nativeTheme, type BrowserWindow, type Rectangle } from "electron";
 
 import { SURFACE } from "../core/constants.js";
 import type { ThemeMode } from "../core/types.js";
@@ -71,6 +71,26 @@ export function lookFor(flush: boolean, surface: string): FrameLook {
 
 /** The window events after which the frame is told again (fact 2 — the colour is Electron's to keep). */
 export const RESETS_THE_FRAME = ["show", "restore"] as const;
+
+/**
+ * A remembered rectangle without the frame's own size in it.
+ *
+ * Since Electron 43, `getBounds()` (and `getNormalBounds()`) report the frame DWM paints, while
+ * `setBounds()` still takes the rectangle the content ends up in. At 100 % the two agree; at 125 %
+ * they are two DIP apart in width and one in height — measured: a window set to 940×620 reads back
+ * 942×621, and a size saved that way and restored grew by two DIP on every launch (940, 942, 944,
+ * 946). The difference between the window's bounds and its content bounds IS the frame, whatever the
+ * window's state, so it is taken off the normal bounds — which are the un-maximised ones, the ones
+ * worth remembering.
+ */
+export function withoutFrame(normal: Rectangle, bounds: Rectangle, content: Rectangle): Rectangle {
+  return {
+    x: normal.x + (content.x - bounds.x),
+    y: normal.y + (content.y - bounds.y),
+    width: normal.width - (bounds.width - content.width),
+    height: normal.height - (bounds.height - content.height),
+  };
+}
 
 /**
  * How many calls to the shell are in flight on koffi's worker thread.
