@@ -44,7 +44,7 @@ describe("readStatus", () => {
     mkdirSync(join(home, "cache"), { recursive: true });
     expect(readStatus(home)).toEqual({ windows: [] });
 
-    writeFileSync(join(home, "cache", "rate-limits.json"), JSON.stringify({
+    writeFileSync(join(home, "cache", "hangar-usage.json"), JSON.stringify({
       five_hour: { used_percentage: 10, resets_at: NOW / 1000 + 60 },
       seven_day: { used_percentage: 40, resets_at: NOW / 1000 + 6000 },
     }));
@@ -58,45 +58,35 @@ describe("readStatus", () => {
     expect(Object.keys(readStatus(home, { windows: null }, NOW))).toEqual(["windows"]);
   });
 
-  it("keeps the model-scoped window from the endpoint's file when Claude Code's own writer replaced the shared one", () => {
-    // The Stop hook and a status line write the block Claude Code hands them — five_hour and
-    // seven_day, nothing else — and that write used to take the "1w Fable" gauge with it (measured).
+  it("reads the app's own file, model-scoped window and all", () => {
+    // hangar-usage.json is written by the usage feature from the endpoint and by nothing else. The
+    // shared rate-limits.json it replaced was also written by a status line or hook, with the block
+    // Claude Code hands them — five_hour and seven_day, nothing else — and every such write took
+    // the "1w Fable" gauge away (measured).
     const home = join(mkdtempSync(join(tmpdir(), "cp-status-")), ".claude");
     mkdirSync(join(home, "cache"), { recursive: true });
-    const own = join(home, "cache", "hangar-usage.json");
-    const shared = join(home, "cache", "rate-limits.json");
-    writeFileSync(own, JSON.stringify({
+    writeFileSync(join(home, "cache", "hangar-usage.json"), JSON.stringify({
       five_hour: { utilization: 30, resets_at: NOW / 1000 + 3600 },
       seven_day: { utilization: 20, resets_at: NOW / 1000 + 86400 },
       weekly_scoped: { utilization: 16, resets_at: NOW / 1000 + 86400, model: "Fable" },
       updated_at: NOW / 1000 - 300, source: "endpoint",
     }));
-    writeFileSync(shared, JSON.stringify({
-      five_hour: { used_percentage: 41, resets_at: NOW / 1000 + 3600 },
-      seven_day: { used_percentage: 21, resets_at: NOW / 1000 + 86400 },
-      updated_at: NOW / 1000 - 10,
-    }));
-    const later = readStatus(home, { windows: null }, NOW).windows;
-    expect(later.map((w) => [w.key, w.usedPercent])).toEqual([["five_hour", 41], ["seven_day", 21], ["weekly_scoped", 16]]);
-    expect(later[2]?.label).toBe("1w Fable");
-    expect(readStatusUpdatedAt(home)).toBe((NOW / 1000 - 10) * 1000);
+    const windows = readStatus(home, { windows: null }, NOW).windows;
+    expect(windows.map((w) => [w.key, w.usedPercent])).toEqual([["five_hour", 30], ["seven_day", 20], ["weekly_scoped", 16]]);
+    expect(windows[2]?.label).toBe("1w Fable");
+    expect(readStatusUpdatedAt(home)).toBe((NOW / 1000 - 300) * 1000);
 
-    // The other way round, a newer answer from the endpoint is the whole picture.
-    writeFileSync(own, JSON.stringify({
-      five_hour: { utilization: 44, resets_at: NOW / 1000 + 3600 },
-      seven_day: { utilization: 22, resets_at: NOW / 1000 + 86400 },
-      weekly_scoped: { utilization: 18, resets_at: NOW / 1000 + 86400, model: "Fable" },
-      updated_at: NOW / 1000 - 5, source: "endpoint",
+    // A file another writer leaves under the old name is nobody's business here any more.
+    writeFileSync(join(home, "cache", "rate-limits.json"), JSON.stringify({
+      five_hour: { used_percentage: 99, resets_at: NOW / 1000 + 3600 }, updated_at: NOW / 1000,
     }));
-    expect(readStatus(home, { windows: null }, NOW).windows.map((w) => [w.key, w.usedPercent]))
-      .toEqual([["five_hour", 44], ["seven_day", 22], ["weekly_scoped", 18]]);
-    expect(readStatusUpdatedAt(home)).toBe((NOW / 1000 - 5) * 1000);
+    expect(readStatus(home, { windows: null }, NOW).windows[0]?.usedPercent).toBe(30);
   });
 
   it("draws only the windows that were chosen", () => {
     const home = join(mkdtempSync(join(tmpdir(), "cp-status-")), ".claude");
     mkdirSync(join(home, "cache"), { recursive: true });
-    writeFileSync(join(home, "cache", "rate-limits.json"), JSON.stringify({
+    writeFileSync(join(home, "cache", "hangar-usage.json"), JSON.stringify({
       five_hour: { used_percentage: 10, resets_at: NOW / 1000 + 60 },
       seven_day: { used_percentage: 40, resets_at: NOW / 1000 + 6000 },
     }));

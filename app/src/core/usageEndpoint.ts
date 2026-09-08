@@ -1,14 +1,14 @@
 /**
- * Claude Code's usage figures asked for directly — the source for a machine where nothing publishes them.
+ * Claude Code's usage figures, asked for the way its own /usage asks.
  *
- * The hook (usageHook.ts) is the first source: free, and current to the last turn. It has to be
- * switched on, though, and a machine where it never was — or where no session has ended since —
- * showed blank gauges with no way to tell why. Claude Code's own /usage reads the same figures from
- * an endpoint with the login it keeps in .credentials.json; so does this, when its last answer is
- * missing or older than STALE_MS, never more than once a minute, and only with a token that has not
- * expired. The token goes to api.anthropic.com and nowhere else, and is never refreshed here: that
- * is Claude Code's job, done whenever it runs. The pure parts are here so they can be tested; the
- * request itself is the feature's.
+ * Claude Code publishes its rate limits to nothing outside itself — no hook input carries them
+ * (checked against 2.1.263, all 33 events), and the status line's stdin, which does, belongs to
+ * the user's own status line. /usage reads them from an endpoint with the login Claude Code keeps
+ * in .credentials.json; so does this, when the last answer is older than a minute while a session
+ * runs or ten minutes while none does, never more than once a minute, and only with a token that
+ * has not expired. The endpoint is a reading, not a model call: no tokens, no cost. The token goes
+ * to api.anthropic.com and nowhere else, and is never refreshed here — that is Claude Code's job,
+ * done whenever it runs. The pure parts are here so they can be tested; the request is the feature's.
  */
 import { RATE_WINDOWS } from "./constants.js";
 
@@ -21,8 +21,10 @@ export const USER_AGENT = "claude-code/2.1.0";
 export const RETRY_ON_ERROR_MS = 5 * 60_000;
 /** A Retry-After longer than this is not believed: a corrupt header must not silence the gauges for days. */
 const MAX_RETRY_AFTER_MS = 24 * 3600_000;
-/** A cache older than this is asked for again. */
+/** Figures older than this are asked for again while no session is running: usage does not move then. */
 export const STALE_MS = 10 * 60_000;
+/** ...and older than this while a Claude Code session is running, since every turn moves them. */
+export const STALE_LIVE_MS = 60_000;
 /** Never two requests closer than this, whatever the answer was. */
 export const RETRY_MS = 60_000;
 /** A token this close to its expiry is not worth a request. */
@@ -49,9 +51,9 @@ export function accessTokenFrom(credentials: unknown, now = Date.now()): string 
   return token;
 }
 
-/** Whether the cache is old enough to ask again; a cache that never was is. */
-export function isStale(updatedAt: number | null, now = Date.now()): boolean {
-  return updatedAt === null || now - updatedAt > STALE_MS;
+/** Whether the figures are old enough to ask again; figures that never were are. */
+export function isStale(updatedAt: number | null, now = Date.now(), staleMs = STALE_MS): boolean {
+  return updatedAt === null || now - updatedAt > staleMs;
 }
 
 interface EndpointBucket { utilization?: unknown; resets_at?: unknown }

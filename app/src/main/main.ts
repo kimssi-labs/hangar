@@ -148,7 +148,7 @@ const wiring = wire(ipcMain, (channel, value) => window?.webContents.send(channe
 // Every feature registers here, at module level, and each hands back the one thing the rest of main
 // may still ask of it. Where two need each other — usage answers into the settings payload, and
 // asks for it back — the reference is a closure, read when called, after both exist.
-const usageFeature = registerUsage(context, wiring, { settingsPayload: () => settingsFeature.payload() });
+const usageFeature = registerUsage(context, wiring);
 // The list every other feature reads, registered first: metrics asks it which sessions run, git
 // asks it for rows. Its one dependency points the other way — "the running set may have changed" —
 // and goes through main, so projects never imports metrics. Called at scan time, once both exist.

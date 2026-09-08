@@ -5,7 +5,12 @@
  * file that only one machine's own scripts write, so for anybody else the segment was either absent
  * or, worse, wrong. MCP health could not see a live connection at all; Outlook reachability came
  * from a private mail probe; the ponytail chip from a local mode flag. Usage comes from Claude
- * Code itself, which is what makes it worth drawing for everyone.
+ * Code's own usage endpoint, which is what makes it worth drawing for everyone.
+ *
+ * The file read here, `cache/hangar-usage.json`, is this app's own: written by the usage feature
+ * from the endpoint's answer and by nothing else. It used to be `cache/rate-limits.json`, a file a
+ * status line or hook could also write — with the block Claude Code hands them, which has no
+ * model-scoped window — and every such write took the "1w Fable" gauge away (measured).
  */
 import { readFileSync } from "node:fs";
 
@@ -51,40 +56,11 @@ export function rateWindows(raw: Record<string, unknown>, now = Date.now()): Rat
   return out;
 }
 
-function updatedAtOf(raw: { updated_at?: unknown }): number | null {
+/** When the figures were last read, in epoch ms, or null when they never were. */
+export function readStatusUpdatedAt(home?: string): number | null {
+  const raw = readJson<{ updated_at?: unknown }>(homePaths(home).hangarUsage, {});
   const seconds = typeof raw.updated_at === "number" && Number.isFinite(raw.updated_at) ? raw.updated_at : null;
   return seconds ? seconds * 1000 : null;
-}
-
-/** When one cache file was written, in epoch ms, or null when it never was. */
-export function readUpdatedAt(file: string): number | null {
-  return updatedAtOf(readJson<{ updated_at?: unknown }>(file, {}));
-}
-
-/** When the figures were last published by anyone, in epoch ms, or null when they never were. */
-export function readStatusUpdatedAt(home?: string): number | null {
-  const paths = homePaths(home);
-  const times = [readUpdatedAt(paths.rateLimits), readUpdatedAt(paths.hangarUsage)].filter((t): t is number => t !== null);
-  return times.length ? Math.max(...times) : null;
-}
-
-/**
- * The two cache files as one: the newer file's windows over the older file's.
- *
- * Two files because two kinds of writer. Claude Code's own — the Stop hook, a status line — write
- * the block Claude Code hands them: the 5-hour and 7-day windows and nothing else. The usage
- * endpoint (usageEndpoint.ts) also answers with the weekly window scoped to one model, and is the
- * only thing that does. In one shared file the next hook write replaced the endpoint's answer
- * whole, and the model's gauge was gone until the cache went stale — which, with a writer keeping
- * it fresh, was never (measured: "1w Fable" came and went all day). So this app keeps a file of its
- * own that nothing else writes; the newer file wins window by window, and a window only one of
- * them has stays.
- */
-export function readRateLimits(home?: string): Record<string, unknown> {
-  const paths = homePaths(home);
-  const shared = readJson<Record<string, unknown>>(paths.rateLimits, {});
-  const own = readJson<Record<string, unknown>>(paths.hangarUsage, {});
-  return (updatedAtOf(own) ?? 0) >= (updatedAtOf(shared) ?? 0) ? { ...shared, ...own } : { ...own, ...shared };
 }
 
 export function readStatus(
@@ -92,7 +68,7 @@ export function readStatus(
   config: StatusConfig = { windows: null },
   now = Date.now(),
 ): StatusSnapshot {
-  const all = rateWindows(readRateLimits(home), now);
+  const all = rateWindows(readJson<Record<string, unknown>>(homePaths(home).hangarUsage, {}), now);
   const chosen = config.windows;
   return { windows: chosen === null ? all : all.filter((w) => chosen.includes(w.key)) };
 }

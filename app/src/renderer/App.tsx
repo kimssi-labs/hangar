@@ -290,13 +290,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   // A sweep runs on a timer in the main process; it speaks only when it changed something.
   useEffect(() => api.onToast((message) => notify({ ok: true, message })), [notify]);
 
-  /** Turn usage collection on or off; the settings it comes back with are this file's to keep. */
-  const collectUsage = useCallback(async (on: boolean) => {
-    const result = await usage.collect(on);
-    setSettings(result.settings);
-    notify(result);
-  }, [notify, usage.collect]);
-
   const applySettings = useCallback(async (next: SettingsPayload) => {
     // Every section, not a list that has to be remembered: a section left out of this call is a
     // setting the screen appears to change and then silently reverts on the next push.
@@ -515,7 +508,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
               onFocus={setSettingsSection}
               onChange={(next) => void applySettings(next)}
               onApplyDock={(enabled) => void applyDock(enabled)}
-              onCollectUsage={(on) => void collectUsage(on)}
               onOpenPage={(page) => void api.openPage(page)}
               locale={info?.locale ?? "en"}
               updates={updates}

@@ -44,8 +44,6 @@ export interface SettingsViewProps {
   onFocus: (section: SettingsSection) => void;
   onChange: (next: SettingsPayload) => void;
   onApplyDock: (enabled: boolean) => void;
-  /** Install or remove the Stop hook that publishes Claude Code's usage figures. */
-  onCollectUsage: (on: boolean) => void;
   /** What the machine's language is, so "System" can say which one that is. */
   locale: string;
   /** Open one of the app's known pages in a browser. */
@@ -55,7 +53,7 @@ export interface SettingsViewProps {
   onClose: () => void;
 }
 
-export function SettingsView({ settings, displays, focused, onFocus, onChange, onApplyDock, onCollectUsage, onOpenPage, locale, updates, onClose }: SettingsViewProps) {
+export function SettingsView({ settings, displays, focused, onFocus, onChange, onApplyDock, onOpenPage, locale, updates, onClose }: SettingsViewProps) {
   const t = useText();
   const [draft, setDraft] = useState(settings);
   // What we last sent, so a push that is only the echo of our own save does not reset the draft
@@ -152,7 +150,7 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
       <Card title={t("settings.usage")} section="usage" focused={focused} onFocus={onFocus} hint={t("settings.usage.hint")} body="space-y-2">
         <StatusSettings status={draft.status} onChange={section("status")} />
         <div className="border-t border-ink-600 pt-2" />
-        <UsageSettings usage={settings.usage} onCollect={onCollectUsage} />
+        <UsageSettings usage={settings.usage} />
       </Card>
 
       <Card title={t("settings.git")} section="git" focused={focused} onFocus={onFocus} hint={t("settings.git.hint")}>
