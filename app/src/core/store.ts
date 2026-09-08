@@ -184,6 +184,12 @@ export class Store {
     return live;
   }
 
+  /** What Claude Code last wrote about the session running as `pid` — "busy", "idle" — or nothing known. */
+  sessionStatus(pid: number): string | null {
+    const data = readJsonFile<{ status?: string }>(join(this.paths.liveSessions, `${pid}.json`), {});
+    return typeof data.status === "string" ? data.status : null;
+  }
+
   /** First prompt per session. Re-parsed only when history.jsonl changed: it is megabytes. */
   historyTitles(): Map<string, string> {
     const sig = signature(this.paths.history);

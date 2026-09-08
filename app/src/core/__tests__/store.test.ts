@@ -281,3 +281,13 @@ describe("pins", () => {
     expect(sessions[1]?.pinned).toBe(false);
   });
 });
+
+describe("sessionStatus", () => {
+  it("reports what the registry says about a running session, and nothing for an unknown pid", () => {
+    const { home, sessionId } = makeHome();
+    writeFileSync(join(home, "sessions", "4242.json"), JSON.stringify({ pid: 4242, sessionId, status: "busy" }));
+    const store = new Store(home, { isAlive: () => true });
+    expect(store.sessionStatus(4242)).toBe("busy");
+    expect(store.sessionStatus(1)).toBeNull();
+  });
+});
