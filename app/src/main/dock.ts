@@ -34,6 +34,8 @@ const BAND_MINIMUM = 60;
  */
 /** The rectangle DWM actually paints, which is inside the window's own by the invisible border. */
 const DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+/** MonitorFromPoint: the nearest monitor, so a point just off the edge still answers. */
+const MONITOR_DEFAULTTONEAREST = 2;
 const SWP_NOZORDER = 0x0004;
 const SWP_NOACTIVATE = 0x0010;
 // Without this, Chromium sees WM_WINDOWPOSCHANGING and drags the window back inside the work
@@ -153,6 +155,27 @@ export function insetFor(scale: number): number {
 export function liftFor(top: number, origin: number, step: number, scale: number): number {
   if ((top - origin) % step === 0) return 0;
   return insetFor(scale);
+}
+
+/**
+ * A display's physical rectangle, from Windows where it can be had.
+ *
+ * Electron's `display.bounds` are DIP and rounded, and the rounding is not always reversible: the
+ * 1920x1200 panel at 125 %, sitting at a fractional offset from the desktop origin, reads 1536x961
+ * — and 961 DIP back is 1201 rows, one more than the monitor has. Everything here is planned in
+ * physical pixels against this rectangle, so being a row out puts a band's edge off the screen.
+ * Windows is asked instead, at the middle of where Electron thinks the display is; its answer is
+ * the monitor. Off Windows, and if the call fails, the conversion is all there is.
+ */
+export function monitorRect(display: Electron.Display): Rectangle {
+  const converted = screen.dipToScreenRect(null, display.bounds);
+  const api = process.platform === "win32" ? loadWin32() : null;
+  if (!api) return converted;
+  const middle = {
+    x: Math.round(converted.x + converted.width / 2),
+    y: Math.round(converted.y + converted.height / 2),
+  };
+  return withNative(() => api.monitorAt(middle)) ?? converted;
 }
 
 /**
@@ -287,6 +310,15 @@ interface Win32Api {
    * that has to land on the reservation.
    */
   frames: (hwnd: number) => { outer: Rectangle; painted: Rectangle; client: Rectangle } | null;
+  /**
+   * The physical rectangle of the monitor a point is on, as Windows has it.
+   *
+   * Electron's own answer is not it. A display's `bounds` are DIP, rounded: the 1920x1200 panel at
+   * 125 % reads 1536x961 when it sits at a fractional offset from the desktop origin, and 961 DIP
+   * converts back to 1201 physical rows — one more than the monitor has. A band planned inside that
+   * rectangle hung one row below the screen, which is a row of desktop under it (measured).
+   */
+  monitorAt: (point: { x: number; y: number }) => Rectangle | null;
   make: (hwnd: number, edge: number, rect?: Rectangle) => AppBarData;
 }
 
@@ -332,6 +364,14 @@ function loadWin32(): Win32Api | null {
     const DwmGetWindowAttribute = dwmapi.func("__stdcall", "DwmGetWindowAttribute", "int32", [
       "intptr", "uint32", koffi.out(koffi.pointer(RECT)), "uint32",
     ]);
+    const MONITORINFO = koffi.struct("MONITORINFO", {
+      cbSize: "uint32", rcMonitor: RECT, rcWork: RECT, dwFlags: "uint32",
+    });
+    // A POINT is passed by value here; koffi marshals the struct into the two words the ABI expects.
+    const MonitorFromPoint = user32.func("__stdcall", "MonitorFromPoint", "intptr", [POINT, "uint32"]);
+    const GetMonitorInfoW = user32.func("__stdcall", "GetMonitorInfoW", "bool", [
+      "intptr", koffi.inout(koffi.pointer(MONITORINFO)),
+    ]);
     win32 = {
       SHAppBarMessage: (message, data) => Number(SHAppBarMessage(message, data)),
       SHAppBarMessageAsync: (message, data) => new Promise((resolve, reject) => {
@@ -361,6 +401,19 @@ function loadWin32(): Win32Api | null {
           ? { x: origin.x, y: origin.y, width: size.right, height: size.bottom }
           : box(painted);
         return { outer: box(outer), painted: box(painted), client };
+      },
+      monitorAt: (point) => {
+        const handle = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
+        if (!handle) return null;
+        const info = {
+          cbSize: koffi.sizeof(MONITORINFO),
+          rcMonitor: { left: 0, top: 0, right: 0, bottom: 0 },
+          rcWork: { left: 0, top: 0, right: 0, bottom: 0 },
+          dwFlags: 0,
+        };
+        if (!GetMonitorInfoW(handle, info)) return null;
+        const rc = info.rcMonitor;
+        return { x: rc.left, y: rc.top, width: rc.right - rc.left, height: rc.bottom - rc.top };
       },
       make: (hwnd, edge, rect) => ({
         cbSize: koffi.sizeof(APPBARDATA),
@@ -796,7 +849,7 @@ export class Dock {
    */
   private plan(band: Rectangle, edge: DockEdge, display: Electron.Display): { window: Rectangle; band: Rectangle; dip: Rectangle; lift: number } {
     if (process.platform !== "win32") return { window: band, band, dip: band, lift: 0 };
-    const monitor = screen.dipToScreenRect(null, display.bounds);
+    const monitor = monitorRect(display);
     // The band is what is reserved and what is seen; the window that shows it sits `lift` rows above
     // — except against the top of the screen, where the window draws where it is (measured), and
     // where a lifted window would start above the monitor.
@@ -861,8 +914,8 @@ export class Dock {
         };
         // Anchored to the work area the shell knows, which is not quite the one Electron reports,
         // then back onto the grid — the move can have taken it off.
-        const monitor = screen.dipToScreenRect(null, display.bounds);
-        kept = snapToGrid(keepThickness(offered, physical, edge), edge, monitor, gridStep(display.scaleFactor));
+        const monitor = monitorRect(display);
+        kept = snapToGrid(withinMonitor(keepThickness(offered, physical, edge), monitor), edge, monitor, gridStep(display.scaleFactor));
       }
       // Written down BEFORE the call, not after it: anything that puts the band back while the shell
       // is at work must put it where the band is going, not where it was.
