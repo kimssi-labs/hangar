@@ -6,10 +6,6 @@ import type { StatusSnapshot } from "../../core/types.js";
 export interface UsageState {
   /** When the figures were last read, in epoch ms; null when they never were. */
   updatedAt: number | null;
-  /** Windows the endpoint reported, whether or not they are ticked for display. */
-  reported: number;
-  /** A Claude Code session is running, so the figures are refreshed every minute rather than every ten. */
-  live: boolean;
   /** Claude Code's login as the endpoint sees it: a token to send, one that ran out, or none (an API key, or nobody signed in). */
   login: "fresh" | "expired" | "absent";
   /** How the last request to the endpoint was refused, until one succeeds. */
@@ -21,4 +17,6 @@ export const usageContract = {
   status: invoke<void, StatusSnapshot>("status:read"),
   /** Fresh figures arrived from the usage endpoint between two polls. */
   onStatus: event<StatusSnapshot>("status:push"),
+  /** Ask the endpoint now — the user double-clicked a gauge — and answer with the figures it gave. */
+  refreshUsage: invoke<void, StatusSnapshot>("status:refresh"),
 } as const;

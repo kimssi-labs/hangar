@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { accessTokenFrom, backoffFor, cacheFromEndpoint, failureFor, isStale, loginState, RETRY_MS, RETRY_ON_ERROR_MS, STALE_MS } from "../usageEndpoint.js";
+import { accessTokenFrom, backoffFor, cacheFromEndpoint, failureFor, isStale, loginState, MANUAL_FLOOR_MS, RETRY_MS, RETRY_ON_ERROR_MS, shouldAsk, STALE_LIVE_MS, STALE_MS } from "../usageEndpoint.js";
 import { rateWindows } from "../status.js";
 
 const NOW = Date.parse("2026-09-08T09:00:00Z");
@@ -112,5 +112,36 @@ describe("after a refusal", () => {
     expect(failureFor(401)).toBe("stale-token");
     expect(failureFor(429)).toBe("rate-limited");
     expect(failureFor(502)).toBe("error");
+  });
+});
+
+describe("whether to ask now", () => {
+  const base = { now: 1_000_000_000_000, lastAskedAt: 0, nextAttemptAt: 0, live: false, manual: false };
+
+  it("on the timer, asks only for stale figures — a minute old while a session runs, ten otherwise", () => {
+    const fresh = base.now - 90_000;
+    expect(shouldAsk({ ...base, updatedAt: fresh })).toBe(false);
+    expect(shouldAsk({ ...base, updatedAt: fresh, live: true })).toBe(true);
+    expect(shouldAsk({ ...base, updatedAt: base.now - STALE_MS - 1 })).toBe(true);
+    expect(shouldAsk({ ...base, updatedAt: base.now - STALE_LIVE_MS + 1, live: true })).toBe(false);
+    expect(shouldAsk({ ...base, updatedAt: null })).toBe(true);
+  });
+
+  it("never asks twice within a minute on the timer, nor within five seconds by hand", () => {
+    const stale = { ...base, updatedAt: null };
+    expect(shouldAsk({ ...stale, lastAskedAt: base.now - RETRY_MS + 1 })).toBe(false);
+    expect(shouldAsk({ ...stale, lastAskedAt: base.now - RETRY_MS })).toBe(true);
+    expect(shouldAsk({ ...stale, manual: true, lastAskedAt: base.now - MANUAL_FLOOR_MS + 1 })).toBe(false);
+    expect(shouldAsk({ ...stale, manual: true, lastAskedAt: base.now - MANUAL_FLOOR_MS })).toBe(true);
+  });
+
+  it("by hand, asks whatever the age of the figures", () => {
+    expect(shouldAsk({ ...base, updatedAt: base.now - 1_000, manual: true })).toBe(true);
+  });
+
+  it("holds a refusal's backoff, by hand or on the timer", () => {
+    expect(shouldAsk({ ...base, updatedAt: null, nextAttemptAt: base.now + 1 })).toBe(false);
+    expect(shouldAsk({ ...base, updatedAt: null, nextAttemptAt: base.now + 1, manual: true })).toBe(false);
+    expect(shouldAsk({ ...base, updatedAt: null, nextAttemptAt: base.now })).toBe(true);
   });
 });
