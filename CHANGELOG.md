@@ -3,6 +3,21 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.14.0
+
+- **Double-clicking a running session shows it.** Until now the app only said the session was
+  already running. Now its window comes to the front — restored if it was minimised, and in Windows
+  Terminal with that session's tab selected — and nothing new is started. A session that is running
+  with no window to show (Claude Code's own background sessions, a terminal that is gone) is offered
+  a take-over: the dialog says whether it is working right now and that stopping it cuts off the
+  response in progress, and on your word its process ends and the session continues in a new tab.
+  The first use after an update builds a small helper once, a few seconds, in the background.
+- **A screenshot's path is for terminals only.** The clipboard watch put a copied screenshot's path
+  beside the picture, and Word — given a bitmap and a text — pastes the text, so Ctrl+V in a document
+  gave a file name. The path is now there only while a terminal is the window in front and the
+  clipboard goes back to the bare picture the moment another kind of window is; nothing else on the
+  machine is affected.
+
 ## v2.13.0
 
 - **The CPU clock moves.** It read 3.0 GHz whatever the machine was doing: the processor's base
