@@ -6,7 +6,7 @@
  */
 import type { ReactNode } from "react";
 
-export const SETTINGS_SECTIONS = ["appearance", "language", "layout", "monitor", "dock", "status", "usage", "git", "updates", "launch", "permissions"] as const;
+export const SETTINGS_SECTIONS = ["appearance", "language", "layout", "monitor", "dock", "usage", "git", "updates", "launch", "permissions"] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 export function Card({
