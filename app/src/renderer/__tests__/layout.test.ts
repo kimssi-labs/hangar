@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { BAND_MAX_HEIGHT, COLUMN_MAX_WIDTH, COMPACT_MAX_WIDTH, layoutFor, STACK_MIN, stackedTopHeight } from "../useLayoutMode";
-import { isNarrow, NARROW_CARD, WIDE_CARD } from "../components/Chart";
+import { CARD_INSET, fitsUpright, isNarrow, NARROW_CARD, textWidth, WIDE_CARD } from "../components/Chart";
 
 describe("layoutFor", () => {
   it("treats a wide, short dock as a band", () => {
@@ -102,5 +102,23 @@ describe("isNarrow", () => {
   it("does not guess before the card has been measured", () => {
     expect(isNarrow(0, true)).toBe(true);
     expect(isNarrow(0, false)).toBe(false);
+  });
+});
+
+/**
+ * Whether a second reading fits an upright card is measured, not thresholded: "2h 15m" fits a card
+ * that "1d 12h 30m" does not. Without a canvas to measure on there is nothing to compare, and the
+ * reading stays — dropping it on a guess is the fault this replaces.
+ */
+describe("fitsUpright", () => {
+  it("gives an unmeasured card, or an unmeasurable page, the benefit of the doubt", () => {
+    expect(fitsUpright("↻ 1d 12h 30m", 0)).toBe(true);
+    expect(textWidth("↻ 1d 12h 30m")).toBe(0);
+    expect(fitsUpright("↻ 1d 12h 30m", 40)).toBe(true);
+  });
+
+  it("measures against the card's usable width, which is less than the card", () => {
+    expect(CARD_INSET).toBeGreaterThan(0);
+    expect(CARD_INSET).toBeLessThan(NARROW_CARD);
   });
 });

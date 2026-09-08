@@ -140,11 +140,51 @@ export function isNarrow(width: number, wasNarrow: boolean): boolean {
   return wasNarrow ? width < WIDE_CARD : width < NARROW_CARD;
 }
 
-/** The upright bar a card falls back to when it is too narrow to read across. */
+/** What an upright card's width loses to its own padding and border before any text can use it. */
+export const CARD_INSET = 10;
+/** Tabular digits and the ↻ glyph run a little wider on the page than a canvas measures them. */
+const FIT_MARGIN = 2;
+let measurer: CanvasRenderingContext2D | null | undefined;
+let smallType: string | undefined;
+
+/**
+ * The width `text` takes in the card's small type, measured rather than guessed.
+ *
+ * Whether the reset time fits is a different question for "2h 15m" and "1d 12h 30m", and the font
+ * is the machine's own. A canvas measures without touching the layout, so nothing here can push
+ * the card it is measuring for. Where there is no canvas — tests — the answer is 0: "fits".
+ */
+export function textWidth(text: string): number {
+  if (measurer === undefined) {
+    measurer = typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+  }
+  if (!measurer) return 0;
+  smallType ??= `10px ${getComputedStyle(document.body).fontFamily || "sans-serif"}`;
+  measurer.font = smallType;
+  return measurer.measureText(text).width;
+}
+
+/**
+ * Whether `text` fits on one line of an upright card `width` wide.
+ *
+ * A card that has not been measured yet is given the benefit of the doubt, as `isNarrow` gives it:
+ * the first paint must not drop a reading on a guess of 0.
+ */
+export function fitsUpright(text: string, width: number): boolean {
+  return width <= 0 || textWidth(text) + FIT_MARGIN <= width - CARD_INSET;
+}
+
+/**
+ * The upright bar a card falls back to when it is too narrow to read across.
+ *
+ * It takes whatever height the card has left: a row of cards stands as tall as its tallest, and a
+ * card that dropped its second reading for want of width would otherwise end in a blank where that
+ * line was. Where nothing stretches the card, the bar is its old 56 px.
+ */
 export function UprightBar({ percent, tone }: { percent: number; tone: string }) {
   return (
-    <div className="mt-1 flex justify-center">
-      <div className="h-14 w-3 rounded-full bg-ink-600 overflow-hidden flex items-end">
+    <div className="mt-1 flex-1 min-h-14 flex justify-center items-stretch">
+      <div className="w-3 rounded-full bg-ink-600 overflow-hidden flex items-end">
         <div className={`w-full rounded-full ${tone}`} style={{ height: `${Math.max(3, Math.min(100, percent))}%` }} />
       </div>
     </div>
@@ -210,15 +250,18 @@ export function AreaChart({ samples, field, max, label, value, total, short, cla
   // Too narrow to read a label and a number across: stand the reading up instead of overlapping it.
   if (narrow) {
     return (
-      <div ref={box} className={`card p-1 ${className}`} title={total ? t("tip.gaugeOf", { label, value, total }) : t("tip.gauge", { label, value })}>
+      <div ref={box} className={`card p-1 flex flex-col ${className}`} title={total ? t("tip.gaugeOf", { label, value, total }) : t("tip.gauge", { label, value })}>
         <div className="text-[10px] text-bone-400 text-center whitespace-nowrap">{short ?? label}</div>
         <UprightBar percent={percent} tone="bg-accent" />
         <div className="mt-1 text-[10px] font-medium text-bone-100 tabular-nums text-center">
           {head}
         </div>
         {/* The share alone is half the reading: a busy CPU still has a clock, and a percentage of
-            memory means nothing without the quantity it is a percentage of. */}
-        {detail ? (
+            memory means nothing without the quantity it is a percentage of. Unless the card has no
+            room for it — then the share, alone and legible, beats two readings written over each
+            other (measured in a docked band, where "2.2 GHz" ran into the next card's number); the
+            tooltip still has both. */}
+        {detail && fitsUpright(detail, boxWidth) ? (
           <div className="text-[10px] text-bone-400 tabular-nums text-center whitespace-nowrap">
             {detail}
           </div>

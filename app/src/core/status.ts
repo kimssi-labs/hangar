@@ -49,6 +49,7 @@ export function rateWindows(raw: Record<string, unknown>, now = Date.now()): Rat
       key,
       label: model ? `${short} ${model}` : label,
       short: model ? `${short} ${model}` : short,
+      brief: model ?? short,
       usedPercent: rolled ? 0 : Math.max(0, Math.min(100, Math.round(used))),
       resetsAt: rolled ? null : resetsAt,
     });

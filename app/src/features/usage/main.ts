@@ -7,8 +7,9 @@
  * way Claude Code's own `/usage` asks: the usage endpoint, with the login Claude Code keeps
  * (core/usageEndpoint.ts). A timer of this process does the asking whether or not the window is
  * looking — every minute while a Claude Code session is running, every ten minutes otherwise, and
- * never twice within a minute. Nothing to install, nothing to switch on, and nothing spent: the
- * endpoint is a reading, not a model call.
+ * never twice within a minute; a double-click on any gauge asks at once, and the card turned off
+ * asks for nothing at all. Nothing to install,
+ * nothing to switch on, and nothing spent: the endpoint is a reading, not a model call.
  *
  * Earlier versions offered a Stop hook instead (core/usageHook.ts says what became of it); one an
  * older version installed is taken back out at start-up.
@@ -21,7 +22,7 @@ import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
 import { homePaths } from "../../core/paths.js";
 import { readStatus, readStatusJson, readStatusUpdatedAt } from "../../core/status.js";
-import { accessTokenFrom, backoffFor, cacheFromEndpoint, type EndpointFailure, failureFor, isStale, loginState, OAUTH_BETA, RETRY_MS, STALE_LIVE_MS, STALE_MS, USAGE_ENDPOINT, USER_AGENT } from "../../core/usageEndpoint.js";
+import { accessTokenFrom, backoffFor, cacheFromEndpoint, type EndpointFailure, failureFor, loginState, OAUTH_BETA, shouldAsk, USAGE_ENDPOINT, USER_AGENT } from "../../core/usageEndpoint.js";
 import { hookFileName, hookInstalled, withoutHook } from "../../core/usageHook.js";
 import { usageContract, type UsageState } from "./contract.js";
 
@@ -97,11 +98,9 @@ function sessionRunning(ctx: MainContext): boolean {
   return ctx.store.liveSessions().size > 0;
 }
 
-function usageState(ctx: MainContext): UsageState {
+function usageState(): UsageState {
   return {
     updatedAt: readStatusUpdatedAt(),
-    reported: readStatus(undefined, { windows: null }).windows.length,
-    live: sessionRunning(ctx),
     login: loginState(readStatusJson<unknown>(homePaths().credentials, null)),
     endpointFailure: lastFailure,
   };
@@ -111,75 +110,88 @@ function usageState(ctx: MainContext): UsageState {
 const ENDPOINT_TIMEOUT_MS = 10_000;
 /** How often the timer looks; it asks only when the figures are stale for the moment's cadence and the wait is over. */
 const ENDPOINT_TICK_MS = 60_000;
+let lastAskedAt = 0;
 let nextAttemptAt = 0;
 let inFlight = false;
 let lastFailure: EndpointFailure | null = null;
 
 /**
- * Ask Claude Code's usage endpoint when the figures are stale, and say so when new ones have landed.
+ * Ask Claude Code's usage endpoint, and say so when new figures have landed.
  *
- * Stale is a minute while a session is running and ten when none is: usage moves only while
- * something runs, and asking every minute of an idle evening would be asking for the same number.
- * Not awaited by the caller — the first status read happens on the way to the first paint. Guarded
- * so that a machine with no login, an expired token, or fresh figures costs nothing, and one that
- * does ask never asks twice within RETRY_MS whatever the answer was.
+ * Whether to ask at all is core's decision (usageEndpoint.shouldAsk): stale figures on the timer,
+ * or the user's double-click, never two requests within a minute — five seconds by hand — and never
+ * during a refusal's backoff. The timer does not await this; a double-click does, so the answer it
+ * gets back is the fresh one. Guarded so that a machine with no login or an expired token costs
+ * nothing: Claude Code renews the token when it next runs, and the figures follow.
  */
-function refreshFromEndpoint(landed: () => void, live: boolean): void {
+async function refreshFromEndpoint(landed: () => void, live: boolean, manual = false): Promise<void> {
   const paths = homePaths();
   const now = Date.now();
-  if (!isStale(readStatusUpdatedAt(), now, live ? STALE_LIVE_MS : STALE_MS) || inFlight || now < nextAttemptAt) return;
+  if (inFlight || !shouldAsk({ now, updatedAt: readStatusUpdatedAt(), lastAskedAt, nextAttemptAt, live, manual })) return;
   const token = accessTokenFrom(readStatusJson<unknown>(paths.credentials, null), now);
-  if (!token) return;                            // none, or run out: Claude Code refreshes it when it next runs
-  nextAttemptAt = now + RETRY_MS;
+  if (!token) return;
+  lastAskedAt = now;
   inFlight = true;
-  // Chromium's network stack, not Node's: it follows the machine's proxy settings, which is the
-  // difference between working and not on a company network.
-  net.fetch(USAGE_ENDPOINT, {
-    headers: { Authorization: `Bearer ${token}`, "anthropic-beta": OAUTH_BETA, "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(ENDPOINT_TIMEOUT_MS),
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        lastFailure = failureFor(response.status);
-        nextAttemptAt = Date.now() + backoffFor(response.status, response.headers.get("retry-after"));
-        throw new Error(`HTTP ${response.status}`);
-      }
-      lastFailure = null;
-      const cache = cacheFromEndpoint(await response.json(), Date.now());
-      if (!cache) return;
-      mkdirSync(dirname(paths.hangarUsage), { recursive: true });
-      // Write then rename, so a read never catches a half-written file.
-      const tmp = `${paths.hangarUsage}.tmp`;
-      writeFileSync(tmp, JSON.stringify(cache), "utf8");
-      renameSync(tmp, paths.hangarUsage);
-      landed();
-    })
-    .catch((error: unknown) => console.error("[hangar] usage endpoint:", (error as Error).message))
-    .finally(() => {
-      inFlight = false;
+  try {
+    // Chromium's network stack, not Node's: it follows the machine's proxy settings, which is the
+    // difference between working and not on a company network.
+    const response = await net.fetch(USAGE_ENDPOINT, {
+      headers: { Authorization: `Bearer ${token}`, "anthropic-beta": OAUTH_BETA, "User-Agent": USER_AGENT },
+      signal: AbortSignal.timeout(ENDPOINT_TIMEOUT_MS),
     });
+    if (!response.ok) {
+      lastFailure = failureFor(response.status);
+      nextAttemptAt = Date.now() + backoffFor(response.status, response.headers.get("retry-after"));
+      throw new Error(`HTTP ${response.status}`);
+    }
+    lastFailure = null;
+    const cache = cacheFromEndpoint(await response.json(), Date.now());
+    if (!cache) return;
+    mkdirSync(dirname(paths.hangarUsage), { recursive: true });
+    // Write then rename, so a read never catches a half-written file.
+    const tmp = `${paths.hangarUsage}.tmp`;
+    writeFileSync(tmp, JSON.stringify(cache), "utf8");
+    renameSync(tmp, paths.hangarUsage);
+    landed();
+  } catch (error) {
+    console.error("[hangar] usage endpoint:", (error as Error).message);
+  } finally {
+    inFlight = false;
+  }
 }
 
 export function register(ctx: MainContext, wire: Wire): UsageFeature {
   retireHook();
   const publish = (): void => wire.emit(usageContract.onStatus, readStatus(undefined, ctx.config.status()));
-  const refresh = (): void => refreshFromEndpoint(publish, sessionRunning(ctx));
+  /** Whether any gauge is drawn: off is off, and nothing is asked for what nothing shows. */
+  const showing = (): boolean => {
+    const windows = ctx.config.status().windows;
+    return windows === null || windows.length > 0;
+  };
+  const refresh = async (manual = false): Promise<void> => {
+    if (showing()) await refreshFromEndpoint(publish, sessionRunning(ctx), manual);
+  };
   let timer: NodeJS.Timeout | null = null;
   wire.bind(usageContract, {
     status: () => {
-      refresh();                                 // a poll that finds them stale need not wait for the tick
+      void refresh();                            // a poll that finds them stale need not wait for the tick
+      return readStatus(undefined, ctx.config.status());
+    },
+    // The user's double-click on a gauge: ask now, and answer with what came back.
+    refreshUsage: async () => {
+      await refresh(true);
       return readStatus(undefined, ctx.config.status());
     },
   });
   return {
-    state: () => usageState(ctx),
+    state: usageState,
     // The figures keep themselves current with nobody looking: this process asks, not the page, so a
     // window that is docked, hidden or busy elsewhere still has today's numbers the moment it draws.
     start() {
       if (timer) return;
-      timer = setInterval(refresh, ENDPOINT_TICK_MS);
+      timer = setInterval(() => void refresh(), ENDPOINT_TICK_MS);
       timer.unref();
-      refresh();                                  // and once now, so the first paint has them
+      void refresh();                                  // and once now, so the first paint has them
     },
     stop() {
       if (timer) clearInterval(timer);

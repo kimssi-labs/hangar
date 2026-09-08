@@ -53,6 +53,8 @@ export interface RateWindow {
   label: string;
   /** The label a narrow card uses; the full one goes in its tooltip. */
   short: string;
+  /** The shortest name there is, for a card with room for one word: the model of a scoped window, else `short`. */
+  brief: string;
   usedPercent: number;
   resetsAt: number | null;
 }

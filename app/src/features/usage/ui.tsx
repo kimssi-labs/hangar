@@ -2,8 +2,8 @@
  * Claude Code's usage figures — the page side.
  *
  * Owns the snapshot the gauges draw from and the way it changes: a re-read, on a poll or when the
- * main side says fresh figures landed. The settings card's two halves are here too — which windows
- * the strip shows, and how the reading stands — and the gauges themselves (`UsageGauges`): what a screen
+ * main side says fresh figures landed. The settings card's body is here too — one switch — and the
+ * gauges themselves (`UsageGauges`): what a screen
  * places is one component, and what it shows is this feature's business alone.
  */
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
@@ -12,7 +12,8 @@ import { RATE_WINDOWS } from "@core/constants";
 import type { RateWindow, StatusConfig, StatusSnapshot } from "@core/types";
 
 import { api } from "../../renderer/api";
-import { isNarrow, UprightBar, useElementWidth } from "../../renderer/components/Chart";
+import { fitsUpright, isNarrow, UprightBar, useElementWidth } from "../../renderer/components/Chart";
+import { Choice } from "../../renderer/components/SettingsCard";
 import { Truncated } from "../../renderer/components/Truncated";
 import { formatClock, formatPercent, formatTime, resetLabel, resetRemaining, sinceParts, usageTone } from "../../renderer/format";
 import { useText } from "../../renderer/useText";
@@ -33,83 +34,42 @@ export function useUsage(): Usage {
   return { status, refresh };
 }
 
-/** When the figures were last written, in the language on screen. */
-function usageWhen(t: ReturnType<typeof useText>, ms: number): string {
-  const { key, vars } = sinceParts(ms);
-  return key === "since.absolute" ? formatTime(ms) : t(key, vars as Record<string, number>);
-}
-
 /**
- * The top half of the usage card: which rate-limit windows the gauges show.
- * Unticking them all is how the usage segment is turned off — there is no separate switch to
- * disagree with. Each window appears only when Claude Code reports it, so a tick here is "show it
- * when there is one", not "invent one".
+ * The usage card's body: on or off.
+ *
+ * On shows every window Claude Code reports, off shows none and stops the app asking for them at
+ * all. The config still holds a list of windows, so a machine that ticked some of them under an
+ * older version keeps exactly those: "on" is any non-empty choice, and choosing it again leaves
+ * that choice alone rather than widening it. Under the two, only what explains a blank gauge:
+ * still reading, no login, a login that ran out, or the endpoint refusing for the moment.
  */
-export function StatusSettings({ status, onChange }: { status: StatusConfig; onChange(status: StatusConfig): void }) {
+export function UsageSettings({ status, onChange, usage }: { status: StatusConfig; onChange(status: StatusConfig): void; usage: UsageState }) {
   const t = useText();
-  const chosen = status.windows;
+  const on = status.windows === null || status.windows.length > 0;
   return (
     <>
-      <div className="text-[11px] text-bone-500 pt-1">{t("settings.status.windows")}</div>
-      {RATE_WINDOWS.map(({ key, label }) => {
-        const on = chosen === null || chosen.includes(key);
-        return (
-          <label key={key} className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-ink-700/60">
-            <input
-              type="checkbox"
-              checked={on}
-              onChange={() => {
-                const current = chosen ?? RATE_WINDOWS.map((w) => w.key);
-                const next = on ? current.filter((k) => k !== key) : [...current, key];
-                onChange({ ...status, windows: next });
-              }}
-              className="accent-accent"
-            />
-            <Truncated as="span" className="text-sm text-bone-100">{label}</Truncated>
-          </label>
-        );
-      })}
-      <div className="text-[11px] text-bone-500">{t("settings.status.note")}</div>
-      <div className="flex flex-wrap gap-2 mt-2">
-        <button
-          type="button"
-          className={`btn ${chosen === null ? "btn-accent" : ""}`}
-          onClick={() => onChange({ ...status, windows: null })}
-        >
-          {t("settings.status.all")}
-        </button>
-        <button type="button" className="btn" onClick={() => onChange({ ...status, windows: [] })}>
-          {t("settings.status.none")}
-        </button>
-      </div>
-    </>
-  );
-}
-
-/** The bottom half of the usage card: where the figures come from, and how current they are. */
-export function UsageSettings({ usage }: { usage: UsageState }) {
-  const t = useText();
-  return (
-    <>
-      <div className="text-xs text-bone-300">{t("settings.usage.what")}</div>
-      <div className="flex items-center gap-2">
-        <span className={`chip ${usage.live ? "text-ok" : ""}`}>
-          {usage.live ? t("settings.usage.live") : t("settings.usage.idle")}
-        </span>
-        <span className="text-[11px] text-bone-500">
-          {usage.updatedAt
-            ? t("settings.usage.state", { count: usage.reported, when: usageWhen(t, usage.updatedAt) })
-            : t("settings.usage.never")}
-        </span>
-      </div>
-      {/* Why the endpoint has nothing to show, when it has nothing: the login, or a refusal. */}
-      {usage.login === "absent" && !usage.updatedAt ? (
+      <Choice
+        label={t("settings.usage.on")}
+        note={t("settings.usage.on.note")}
+        selected={on}
+        onSelect={() => { if (!on) onChange({ ...status, windows: null }); }}
+      />
+      <Choice
+        label={t("settings.usage.off")}
+        note={t("settings.usage.off.note")}
+        selected={!on}
+        onSelect={() => { if (on) onChange({ ...status, windows: [] }); }}
+      />
+      {on && !usage.updatedAt && usage.login === "fresh" && !usage.endpointFailure ? (
+        <div className="text-[11px] text-bone-500">{t("settings.usage.loading")}</div>
+      ) : null}
+      {on && usage.login === "absent" && !usage.updatedAt ? (
         <div className="text-[11px] text-warn">{t("settings.usage.login.absent")}</div>
       ) : null}
-      {usage.login === "expired" || usage.endpointFailure === "stale-token" ? (
+      {on && (usage.login === "expired" || usage.endpointFailure === "stale-token") ? (
         <div className="text-[11px] text-warn">{t("settings.usage.login.expired")}</div>
       ) : null}
-      {usage.endpointFailure === "rate-limited" ? (
+      {on && usage.endpointFailure === "rate-limited" ? (
         <div className="text-[11px] text-warn">{t("settings.usage.rateLimited")}</div>
       ) : null}
     </>
@@ -141,19 +101,27 @@ export function UsageCard({ window: usage, className = "", compact = false }: {
       clock: formatClock(usage.resetsAt),
     })
     : t("tip.usage", { label: usage.label, percent: formatPercent(usage.usedPercent) });
+  // Every gauge is a handle on the whole reading: the endpoint answers for all windows at once, and
+  // the main side tells every card when it has.
+  const refreshNow = (): void => void api.refreshUsage();
 
   if (narrow) {
+    // "1w Fable" where it fits, "Fable" where only one word does; "↻ 2h 15m" where it fits, and
+    // nothing where "↻ 1d 12h 30m" would run into the next card — each measured against this card.
+    const remaining = usage.resetsAt ? `↻ ${resetRemaining(usage.resetsAt)}` : "";
     return (
-      <div ref={box} className={`card p-1 ${className}`} title={title}>
-        <div className="text-[10px] text-bone-400 text-center whitespace-nowrap">{usage.short}</div>
+      <div ref={box} className={`card p-1 flex flex-col ${className}`} title={title} onDoubleClick={refreshNow}>
+        <div className="text-[10px] text-bone-400 text-center whitespace-nowrap">{fitsUpright(usage.short, boxWidth) ? usage.short : usage.brief}</div>
         <UprightBar percent={usage.usedPercent} tone={tone} />
         <div className={`mt-1 text-[10px] font-medium tabular-nums text-center ${usageTone(usage.usedPercent)}`}>
           {formatPercent(usage.usedPercent)}
         </div>
-        {/* Standing the card up must not cost the only thing the gauge is asked: how long until it frees up. */}
-        {usage.resetsAt ? (
+        {/* Standing the card up must not cost the only thing the gauge is asked: how long until it
+            frees up — until the card is too narrow even for that, when a time written over the next
+            card's number answers nothing. The percentage stays, and the tooltip keeps the time. */}
+        {remaining && fitsUpright(remaining, boxWidth) ? (
           <div data-testid="usage-reset" className="text-[10px] text-bone-400 tabular-nums text-center whitespace-nowrap">
-            ↻ {resetRemaining(usage.resetsAt)}
+            {remaining}
           </div>
         ) : null}
       </div>
@@ -161,7 +129,7 @@ export function UsageCard({ window: usage, className = "", compact = false }: {
   }
 
   return (
-    <div ref={box} className={`card ${compact ? "p-1.5" : "p-3"} ${className}`} title={title}>
+    <div ref={box} className={`card ${compact ? "p-1.5" : "p-3"} ${className}`} title={title} onDoubleClick={refreshNow}>
       <div className="flex items-baseline justify-between gap-2">
         <Truncated as="span" className={`${compact ? "text-[11px]" : "text-xs"} text-bone-400`}>{usage.label}</Truncated>
         <span className={`${compact ? "text-xs" : "text-sm"} font-semibold tabular-nums ${usageTone(usage.usedPercent)}`}>

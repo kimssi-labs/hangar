@@ -17,7 +17,7 @@ import { GitSettings } from "../../features/git/ui";
 import { MonitorSettings } from "../../features/metrics/ui";
 import { LaunchSettings, PermissionSettings } from "../../features/projects/ui";
 import { UpdatesSettings, type Updates } from "../../features/updates/ui";
-import { StatusSettings, UsageSettings } from "../../features/usage/ui";
+import { UsageSettings } from "../../features/usage/ui";
 import type { DisplayInfo, SettingsPayload } from "../api";
 import { useText } from "../useText";
 import { Card, Choice, SETTINGS_SECTIONS, type SettingsSection } from "./SettingsCard";
@@ -146,11 +146,8 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
         />
       </Card>
 
-      {/* One card: what the gauges show, and where the figures come from — the two were one question asked twice. */}
       <Card title={t("settings.usage")} section="usage" focused={focused} onFocus={onFocus} hint={t("settings.usage.hint")} body="space-y-2">
-        <StatusSettings status={draft.status} onChange={section("status")} />
-        <div className="border-t border-ink-600 pt-2" />
-        <UsageSettings usage={settings.usage} />
+        <UsageSettings status={draft.status} onChange={section("status")} usage={settings.usage} />
       </Card>
 
       <Card title={t("settings.git")} section="git" focused={focused} onFocus={onFocus} hint={t("settings.git.hint")}>

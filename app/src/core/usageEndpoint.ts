@@ -27,6 +27,8 @@ export const STALE_MS = 10 * 60_000;
 export const STALE_LIVE_MS = 60_000;
 /** Never two requests closer than this, whatever the answer was. */
 export const RETRY_MS = 60_000;
+/** A request the user asked for by hand may follow the last one this soon — a double-click, not a burst. */
+export const MANUAL_FLOOR_MS = 5_000;
 /** A token this close to its expiry is not worth a request. */
 const TOKEN_MARGIN_MS = 60_000;
 
@@ -54,6 +56,35 @@ export function accessTokenFrom(credentials: unknown, now = Date.now()): string 
 /** Whether the figures are old enough to ask again; figures that never were are. */
 export function isStale(updatedAt: number | null, now = Date.now(), staleMs = STALE_MS): boolean {
   return updatedAt === null || now - updatedAt > staleMs;
+}
+
+/** What deciding whether to ask the endpoint takes. */
+export interface AskInput {
+  now: number;
+  /** When the figures were last read; null when never. */
+  updatedAt: number | null;
+  /** When the endpoint was last asked; 0 when never. */
+  lastAskedAt: number;
+  /** Until when a refusal (401, 429) said not to ask again; 0 when it never did. */
+  nextAttemptAt: number;
+  /** A Claude Code session is running, so the figures go stale in a minute rather than ten. */
+  live: boolean;
+  /** The user asked, by hand: the age of the figures does not matter, only the floors do. */
+  manual: boolean;
+}
+
+/**
+ * Whether to ask the endpoint now.
+ *
+ * On the timer: only when the figures are stale for the moment's cadence, and never within RETRY_MS
+ * of the last request. By hand: whenever, but never within MANUAL_FLOOR_MS of the last request — a
+ * double-click is one request, not one per click. A refusal's backoff holds either way: the server
+ * said when to come back, and asking sooner would only lengthen it.
+ */
+export function shouldAsk({ now, updatedAt, lastAskedAt, nextAttemptAt, live, manual }: AskInput): boolean {
+  if (now < nextAttemptAt) return false;
+  if (manual) return now - lastAskedAt >= MANUAL_FLOOR_MS;
+  return now - lastAskedAt >= RETRY_MS && isStale(updatedAt, now, live ? STALE_LIVE_MS : STALE_MS);
 }
 
 interface EndpointBucket { utilization?: unknown; resets_at?: unknown }

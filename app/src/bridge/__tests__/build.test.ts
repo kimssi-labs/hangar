@@ -107,6 +107,7 @@ describe("the surface the page can reach", () => {
       worktreeRemove: "invoke worktree:remove",
       status: "invoke status:read",
       onStatus: "event status:push",
+      refreshUsage: "invoke status:refresh",
       metrics: "invoke metrics:history",
       onMetrics: "event metrics:push",
       pasteImage: "invoke clipboard:paste-image",
