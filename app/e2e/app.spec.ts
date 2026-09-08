@@ -249,7 +249,8 @@ test("a copied screenshot is given a path without anyone pressing a shortcut", a
 test("a copied screenshot stays a picture while no terminal is in front", async () => {
   test.skip(process.platform !== "win32", "the clipboard watch is Windows-only");
   const { home } = fixture();
-  const { app, page } = await launch(home);                    // the window in front is the app's, not a terminal
+  // Whatever is in front on the desktop running this — a terminal, often — the watch is told it is not one.
+  const { app, page } = await launch(home, { HANGAR_CLIP_FOCUS: "other" });
   try {
     await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
     await app.evaluate(({ clipboard, nativeImage }) => {

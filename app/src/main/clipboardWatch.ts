@@ -16,7 +16,7 @@ import { foregroundExecutable } from "./foreground.js";
 
 /** Cheap enough to run often; a person notices a screenshot taking a second to be ready. */
 const POLL_MS = 600;
-/** For the tests, whose own window is in front: `terminal` counts that as a terminal. */
+/** For the tests, which cannot choose the window in front: `terminal` counts it as one, `other` as none. */
 export const FOCUS_OVERRIDE_ENV = "HANGAR_CLIP_FOCUS";
 
 type SequenceNumber = () => number;
@@ -65,7 +65,9 @@ export interface ClipboardWatchOptions {
 
 /** Whether a paste right now would land in a terminal. */
 export function terminalInFront(): boolean {
-  if (process.env[FOCUS_OVERRIDE_ENV] === "terminal") return true;
+  const override = process.env[FOCUS_OVERRIDE_ENV];
+  if (override === "terminal") return true;
+  if (override === "other") return false;
   return isTerminalHost(foregroundExecutable());
 }
 
