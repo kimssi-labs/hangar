@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { rateWindows, readStatus } from "../status.js";
+import { rateWindows, readStatus, readStatusUpdatedAt } from "../status.js";
 import { MetricsHistory, processTree, sumTree, SYSTEM_SERIES } from "../metrics.js";
 import type { MetricsSnapshot } from "../types.js";
 
@@ -56,6 +56,41 @@ describe("readStatus", () => {
     writeFileSync(join(home, "cache", "outlook-status.json"), JSON.stringify({ servers: { web: { ok: true } } }));
     writeFileSync(join(home, ".ponytail-active"), "full");
     expect(Object.keys(readStatus(home, { windows: null }, NOW))).toEqual(["windows"]);
+  });
+
+  it("keeps the model-scoped window from the endpoint's file when Claude Code's own writer replaced the shared one", () => {
+    // The Stop hook and a status line write the block Claude Code hands them — five_hour and
+    // seven_day, nothing else — and that write used to take the "1w Fable" gauge with it (measured).
+    const home = join(mkdtempSync(join(tmpdir(), "cp-status-")), ".claude");
+    mkdirSync(join(home, "cache"), { recursive: true });
+    const own = join(home, "cache", "hangar-usage.json");
+    const shared = join(home, "cache", "rate-limits.json");
+    writeFileSync(own, JSON.stringify({
+      five_hour: { utilization: 30, resets_at: NOW / 1000 + 3600 },
+      seven_day: { utilization: 20, resets_at: NOW / 1000 + 86400 },
+      weekly_scoped: { utilization: 16, resets_at: NOW / 1000 + 86400, model: "Fable" },
+      updated_at: NOW / 1000 - 300, source: "endpoint",
+    }));
+    writeFileSync(shared, JSON.stringify({
+      five_hour: { used_percentage: 41, resets_at: NOW / 1000 + 3600 },
+      seven_day: { used_percentage: 21, resets_at: NOW / 1000 + 86400 },
+      updated_at: NOW / 1000 - 10,
+    }));
+    const later = readStatus(home, { windows: null }, NOW).windows;
+    expect(later.map((w) => [w.key, w.usedPercent])).toEqual([["five_hour", 41], ["seven_day", 21], ["weekly_scoped", 16]]);
+    expect(later[2]?.label).toBe("1w Fable");
+    expect(readStatusUpdatedAt(home)).toBe((NOW / 1000 - 10) * 1000);
+
+    // The other way round, a newer answer from the endpoint is the whole picture.
+    writeFileSync(own, JSON.stringify({
+      five_hour: { utilization: 44, resets_at: NOW / 1000 + 3600 },
+      seven_day: { utilization: 22, resets_at: NOW / 1000 + 86400 },
+      weekly_scoped: { utilization: 18, resets_at: NOW / 1000 + 86400, model: "Fable" },
+      updated_at: NOW / 1000 - 5, source: "endpoint",
+    }));
+    expect(readStatus(home, { windows: null }, NOW).windows.map((w) => [w.key, w.usedPercent]))
+      .toEqual([["five_hour", 44], ["seven_day", 22], ["weekly_scoped", 18]]);
+    expect(readStatusUpdatedAt(home)).toBe((NOW / 1000 - 5) * 1000);
   });
 
   it("draws only the windows that were chosen", () => {

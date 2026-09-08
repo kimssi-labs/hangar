@@ -9,8 +9,9 @@
  *
  * The Stop hook (core/usageHook.ts) stays as an option beside it, for a machine that would rather
  * publish the figures from Claude Code itself than have them fetched: it costs no request and is
- * current to the last turn. Both land in the one cache file the gauges read (core/status.ts), and a
- * cache the hook keeps fresh means the timer below finds nothing to do.
+ * current to the last turn. Each writes a cache file of its own and the reader (core/status.ts)
+ * lays the newer over the older: the hook's block has no model-scoped window, and in one shared
+ * file it used to replace the endpoint's whole answer.
  */
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -19,7 +20,7 @@ import { app, net } from "electron";
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
 import { homePaths } from "../../core/paths.js";
-import { readStatus, readStatusJson, readStatusUpdatedAt } from "../../core/status.js";
+import { readStatus, readStatusJson, readStatusUpdatedAt, readUpdatedAt } from "../../core/status.js";
 import { accessTokenFrom, backoffFor, cacheFromEndpoint, type EndpointFailure, failureFor, isStale, loginState, OAUTH_BETA, RETRY_MS, USAGE_ENDPOINT, USER_AGENT } from "../../core/usageEndpoint.js";
 import { hookCommand, hookFileName, hookInstalled, hookScript, withHook, withoutHook } from "../../core/usageHook.js";
 import type { ActionResult, SettingsPayload } from "../../main/ipc.js";
@@ -78,15 +79,16 @@ function usageHookPath(): string {
 }
 
 function usageState(): UsageState {
+  const paths = homePaths();
   const updatedAt = readStatusUpdatedAt();
-  const written = readStatusJson<{ source?: unknown }>(homePaths().rateLimits, {}).source;
+  const endpointAt = readUpdatedAt(paths.hangarUsage);
   return {
     collecting: hookInstalled(readClaudeSettings().settings),
     portable: !app.isPackaged || Boolean(process.env["PORTABLE_EXECUTABLE_DIR"]),
     updatedAt,
     reported: readStatus(undefined, { windows: null }).windows.length,
-    source: updatedAt === null ? null : written === "endpoint" ? "endpoint" : "hook",
-    login: loginState(readStatusJson<unknown>(homePaths().credentials, null)),
+    source: updatedAt === null ? null : endpointAt !== null && endpointAt >= updatedAt ? "endpoint" : "hook",
+    login: loginState(readStatusJson<unknown>(paths.credentials, null)),
     endpointFailure: lastFailure,
   };
 }
@@ -100,17 +102,17 @@ let inFlight = false;
 let lastFailure: EndpointFailure | null = null;
 
 /**
- * Ask Claude Code's usage endpoint when the cache is stale, and say so when the answer has landed.
+ * Ask Claude Code's usage endpoint when its last answer is stale, and say so when a new one has landed.
  *
  * Not awaited by the caller: the first status read happens on the way to the first paint. Guarded
- * so that a machine with no login, an expired token, or a fresh cache costs nothing, and one that
- * does ask never asks twice within RETRY_MS. The answer is written the way the hook writes, so the
- * reader cannot tell the two apart — only the `source` field, for the settings screen, differs.
+ * so that a machine with no login, an expired token, or a fresh answer costs nothing, and one that
+ * does ask never asks twice within RETRY_MS. The answer is written in the shape the hook writes,
+ * into a file of its own (core/status.ts, readRateLimits, says why two files).
  */
 function refreshFromEndpoint(landed: () => void): void {
   const paths = homePaths();
   const now = Date.now();
-  if (!isStale(readStatusUpdatedAt(), now) || inFlight || now < nextAttemptAt) return;
+  if (!isStale(readUpdatedAt(paths.hangarUsage), now) || inFlight || now < nextAttemptAt) return;
   const token = accessTokenFrom(readStatusJson<unknown>(paths.credentials, null), now);
   if (!token) return;                            // none, or run out: Claude Code refreshes it when it next runs
   nextAttemptAt = now + RETRY_MS;
@@ -130,11 +132,11 @@ function refreshFromEndpoint(landed: () => void): void {
       lastFailure = null;
       const cache = cacheFromEndpoint(await response.json(), Date.now());
       if (!cache) return;
-      mkdirSync(dirname(paths.rateLimits), { recursive: true });
+      mkdirSync(dirname(paths.hangarUsage), { recursive: true });
       // Write then rename, so a read never catches a half-written file — the hook does the same.
-      const tmp = `${paths.rateLimits}.tmp`;
+      const tmp = `${paths.hangarUsage}.tmp`;
       writeFileSync(tmp, JSON.stringify(cache), "utf8");
-      renameSync(tmp, paths.rateLimits);
+      renameSync(tmp, paths.hangarUsage);
       landed();
     })
     .catch((error: unknown) => console.error("[hangar] usage endpoint:", (error as Error).message))
