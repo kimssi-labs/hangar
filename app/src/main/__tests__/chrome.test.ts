@@ -36,8 +36,7 @@ vi.mock("electron", () => ({
 
 import { SURFACE } from "../../core/constants.js";
 import {
-  DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DEFAULT, DWMWCP_DONOTROUND, lookFor, native, nativeBusy, resolveTheme, RESETS_THE_FRAME, shell, SHELL_RETRY_MS, surfaceFor, WindowChrome, withNative, withShell,
-} from "../chrome.js";
+  DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DEFAULT, DWMWCP_DONOTROUND, lookFor, native, nativeBusy, resolveTheme, RESETS_THE_FRAME, shell, SHELL_RETRY_MS, surfaceFor, WindowChrome, withNative, withShell, withoutFrame } from "../chrome.js";
 
 /** A window that can be shown, restored and closed, says whether it is gone, and records its accent. */
 class FakeWindow extends EventEmitter {
@@ -215,5 +214,26 @@ describe("a window's chrome", () => {
     c.flush(true);
     window.emit("show");
     expect(window.accents).toEqual([]);
+  });
+});
+
+describe("a remembered rectangle", () => {
+  it("has the frame taken off — the 125 % case measured: bounds two DIP wider and one taller than the content", () => {
+    const normal = { x: 220, y: 160, width: 942, height: 621 };
+    const bounds = { x: 220, y: 160, width: 942, height: 621 };
+    const content = { x: 220, y: 160, width: 940, height: 620 };
+    expect(withoutFrame(normal, bounds, content)).toEqual({ x: 220, y: 160, width: 940, height: 620 });
+  });
+
+  it("is the normal rectangle itself where the frame adds nothing (100 %)", () => {
+    const rect = { x: 10, y: 20, width: 1180, height: 760 };
+    expect(withoutFrame(rect, rect, rect)).toEqual(rect);
+  });
+
+  it("applies the frame of a maximised window to its normal rectangle, not to the maximised one", () => {
+    const normal = { x: 220, y: 160, width: 942, height: 621 };
+    const bounds = { x: -8, y: -8, width: 1552, height: 936 };
+    const content = { x: -7, y: -7, width: 1550, height: 934 };
+    expect(withoutFrame(normal, bounds, content)).toEqual({ x: 221, y: 161, width: 940, height: 619 });
   });
 });
