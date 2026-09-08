@@ -5,7 +5,7 @@
  * did not recognise its own work would rewrite the clipboard forever.
  */
 import { describe, expect, it } from "vitest";
-import { CLIP_KEEP, clipsToPrune, shouldAddPath } from "../clipboardRules.js";
+import { CLIP_KEEP, clipsToPrune, shouldAddPath, isTerminalHost, TERMINAL_HOSTS } from "../clipboardRules.js";
 
 const IMAGE = ["image/png"];
 const IMAGE_AND_PATH = ["text/plain", "image/png"];
@@ -49,5 +49,24 @@ describe("clipsToPrune", () => {
   it("touches nothing else in the folder", () => {
     expect(clipsToPrune(["notes.txt", "clip-keep.png.bak", ...named(2)], 0))
       .toEqual(named(2).sort());
+  });
+});
+
+describe("isTerminalHost", () => {
+  it("knows the terminals by executable, whatever the case", () => {
+    expect(isTerminalHost("WindowsTerminal.exe")).toBe(true);
+    expect(isTerminalHost("CONHOST.EXE")).toBe(true);
+    expect(isTerminalHost("OpenConsole.exe")).toBe(true);
+  });
+
+  it("does not count an editor, a browser, Word, or nothing at all", () => {
+    for (const exe of ["Code.exe", "msedge.exe", "WINWORD.EXE", "explorer.exe", "", null, undefined]) {
+      expect(isTerminalHost(exe), String(exe)).toBe(false);
+    }
+  });
+
+  it("lists file names only, no paths and no duplicates", () => {
+    expect(TERMINAL_HOSTS.every((h) => /^[\w.-]+\.exe$/.test(h))).toBe(true);
+    expect(new Set(TERMINAL_HOSTS.map((h) => h.toLowerCase())).size).toBe(TERMINAL_HOSTS.length);
   });
 });

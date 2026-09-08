@@ -51,13 +51,13 @@ function fixture(): { home: string; projectDir: string } {
   return { home, projectDir };
 }
 
-async function launch(home: string): Promise<{ app: ElectronApplication; page: Page }> {
+async function launch(home: string, env: Record<string, string> = {}): Promise<{ app: ElectronApplication; page: Page }> {
   const app = await electron.launch({
     // --lang pins what app.getLocale() reports, and the window follows the machine unless told
     // otherwise: without this the suite reads in the language of whoever is running it.
     args: [".", "--lang=en-US"],
     cwd: process.cwd(),
-    env: { ...process.env, CLAUDE_HOME: home },
+    env: { ...process.env, ...env, CLAUDE_HOME: home },
   });
   const page = await mainWindow(app);
   await page.waitForLoadState("domcontentloaded");
@@ -213,7 +213,9 @@ test("a screenshot on the clipboard becomes a file, with its path ready to paste
 test("a copied screenshot is given a path without anyone pressing a shortcut", async () => {
   test.skip(process.platform !== "win32", "the clipboard watch is Windows-only");
   const { home } = fixture();
-  const { app, page } = await launch(home);
+  // The path is for terminals, and the window in front here is the app's own — so the watch is
+  // told a terminal is in front (main/clipboardWatch's override for exactly this).
+  const { app, page } = await launch(home, { HANGAR_CLIP_FOCUS: "terminal" });
   try {
     await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
 
@@ -233,6 +235,31 @@ test("a copied screenshot is given a path without anyone pressing a shortcut", a
     expect(existsSync(file), "the file the path points at is really there").toBe(true);
     // And the picture is still on the clipboard, so an image editor is unaffected.
     expect(await app.evaluate(({ clipboard }) => !clipboard.readImage().isEmpty())).toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * The other half of the same rule: while no terminal is in front, the screenshot is left as it
+ * was. Word pastes the text when a clipboard offers both a bitmap and a text (measured), so a path
+ * added beside every screenshot turned Ctrl+V in a document into a file name — the report that
+ * brought this test.
+ */
+test("a copied screenshot stays a picture while no terminal is in front", async () => {
+  test.skip(process.platform !== "win32", "the clipboard watch is Windows-only");
+  const { home } = fixture();
+  const { app, page } = await launch(home);                    // the window in front is the app's, not a terminal
+  try {
+    await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
+    await app.evaluate(({ clipboard, nativeImage }) => {
+      const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFElEQVR4nGO8WR7OgA0wYRUdtBIATsMBtyGIWZMAAAAASUVORK5CYII=", "base64");
+      clipboard.clear();
+      clipboard.writeImage(nativeImage.createFromBuffer(png));
+    });
+    await page.waitForTimeout(2500);                           // several polls of the watch
+    expect(await app.evaluate(({ clipboard }) => clipboard.readText()), "no path was added").toBe("");
+    expect(await app.evaluate(({ clipboard }) => !clipboard.readImage().isEmpty()), "the picture is still there").toBe(true);
   } finally {
     await app.close();
   }
