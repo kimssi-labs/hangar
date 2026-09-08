@@ -2,7 +2,7 @@
  * Claude Code's usage figures — the page side.
  *
  * Owns the snapshot the gauges draw from and the two ways it changes: a re-read, and the hook
- * being switched on or off. The two settings card bodies are here too — which windows the strip
+ * being switched on or off. The settings card's two halves are here too — which windows the strip
  * shows, and the collection switch — and the gauges themselves (`UsageGauges`): what a screen
  * places is one component, and what it shows is this feature's business alone.
  */
@@ -53,7 +53,7 @@ function usageWhen(t: ReturnType<typeof useText>, ms: number): string {
 }
 
 /**
- * The settings card body for the status strip: which rate-limit windows the gauges show.
+ * The top half of the usage card: which rate-limit windows the gauges show.
  * Unticking them all is how the usage segment is turned off — there is no separate switch to
  * disagree with. Each window appears only when Claude Code reports it, so a tick here is "show it
  * when there is one", not "invent one".
@@ -99,7 +99,7 @@ export function StatusSettings({ status, onChange }: { status: StatusConfig; onC
   );
 }
 
-/** The settings card body for collection: how it stands right now, and the switch. */
+/** The bottom half of the usage card: where the figures come from, how that stands, and the switch. */
 export function UsageSettings({ usage, onCollect }: { usage: UsageState; onCollect(on: boolean): void }) {
   const t = useText();
   return (

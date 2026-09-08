@@ -148,11 +148,10 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
         />
       </Card>
 
-      <Card title={t("settings.status")} section="status" focused={focused} onFocus={onFocus} hint={t("settings.status.hint")}>
-        <StatusSettings status={draft.status} onChange={section("status")} />
-      </Card>
-
+      {/* One card: what the gauges show, and where the figures come from — the two were one question asked twice. */}
       <Card title={t("settings.usage")} section="usage" focused={focused} onFocus={onFocus} hint={t("settings.usage.hint")} body="space-y-2">
+        <StatusSettings status={draft.status} onChange={section("status")} />
+        <div className="border-t border-ink-600 pt-2" />
         <UsageSettings usage={settings.usage} onCollect={onCollectUsage} />
       </Card>
 
