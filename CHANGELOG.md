@@ -3,6 +3,25 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.15.0
+
+- **A conversation you `/clear` stays one row.** Claude Code's `/clear` starts a new session id in the
+  same terminal and hands it the old session's name, so the list showed two rows named alike — one
+  finished, one running. The finished one is now folded under its successor: the row is the newest
+  transcript, the detail pane says how many came before it, and the first prompt is borrowed until a
+  new one is typed. Only a named session is folded, and only under a successor of the same name;
+  deleting the head row brings the earlier ones back.
+- **Usage shows on any machine you are signed in on.** The gauges used to depend on a hook you had
+  to switch on. When nothing has published the figures, or what was published is more than ten
+  minutes old, Hangar now asks Anthropic's usage API directly — the same request Claude Code's own
+  `/usage` makes, with the login Claude Code keeps, through the machine's proxy settings, at most once
+  a minute. The token goes to api.anthropic.com and nowhere else, and is neither refreshed nor
+  stored. The settings screen says which source wrote the figures, and — when there is nothing to
+  show — whether the login is missing (an API-key machine) or has run out (run Claude Code once).
+- **A third gauge for a weekly limit scoped to one model**, labelled after the model ("1w Fable"),
+  when the account has one.
+- Claude Code's own home override, `CLAUDE_CONFIG_DIR`, is honoured when Hangar has none of its own.
+
 ## v2.14.1
 
 - **On a 125 % display, a band docked to the right no longer sits one pixel off the screen.**
