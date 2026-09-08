@@ -291,3 +291,34 @@ describe("sessionStatus", () => {
     expect(store.sessionStatus(1)).toBeNull();
   });
 });
+
+describe("a conversation split by /clear", () => {
+  it("is one row: the new transcript, counting the finished one folded under it", async () => {
+    const { home, cwd, dir } = makeHome();
+    const project = join(home, "projects", dir);
+    const older = "aaaaaaaa-1111-2222-3333-444444444444";
+    const newer = "bbbbbbbb-1111-2222-3333-444444444444";
+    const name = (id: string) => {
+      mkdirSync(join(project, id), { recursive: true });
+      writeFileSync(join(project, id, "custom-title.json"), JSON.stringify({ customTitle: "번역기" }));
+    };
+    writeFileSync(join(project, `${older}.jsonl`), [
+      JSON.stringify({ type: "user", cwd, sessionId: older, message: { content: "아래 내용을 영어로" }, origin: { kind: "human" } }),
+      JSON.stringify({ type: "assistant", message: { content: "…" } }),
+    ].join("\n") + "\n");
+    name(older);
+    await new Promise((resolve) => setTimeout(resolve, 30));    // born later, measurably
+    writeFileSync(join(project, `${newer}.jsonl`), [
+      JSON.stringify({ type: "custom-title", customTitle: "번역기", sessionId: newer }),
+      JSON.stringify({ type: "user", cwd, sessionId: newer, message: { content: "<command-name>/clear</command-name>" } }),
+    ].join("\n") + "\n");
+    name(newer);
+    const store = new Store(home, { isAlive: () => false });
+    const sessions = store.scan().find((p) => p.dir === dir)?.sessions ?? [];
+    const row = sessions.find((s) => s.id === newer);
+    expect(sessions.map((s) => s.id)).not.toContain(older);
+    expect(row?.continues).toBe(1);
+    expect(row?.prompt).toBe("아래 내용을 영어로");                  // borrowed until something is typed
+    expect(row?.title).toBe("번역기");
+  });
+});

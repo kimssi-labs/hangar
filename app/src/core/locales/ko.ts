@@ -79,6 +79,8 @@ export const ko: Dictionary = {
   "detail.state": "상태",
   "detail.state.running": "실행 중 (pid {pid})",
   "detail.state.idle": "대기",
+  "detail.continues": "이전 대화",
+  "detail.continues.value": "/clear 전의 대화 기록 {count}개를 이 행으로 묶어 표시합니다",
   "detail.using": "현재 사용",
   "detail.file": "파일",
 

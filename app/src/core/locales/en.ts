@@ -72,6 +72,8 @@ export const en = {
   "detail.state": "State",
   "detail.state.running": "running (pid {pid})",
   "detail.state.idle": "idle",
+  "detail.continues": "Earlier transcripts",
+  "detail.continues.value": "{count} earlier transcript(s) of this conversation, split off by /clear, shown as this row",
   "detail.using": "Using",
   "detail.file": "File",
 

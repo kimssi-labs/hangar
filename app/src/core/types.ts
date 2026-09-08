@@ -18,6 +18,8 @@ export interface SessionInfo {
   pid: number | null;
   /** Kept at the top of its list, by the user's choice. */
   pinned: boolean;
+  /** Earlier transcripts of this same conversation, split off by /clear and folded under this row. */
+  continues: number;
 }
 
 export interface ProjectInfo {
