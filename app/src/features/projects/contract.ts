@@ -7,6 +7,13 @@ export interface OpenSessionRequest {
   projectDir: string;
   sessionId: string | null;
   target: "sessionsWindow" | "currentWindow" | "newWindow";
+  /** The window asked and the user agreed: stop the process running this session and resume it here. */
+  takeOver?: boolean;
+}
+
+/** How opening went. `background` is a running session with no window to show, for the page to ask about. */
+export interface OpenSessionResult extends ActionResult {
+  background?: { pid: number; title: string; busy: boolean };
 }
 
 export interface RenameRequest {
@@ -31,7 +38,7 @@ export const projectsContract = {
   /** Every project with its sessions, read again from disk. */
   scan: invoke<void, ProjectInfo[]>("projects:scan"),
   /** Start or resume a session in a terminal. */
-  openSession: invoke<OpenSessionRequest, ActionResult>("session:open"),
+  openSession: invoke<OpenSessionRequest, OpenSessionResult>("session:open"),
   renameSession: invoke<RenameRequest, ActionResult>("session:rename"),
   renameProject: invoke<RenameRequest, ActionResult>("project:rename"),
   deleteSession: invoke<DeleteRequest, ActionResult>("session:delete"),

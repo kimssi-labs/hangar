@@ -10,8 +10,8 @@
  */
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { dirname } from "node:path";
-import { dialog, shell } from "electron";
+import { dirname, join } from "node:path";
+import { app, dialog, shell } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
@@ -19,12 +19,15 @@ import { launchCommand, sessionEnvironment } from "../../core/launcher.js";
 import type { ProjectInfo } from "../../core/types.js";
 import { claudeExecutable, detectLinuxTerminal, haveExecutable, which } from "../../main/executables.js";
 import { headOf, isLinkedWorktree, mainCheckoutOf } from "../../main/gitStatus.js";
+import { focusSession, helperExecutable, stopSession } from "../../main/liveSession.js";
 import type { ActionResult, AddProjectResult } from "../../main/ipc.js";
 import type { SessionTarget } from "../../main/sampler.js";
-import { projectsContract } from "./contract.js";
+import { projectsContract, type OpenSessionResult } from "./contract.js";
 
 /** A scan slower than this is worth a line in the log. */
 const SLOW_SCAN_MS = 200;
+/** How long after start-up the focus helper is built, so the first double-click on a running session does not wait for it. */
+const HELPER_WARMUP_MS = 10_000;
 
 /** What this feature needs from the rest of main. */
 export interface ProjectsDeps {
@@ -43,6 +46,9 @@ export interface ProjectsFeature {
 
 export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): ProjectsFeature {
   let projects: ProjectInfo[] = [];
+  const helpersDir = (): string => join(app.getPath("userData"), "helpers");
+  // Built once per version, a few seconds of compiler time: off the start-up path, before anyone asks.
+  if (process.platform === "win32") setTimeout(() => void helperExecutable(helpersDir()), HELPER_WARMUP_MS).unref();
 
   const find = (dir: string): ProjectInfo | undefined => projects.find((p) => p.dir === dir);
 
@@ -107,14 +113,30 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
   wire.bind(projectsContract, {
     scan: () => scan(),
 
-    openSession: (request): ActionResult => {
+    openSession: async (request): Promise<OpenSessionResult> => {
       const project = find(request.projectDir);
       if (!project?.cwd) return { ok: false, message: "That project's folder is unknown." };
       if (!project.exists) return { ok: false, message: `Folder is gone: ${project.cwd}` };
       const exe = claudeExecutable();
       if (!exe) return { ok: false, message: "claude is not on PATH — install Claude Code first." };
       const session = request.sessionId ? project.sessions.find((s) => s.id === request.sessionId) : null;
-      if (session?.live) return { ok: false, message: "That session is already running." };
+      if (session?.live && session.pid) {
+        // Running already: a double-click means "show me", not "start another". The window it lives
+        // in is raised — its tab selected, in Windows Terminal — and nothing is launched. A session
+        // with no window to show is handed back for the page to ask about; only with the answer does
+        // its process end and the session resume here.
+        if (!request.takeOver) {
+          const focus = await focusSession(session.pid, helpersDir());
+          if (focus.found) return { ok: true, message: focus.tab ? `Switched to ${session.title}.` : `Brought ${session.title} to the front.` };
+          if (process.platform !== "win32") return { ok: false, message: "That session is already running." };
+          return {
+            ok: false,
+            message: "That session is running without a window.",
+            background: { pid: session.pid, title: session.title, busy: ctx.store.sessionStatus(session.pid) === "busy" },
+          };
+        }
+        if (!stopSession(session.pid)) return { ok: false, message: `Could not stop the running session (pid ${session.pid}).` };
+      }
 
       const launch = ctx.config.launch();
       const command = launchCommand({

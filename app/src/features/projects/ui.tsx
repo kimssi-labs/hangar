@@ -80,9 +80,29 @@ export interface ProjectsUi {
   t: Translate;
 }
 
-/** Start or resume a session, say how it went, and read the rows again: a running dot may have lit. */
+/**
+ * Start or resume a session, say how it went, and read the rows again: a running dot may have lit.
+ *
+ * A running session's window is brought to the front instead. One running with no window to show
+ * is offered a take-over — its process stopped, the session resumed in a new tab — and the dialog
+ * says plainly whether a response in progress would be cut off.
+ */
 export async function openSession(request: OpenSessionRequest, ui: ProjectsUi): Promise<void> {
-  ui.notify(await api.openSession(request));
+  const result = await api.openSession(request);
+  if (result.background) {
+    const { askUser, t } = ui;
+    const { pid, title, busy } = result.background;
+    const yes = await askUser({
+      title: t("dialog.background", { name: title }),
+      detail: [t("dialog.background.detail", { pid: String(pid) }), t(busy ? "dialog.background.busy" : "dialog.background.idle")].join("\n"),
+      confirm: t("dialog.background.confirm"),
+      danger: busy,
+    });
+    if (!yes) return;
+    ui.notify(await api.openSession({ ...request, takeOver: true }));
+  } else {
+    ui.notify(result);
+  }
   void ui.refresh();
 }
 
