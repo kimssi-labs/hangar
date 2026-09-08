@@ -16,7 +16,7 @@ import type { RateWindow, StatusConfig, StatusSnapshot } from "./types.js";
 export { RATE_WINDOWS } from "./constants.js";
 
 
-interface RateBucket { used_percentage?: number; utilization?: number; resets_at?: number }
+interface RateBucket { used_percentage?: number; utilization?: number; resets_at?: number; model?: unknown }
 
 function readJson<T>(file: string, fallback: T): T {
   try {
@@ -38,10 +38,12 @@ export function rateWindows(raw: Record<string, unknown>, now = Date.now()): Rat
     if (typeof used !== "number" || !Number.isFinite(used)) continue;
     const resetsAt = typeof bucket.resets_at === "number" ? bucket.resets_at * 1000 : null;
     const rolled = resetsAt !== null && resetsAt <= now;
+    // A window scoped to one model is named after it: "1w Fable".
+    const model = typeof bucket.model === "string" && bucket.model.trim() ? bucket.model.trim() : null;
     out.push({
       key,
-      label,
-      short,
+      label: model ? `${short} ${model}` : label,
+      short: model ? `${short} ${model}` : short,
       usedPercent: rolled ? 0 : Math.max(0, Math.min(100, Math.round(used))),
       resetsAt: rolled ? null : resetsAt,
     });

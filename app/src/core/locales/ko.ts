@@ -163,6 +163,9 @@ export const ko: Dictionary = {
   "settings.usage.stop": "수집 중지",
   "settings.usage.writes": "켜면 hooks/{file}을 만들고 settings.json에 Stop 훅 하나를 추가합니다. 기존 훅은 건드리지 않습니다. 끄면 둘 다 지웁니다. 값은 cache/rate-limits.json에 저장됩니다. 직접 읽어올 때는 .credentials.json의 로그인 토큰을 api.anthropic.com에만 보내며, 갱신하거나 다른 곳에 쓰지 않습니다.",
   "settings.usage.endpoint": "지금 표시된 값은 Anthropic 사용량 API에서 직접 읽어온 것입니다. 훅이 없어도 동작합니다.",
+  "settings.usage.login.absent": "Claude Code 로그인 정보(.credentials.json)가 없어 직접 조회할 수 없습니다. API 키로 쓰는 PC이거나 아직 로그인하지 않은 상태입니다.",
+  "settings.usage.login.expired": "Claude Code 로그인 토큰이 만료되어 직접 조회를 쉬고 있습니다. Claude Code를 한 번 실행하면 토큰이 갱신되고 곧 값이 들어옵니다.",
+  "settings.usage.rateLimited": "사용량 API가 요청을 제한했습니다. 알려준 시간이 지나면 다시 시도합니다.",
   "settings.usage.portable": "설치본이 아닌 실행 파일입니다. 훅은 Claude Code 쪽에 남으므로 이 폴더만 지우면 훅이 그대로 동작합니다. 지우기 전에 수집을 꺼 주세요. 나중에 설치한 Hangar에서도 제거할 수 있습니다.",
   "settings.usage.waiting": "첫 세션이 끝나면 값이 들어옵니다. 계속 비어 있다면 Claude 구독이 아니라 API 키로 로그인된 PC일 수 있습니다. 이 경우 5시간·주간 사용량 자체가 제공되지 않습니다.",
 

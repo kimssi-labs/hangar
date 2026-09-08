@@ -10,13 +10,13 @@
  */
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { app } from "electron";
+import { app, net } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
 import { homePaths } from "../../core/paths.js";
 import { readStatus, readStatusJson, readStatusUpdatedAt } from "../../core/status.js";
-import { accessTokenFrom, cacheFromEndpoint, isStale, OAUTH_BETA, RETRY_MS, USAGE_ENDPOINT } from "../../core/usageEndpoint.js";
+import { accessTokenFrom, backoffFor, cacheFromEndpoint, type EndpointFailure, failureFor, isStale, loginState, OAUTH_BETA, RETRY_MS, USAGE_ENDPOINT, USER_AGENT } from "../../core/usageEndpoint.js";
 import { hookCommand, hookFileName, hookInstalled, hookScript, withHook, withoutHook } from "../../core/usageHook.js";
 import type { ActionResult, SettingsPayload } from "../../main/ipc.js";
 import { usageContract, type UsageState } from "./contract.js";
@@ -73,13 +73,16 @@ function usageState(): UsageState {
     updatedAt,
     reported: readStatus(undefined, { windows: null }).windows.length,
     source: updatedAt === null ? null : written === "endpoint" ? "endpoint" : "hook",
+    login: loginState(readStatusJson<unknown>(homePaths().credentials, null)),
+    endpointFailure: lastFailure,
   };
 }
 
 /** How long one request to the usage endpoint may take. */
-const ENDPOINT_TIMEOUT_MS = 8000;
-let lastAttempt = 0;
+const ENDPOINT_TIMEOUT_MS = 10_000;
+let nextAttemptAt = 0;
 let inFlight = false;
+let lastFailure: EndpointFailure | null = null;
 
 /**
  * Ask Claude Code's usage endpoint when the cache is stale, and say so when the answer has landed.
@@ -92,17 +95,24 @@ let inFlight = false;
 function refreshFromEndpoint(landed: () => void): void {
   const paths = homePaths();
   const now = Date.now();
-  if (!isStale(readStatusUpdatedAt(), now) || inFlight || now - lastAttempt < RETRY_MS) return;
+  if (!isStale(readStatusUpdatedAt(), now) || inFlight || now < nextAttemptAt) return;
   const token = accessTokenFrom(readStatusJson<unknown>(paths.credentials, null), now);
-  if (!token) return;
-  lastAttempt = now;
+  if (!token) return;                            // none, or run out: Claude Code refreshes it when it next runs
+  nextAttemptAt = now + RETRY_MS;
   inFlight = true;
-  fetch(USAGE_ENDPOINT, {
-    headers: { Authorization: `Bearer ${token}`, "anthropic-beta": OAUTH_BETA },
+  // Chromium's network stack, not Node's: it follows the machine's proxy settings, which is the
+  // difference between working and not on a company network.
+  net.fetch(USAGE_ENDPOINT, {
+    headers: { Authorization: `Bearer ${token}`, "anthropic-beta": OAUTH_BETA, "User-Agent": USER_AGENT },
     signal: AbortSignal.timeout(ENDPOINT_TIMEOUT_MS),
   })
     .then(async (response) => {
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        lastFailure = failureFor(response.status);
+        nextAttemptAt = Date.now() + backoffFor(response.status, response.headers.get("retry-after"));
+        throw new Error(`HTTP ${response.status}`);
+      }
+      lastFailure = null;
       const cache = cacheFromEndpoint(await response.json(), Date.now());
       if (!cache) return;
       mkdirSync(dirname(paths.rateLimits), { recursive: true });

@@ -131,6 +131,16 @@ export function UsageSettings({ usage, onCollect }: { usage: UsageState; onColle
       {usage.source === "endpoint" ? (
         <div className="text-[11px] text-bone-500">{t("settings.usage.endpoint")}</div>
       ) : null}
+      {/* Why the endpoint has nothing to show, when it has nothing: the login, or a refusal. */}
+      {usage.login === "absent" && !usage.updatedAt ? (
+        <div className="text-[11px] text-warn">{t("settings.usage.login.absent")}</div>
+      ) : null}
+      {(usage.login === "expired" || usage.endpointFailure === "stale-token") && !usage.collecting ? (
+        <div className="text-[11px] text-warn">{t("settings.usage.login.expired")}</div>
+      ) : null}
+      {usage.endpointFailure === "rate-limited" ? (
+        <div className="text-[11px] text-warn">{t("settings.usage.rateLimited")}</div>
+      ) : null}
       {usage.portable && usage.collecting ? (
         <div className="text-[11px] text-warn">{t("settings.usage.portable")}</div>
       ) : null}
