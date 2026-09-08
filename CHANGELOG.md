@@ -3,6 +3,19 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.15.1
+
+- **Usage collection worked, and showed nothing, on a machine whose user name is not plain English.**
+  The hook script carried the path it publishes to, and a Windows script is read in the console's
+  code page — so a home with a Korean (or any non-ASCII) name in it became a path that does not
+  exist. The hook ran every turn and wrote nowhere, while the settings card said "collecting". Both
+  scripts now find the file from their own folder, and a script installed by an earlier version is
+  brought up to date when Hangar starts.
+- **The figures keep themselves current in the background.** They used to be fetched only while the
+  window was asking; now the app keeps them up to date on its own, so a band that is docked or
+  minimised has today's numbers the moment it is looked at. Nothing to install and nothing to switch
+  on: at most one request every ten minutes, and none at all while something else is publishing them.
+
 ## v2.15.0
 
 - **A conversation you `/clear` stays one row.** Claude Code's `/clear` starts a new session id in the
