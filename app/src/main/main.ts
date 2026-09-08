@@ -403,6 +403,7 @@ async function start(): Promise<void> {
   await createWindow();
   splashSays("Starting the monitor…");
   metricsFeature.start();
+  usageFeature.start();                           // the usage figures start keeping themselves current
   clipboardFeature.rearm();
 
   closeSplash();
@@ -509,6 +510,7 @@ function leave(): Promise<void> {
 
 app.on("window-all-closed", () => {
   console.log("[hangar] window-all-closed -> quitting");
+  usageFeature.stop();
   if (process.platform === "win32") {
     void leave();                               // under way already when the window's `close` ran
     return;

@@ -24,6 +24,8 @@
  * is written, and removes exactly what it added.
  */
 
+import { posix, win32 } from "node:path";
+
 /** Base name of the hook script; the extension follows the platform. */
 export const HOOK_BASE = "hangar-usage";
 
@@ -49,9 +51,19 @@ function isOurs(command: string | undefined): boolean {
 const NOTE = "Written by Hangar. Publishes Claude Code's rate limits so the manager can draw them."
   + " Turn it off in Hangar under Settings, Usage.";
 
-/** A single-quoted shell literal, safe for a path with anything in it. */
-function shellQuote(value: string): string {
-  return `'${value.split("'").join(`'\\''`)}'`;
+/**
+ * Where the cache is, from where the script is: the two live under the same home, `hooks/` and
+ * `cache/`, so the script can find the file by its own location and carry no path of its own.
+ *
+ * It has to. A cmd script is read in the console's code page — 949 on a Korean Windows, 437 on an
+ * English one — and a home spelled with anything outside ASCII (a Korean user name, say), written
+ * into the script as UTF-8, comes out as a path that does not exist: the hook ran, wrote nothing,
+ * and the gauges stayed blank with "collecting" on (measured, chcp 949 and 437; only a machine with
+ * the system UTF-8 option on, code page 65001, was ever right). `%~dp0` and `$0` come from the OS,
+ * in the right encoding, whatever the name of the user.
+ */
+export function cacheFromScript(scriptDir: string, cachePath: string, platform: NodeJS.Platform): string {
+  return (platform === "win32" ? win32 : posix).relative(scriptDir, cachePath);
 }
 
 /**
@@ -61,10 +73,12 @@ function shellQuote(value: string): string {
  * today or grows tomorrow, the reader already tolerates what it does not recognise, and a hook that
  * reshapes the data is one more place for the schema to go stale.
  */
-export function posixHook(cachePath: string): string {
+export function posixHook(cachePath: string, scriptDir: string): string {
   return `#!/bin/sh
 # ${NOTE}
-cache=${shellQuote(cachePath)}
+# The cache sits beside this script's folder; found from here, so no path is written into the file.
+case "$0" in */*) here=\${0%/*} ;; *) here=. ;; esac
+cache="$here/${cacheFromScript(scriptDir, cachePath, "linux").split(posix.sep).join("/")}"
 
 payload=
 while IFS= read -r line || [ -n "$line" ]; do
@@ -114,15 +128,15 @@ exit 0
  * does the parsing. PowerShell starts once per turn at most, and only when the payload actually
  * carries rate limits.
  */
-export function windowsHook(cachePath: string): string {
+export function windowsHook(cachePath: string, scriptDir: string): string {
   return [
     "@echo off",
     `rem ${NOTE}`,
     "setlocal",
-    // The destination is written down at install time rather than derived here. Claude Code keys
-    // its home off CLAUDE_CONFIG_DIR and Hangar off CLAUDE_HOME; on a machine that sets either one,
-    // a hook that guessed would publish to a file nothing reads.
-    `set "HANGAR_CACHE=${cachePath}"`,
+    // From the script's own folder (%~dp0 ends in a backslash), never a literal: see cacheFromScript.
+    // Not from CLAUDE_CONFIG_DIR or CLAUDE_HOME either — a machine that sets one would publish where
+    // nothing reads. The hooks and cache folders sit under the one home the app installed both into.
+    `set "HANGAR_CACHE=%~dp0${cacheFromScript(scriptDir, cachePath, "win32")}"`,
     'set "HANGAR_PAYLOAD=%TEMP%\\hangar-usage-%RANDOM%%RANDOM%.json"',
     '"%SystemRoot%\\System32\\more.com" > "%HANGAR_PAYLOAD%" 2>nul',
     'if not exist "%HANGAR_PAYLOAD%" exit /b 0',
@@ -156,9 +170,9 @@ export function windowsHook(cachePath: string): string {
   ].join("\r\n");
 }
 
-/** The script for this platform, publishing to the one file Hangar will read. */
-export function hookScript(platform: NodeJS.Platform, cachePath: string): string {
-  return platform === "win32" ? windowsHook(cachePath) : posixHook(cachePath);
+/** The script for this platform, publishing to the one file Hangar will read, found from where the script is. */
+export function hookScript(platform: NodeJS.Platform, cachePath: string, scriptDir: string): string {
+  return platform === "win32" ? windowsHook(cachePath, scriptDir) : posixHook(cachePath, scriptDir);
 }
 
 interface HookEntry { type?: string; command?: string; shell?: string }

@@ -6,9 +6,10 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { hookCommand, hookFileName, hookInstalled, hookScript, withHook, withoutHook } from "../usageHook.js";
+import { cacheFromScript, hookCommand, hookFileName, hookInstalled, hookScript, withHook, withoutHook } from "../usageHook.js";
 
 const CACHE = "C:\\Users\\me\\.claude\\cache\\rate-limits.json";
+const HOOKS = "C:\\Users\\me\\.claude\\hooks";
 
 const MINE = hookCommand("C:\\Users\\me\\AppData\\Roaming\\Hangar\\hangar-usage.cmd");
 
@@ -76,29 +77,43 @@ describe("the script it installs", () => {
   it("asks for nothing the platform does not already ship", () => {
     // The whole point of the rewrite: the first draft ran through bash, which plenty of Windows
     // machines do not have, and curl, which the file approach never needed.
-    const windows = hookScript("win32", CACHE);
+    const windows = hookScript("win32", CACHE, HOOKS);
     expect(windows).toContain("more.com");
     expect(windows).not.toMatch(/\bbash\b/);
     expect(windows).not.toMatch(/\bcurl\b/);
 
-    const posix = hookScript("linux", CACHE);
+    const posix = hookScript("linux", "/home/me/.claude/cache/rate-limits.json", "/home/me/.claude/hooks");
     expect(posix.startsWith("#!/bin/sh")).toBe(true);
     expect(posix).not.toMatch(/\bbash\b/);
     expect(posix).not.toMatch(/\bcurl\b|\bjq\b/);
   });
 
-  it("publishes to the exact file the app reads, rather than guessing at a home", () => {
+  it("finds the cache from its own folder, and never guesses at a home", () => {
     // Claude Code keys its home off CLAUDE_CONFIG_DIR and Hangar off CLAUDE_HOME. A script that
     // worked either out at run time would write where nothing reads on a machine that sets one.
-    expect(hookScript("win32", CACHE)).toContain(CACHE);
-    expect(hookScript("linux", "/home/me/.claude/cache/rate-limits.json"))
-      .toContain("'/home/me/.claude/cache/rate-limits.json'");
-    expect(hookScript("win32", CACHE)).not.toContain("CLAUDE_CONFIG_DIR");
-    expect(hookScript("linux", "/x/y.json")).not.toContain("CLAUDE_CONFIG_DIR");
+    // The two folders sit under the one home the app installed both into, so the script's own
+    // place is the one thing it can trust.
+    expect(cacheFromScript(HOOKS, CACHE, "win32")).toBe("..\\cache\\rate-limits.json");
+    expect(cacheFromScript("/home/me/.claude/hooks", "/home/me/.claude/cache/rate-limits.json", "linux")).toBe("../cache/rate-limits.json");
+    expect(hookScript("win32", CACHE, HOOKS)).toContain('set "HANGAR_CACHE=%~dp0..\\cache\\rate-limits.json"');
+    expect(hookScript("linux", "/home/me/.claude/cache/rate-limits.json", "/home/me/.claude/hooks"))
+      .toContain('cache="$here/../cache/rate-limits.json"');
+    expect(hookScript("win32", CACHE, HOOKS)).not.toContain("CLAUDE_CONFIG_DIR");
+    expect(hookScript("linux", "/x/y.json", "/x/hooks")).not.toContain("CLAUDE_CONFIG_DIR");
+  });
+
+  it("carries no path of the home in it, so a user name outside ASCII cannot break it", () => {
+    // cmd reads the script in the console's code page — 949 on a Korean Windows — and a UTF-8
+    // Korean path in it came out as a path that does not exist: the hook wrote nothing (measured).
+    const korean = hookScript("win32", "C:\\Users\\홍길동\\.claude\\cache\\rate-limits.json", "C:\\Users\\홍길동\\.claude\\hooks");
+    expect(korean).not.toContain("홍길동");
+    expect(/^[\x00-\x7f]*$/.test(korean)).toBe(true);
+    expect(korean).toBe(hookScript("win32", CACHE, HOOKS));
+    expect(hookScript("linux", "/home/홍길동/.claude/cache/rate-limits.json", "/home/홍길동/.claude/hooks")).not.toContain("홍길동");
   });
 
   it("writes through a temporary file, so a reader never sees half of one", () => {
-    expect(hookScript("linux", CACHE)).toMatch(/mv -f/);
-    expect(hookScript("win32", CACHE)).toMatch(/Move-Item -Force/);
+    expect(hookScript("linux", CACHE, HOOKS)).toMatch(/mv -f/);
+    expect(hookScript("win32", CACHE, HOOKS)).toMatch(/Move-Item -Force/);
   });
 });
