@@ -268,9 +268,52 @@ async function bandBounds(app: ElectronApplication): Promise<Electron.Rectangle>
  * docked band that the page does NOT draw — the window's own border.
  */
 async function screenPixels(app: ElectronApplication, points: { x: number; y: number }[]): Promise<(string | null)[]> {
-  return app.evaluate(async ({ desktopCapturer, screen }, wanted) => {
+  const koffiPath = join(process.cwd(), "node_modules", "koffi");
+  return app.evaluate(async ({ desktopCapturer, screen }, input) => {
+    const { wanted, koffiFrom } = input;
     const display = screen.getDisplayNearestPoint(screen.screenToDipPoint(wanted[0] ?? { x: 0, y: 0 }));
-    const phys = screen.dipToScreenRect(null, display.bounds);
+    /**
+     * The screen's own rectangle, asked of Windows.
+     *
+     * Electron's conversion of a display's DIP bounds is not it: the 1920x1200 panel at 125 %, at a
+     * fractional offset from the desktop origin, comes back 1202 rows tall. A thumbnail asked for at
+     * that size maps every row a little low, and a sample of the band's last row then reads a blend
+     * of the band and whatever lies under the screen's edge — measured as 302f2d where the band is
+     * 141413, which is how this helper's own rounding failed a test of the app.
+     */
+    const fromWindows = ((point: { x: number; y: number }): Electron.Rectangle | null => {
+      if (process.platform !== "win32") return null;
+      const req = (typeof require === "function"
+        ? require
+        : (process as unknown as { mainModule?: { require: NodeRequire } }).mainModule?.require
+      ) as NodeRequire | undefined;
+      if (!req) return null;
+      const cache = globalThis as unknown as { __monitor?: (p: { x: number; y: number }) => Electron.Rectangle | null };
+      if (!cache.__monitor) {
+        const koffi = req(koffiFrom) as typeof import("koffi");
+        const RECT = koffi.struct("RECT_mon", { left: "long", top: "long", right: "long", bottom: "long" });
+        const POINT = koffi.struct("POINT_mon", { x: "long", y: "long" });
+        const MONITORINFO = koffi.struct("MONITORINFO_mon", { cbSize: "uint32", rcMonitor: RECT, rcWork: RECT, dwFlags: "uint32" });
+        const user32 = koffi.load("user32.dll");
+        const MonitorFromPoint = user32.func("__stdcall", "MonitorFromPoint", "intptr", [POINT, "uint32"]);
+        const GetMonitorInfoW = user32.func("__stdcall", "GetMonitorInfoW", "bool", ["intptr", koffi.inout(koffi.pointer(MONITORINFO))]);
+        cache.__monitor = (at) => {
+          const handle = MonitorFromPoint(at, 2);              // MONITOR_DEFAULTTONEAREST
+          if (!handle) return null;
+          const info = {
+            cbSize: koffi.sizeof(MONITORINFO),
+            rcMonitor: { left: 0, top: 0, right: 0, bottom: 0 },
+            rcWork: { left: 0, top: 0, right: 0, bottom: 0 },
+            dwFlags: 0,
+          };
+          if (!GetMonitorInfoW(handle, info)) return null;
+          const rc = info.rcMonitor;
+          return { x: rc.left, y: rc.top, width: rc.right - rc.left, height: rc.bottom - rc.top };
+        };
+      }
+      return cache.__monitor(point);
+    })(wanted[0] ?? { x: 0, y: 0 });
+    const phys = fromWindows ?? screen.dipToScreenRect(null, display.bounds);
     const sources = await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: phys.width, height: phys.height } });
     const source = sources.find((s) => String(s.display_id) === String(display.id)) ?? sources[0];
     const image = source?.thumbnail;
@@ -285,7 +328,7 @@ async function screenPixels(app: ElectronApplication, points: { x: number; y: nu
       const i = (ly * size.width + lx) * 4;
       return [bitmap[i + 2], bitmap[i + 1], bitmap[i]].map((v) => (v ?? 0).toString(16).padStart(2, "0")).join("");
     });
-  }, points);
+  }, { wanted: points, koffiFrom: koffiPath });
 }
 /**
  * The band's height once it has changed from `was` and stopped moving again.
