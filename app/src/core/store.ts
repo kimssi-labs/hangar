@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 import { ConfigStore } from "./config.js";
 import { encodeProjectPath, homePaths, type HomePaths } from "./paths.js";
+import { foldClears, type SessionWithOrigin } from "./sessionChain.js";
 import { factsFrom, type TranscriptFacts } from "./transcript.js";
 import type { ProjectInfo, SessionInfo } from "./types.js";
 
@@ -324,7 +325,7 @@ export class Store {
     }
     cwd = cwd ?? known.get(dirName) ?? null;
 
-    const sessions: SessionInfo[] = stats.flatMap(({ file, stat: st }) => {
+    const transcripts: SessionWithOrigin[] = stats.flatMap(({ file, stat: st }) => {
       const facts = this.transcriptFacts(file, st);
       // Not a session anyone can open: a few hundred bytes holding a title and no conversation.
       // Claude Code leaves one behind whenever the talking ends up in a different file.
@@ -347,8 +348,13 @@ export class Store {
         live: live.has(id),
         pid: live.get(id) ?? null,
         pinned: pins.sessions.includes(id),
+        continues: 0,
+        startedByClear: facts.startedByClear,
       }];
-    }).sort((a, b) => Number(b.pinned) - Number(a.pinned));   // stable: newest first within each group
+    });
+    // A conversation /clear split into several transcripts is one row (core/sessionChain.ts).
+    const sessions: SessionInfo[] = foldClears(transcripts)
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned));   // stable: newest first within each group
 
     const dirMtime = statSync(dir).mtimeMs;
     const alias = (cwd && aliases[cwd]) || aliases[dirName] || null;

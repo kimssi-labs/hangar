@@ -23,6 +23,14 @@ export interface TranscriptFacts {
   /** The first thing a person actually typed, past the caveats and command echoes. */
   firstPrompt: string | null;
   /**
+   * The transcript was opened by /clear: the command's echo is there before anyone typed.
+   *
+   * Claude Code's /clear starts a new session id in the same terminal, hands it the old session's
+   * name, and writes the echo of the command as the new transcript's first user entry (measured).
+   * The list folds such a transcript's finished predecessor under it — see core/sessionChain.ts.
+   */
+  startedByClear: boolean;
+  /**
    * Whether anyone ever spoke here.
    *
    * False only for the title-carrying stubs Claude Code leaves behind — files of a few hundred
@@ -34,6 +42,8 @@ export interface TranscriptFacts {
 
 const AI_TITLE = "ai-title";
 const USER = "user";
+/** What Claude Code writes into the transcript /clear opens, as the echo of the command itself. */
+const CLEAR_ECHO = "<command-name>/clear</command-name>";
 const ASSISTANT = "assistant";
 const HUMAN = "human";
 
@@ -86,13 +96,19 @@ export function factsFrom(head: string, tail: string, complete: boolean): Transc
   }
 
   let firstPrompt: string | null = null;
+  let startedByClear = false;
   let conversation = !complete;
   for (const entry of early) {
     if (entry.type !== USER && entry.type !== ASSISTANT) continue;
     conversation = true;
-    if (firstPrompt || entry.type !== USER || entry.origin?.kind !== HUMAN) continue;
+    if (firstPrompt || entry.type !== USER) continue;
+    if (entry.origin?.kind !== HUMAN) {
+      // The echoes and caveats before the first prompt: one of them is the /clear that opened this file.
+      if (typeof entry.message?.content === "string" && entry.message.content.includes(CLEAR_ECHO)) startedByClear = true;
+      continue;
+    }
     firstPrompt = firstLine(entry.message?.content);
   }
 
-  return { aiTitle, firstPrompt, conversation };
+  return { aiTitle, firstPrompt, conversation, startedByClear };
 }

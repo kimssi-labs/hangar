@@ -255,6 +255,7 @@ export function SessionDetail({ session, samples }: { session: SessionInfo; samp
       <Field label={t("detail.state")} tone={session.live ? "text-ok" : ""}>
         {session.live ? t("detail.state.running", { pid: String(session.pid) }) : t("detail.state.idle")}
       </Field>
+      {session.continues ? <Field label={t("detail.continues")}>{t("detail.continues.value", { count: session.continues })}</Field> : null}
       {session.live && latest ? (
         <Field label={t("detail.using")}>{`${latest.cpu.toFixed(0)}% CPU · ${formatBytes(latest.memoryBytes)}`}</Field>
       ) : null}

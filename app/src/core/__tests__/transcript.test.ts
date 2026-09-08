@@ -72,6 +72,23 @@ describe("factsFrom", () => {
   });
 
   it("has nothing to say about an empty file", () => {
-    expect(factsFrom("", "", true)).toEqual({ aiTitle: null, firstPrompt: null, conversation: false });
+    expect(factsFrom("", "", true)).toEqual({ aiTitle: null, firstPrompt: null, conversation: false, startedByClear: false });
+  });
+});
+
+describe("startedByClear", () => {
+  it("is true for a transcript that opens with the /clear echo, before the first prompt", () => {
+    expect(factsFrom(CLEARED, "", true).startedByClear).toBe(true);
+  });
+
+  it("is false for a fresh session, for a stub, and for a /clear typed later in the conversation", () => {
+    const fresh = [
+      line({ type: "user", message: { content: "첫 질문" }, origin: { kind: "human" } }),
+      line({ type: "assistant", message: { content: "…" } }),
+    ].join("");
+    expect(factsFrom(fresh, "", true).startedByClear).toBe(false);
+    expect(factsFrom(STUB, "", true).startedByClear).toBe(false);
+    const later = fresh + line({ type: "user", message: { content: "<command-name>/clear</command-name>" } });
+    expect(factsFrom(later, "", true).startedByClear).toBe(false);
   });
 });
