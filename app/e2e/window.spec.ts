@@ -115,12 +115,14 @@ async function nativeFrames(app: ElectronApplication): Promise<NativeFrames> {
     const all = BrowserWindow.getAllWindows();
     const win = all.find((w) => w.webContents.getURL().includes("index.html")) ?? all[0];
     if (!win) return null;
-    // The same rule the app decides by (`insetFor`): the one DIP of frame room a fractional scale
-    // keeps, as whole rows, and none for a window whose top is the screen's — it draws where it is
-    // there (measured). Not read back from the window: the two bounds disagree about it over time.
+    // The same rule the app decides by (`liftFor`): none for a top on the DIP grid — a whole number
+    // of DIP from the monitor's top — and the one DIP of frame room a fractional scale keeps, as whole
+    // rows, for a top that is not. Not read back from the window: the two bounds disagree over time.
     const liftOf = (paintedTop: number, monitorTop: number): number => {
-      if (paintedTop === monitorTop) return 0;
       const scale = screen.getDisplayMatching(win.getBounds()).scaleFactor;
+      let step = 1;
+      for (let dip = 1; dip <= 64; dip += 1) { const px = dip * scale; if (Math.abs(px - Math.round(px)) < 1e-6) { step = Math.round(px); break; } }
+      if ((paintedTop - monitorTop) % step === 0) return 0;
       return Number.isInteger(scale) ? 0 : Math.ceil(scale);
     };
     const fallback = (): NativeFrames => {
