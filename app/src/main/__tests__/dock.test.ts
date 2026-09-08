@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { bandOf, bandOfThickness, bandRect, bandThickness, gridStep, insetFor, keepThickness, OPEN_FACE, resizeAllowed, snapToGrid, windowFor } from "../dock.js";
+import { bandOf, bandOfThickness, bandRect, bandThickness, gridStep, insetFor, keepThickness, liftFor, OPEN_FACE, resizeAllowed, snapToGrid, windowFor, withinMonitor } from "../dock.js";
 
 const AREA = { x: 0, y: 0, width: 2000, height: 1000 };
 
@@ -235,5 +235,50 @@ describe("the window that shows a band", () => {
     expect(insetFor(2)).toBe(0);
     expect(insetFor(1.5)).toBe(2);
     expect(insetFor(1.75)).toBe(2);
+  });
+});
+
+describe("withinMonitor", () => {
+  const monitor = { x: 0, y: 0, width: 1920, height: 1200 };
+
+  it("puts a band Electron converted one pixel past the right edge back on the screen (measured at 125 %)", () => {
+    // 1306 DIP → 1633 px and 230 DIP → 288 px: a right edge of 1921 on a 1920-px screen.
+    const converted = { x: 1633, y: 0, width: 288, height: 1140 };
+    const cut = withinMonitor(converted, monitor);
+    expect(cut).toEqual({ x: 1633, y: 0, width: 287, height: 1140 });
+    // And the grid then moves only the open face: 1635..1920, 285 px = 228 DIP exactly.
+    expect(snapToGrid(cut, "right", monitor, gridStep(1.25))).toEqual({ x: 1635, y: 0, width: 285, height: 1140 });
+  });
+
+  it("does the same for a bottom band past the bottom edge", () => {
+    expect(withinMonitor({ x: 0, y: 1028, width: 1920, height: 173 }, monitor)).toEqual({ x: 0, y: 1028, width: 1920, height: 172 });
+  });
+
+  it("leaves a band inside the monitor alone", () => {
+    const inside = { x: 1540, y: 0, width: 380, height: 1140 };
+    expect(withinMonitor(inside, monitor)).toEqual(inside);
+    expect(withinMonitor({ x: 0, y: 0, width: 285, height: 1140 }, monitor)).toEqual({ x: 0, y: 0, width: 285, height: 1140 });
+  });
+
+  it("holds on a monitor that does not start at the origin", () => {
+    const second = { x: -1080, y: -81, width: 1080, height: 1920 };
+    expect(withinMonitor({ x: -1081, y: -81, width: 200, height: 1920 }, second)).toEqual({ x: -1080, y: -81, width: 199, height: 1920 });
+  });
+});
+
+describe("liftFor", () => {
+  it("is none for a top on the DIP grid — the screen's own top, or a snapped open face (bottom band at 970 px, 125 %)", () => {
+    expect(liftFor(0, 0, 5, 1.25)).toBe(0);
+    expect(liftFor(970, 0, 5, 1.25)).toBe(0);
+    expect(liftFor(-81, -81, 5, 1.25)).toBe(0);
+  });
+
+  it("is the scale's inset for a top that is not a whole DIP — under a taskbar of an odd height", () => {
+    expect(liftFor(57, 0, 5, 1.25)).toBe(2);
+    expect(liftFor(-79, -81, 5, 1.25)).toBe(2);
+  });
+
+  it("is always none at 100 %, where every pixel is a DIP", () => {
+    expect(liftFor(37, 0, 1, 1)).toBe(0);
   });
 });

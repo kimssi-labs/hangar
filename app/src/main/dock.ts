@@ -127,16 +127,50 @@ export function bandOf(window: Rectangle, lift: number): Rectangle {
 
 /**
  * How many rows below its own rectangle a window draws on a display of `scale`, when its top is not
- * the screen's: the one DIP of frame room Chromium keeps at a fractional scale, as whole rows.
+ * a whole DIP from the screen's: the one DIP of frame room Chromium keeps at a fractional scale, as
+ * whole rows.
  *
- * Measured two at 125 % — at every position tried, on and off the DIP grid — and none at 100 %; other
- * fractional scales are assumed to keep the same one DIP. Decided from the scale and NOT read back
- * from the window: `getBounds()` against `getContentBounds()` said one DIP or none for the very same
- * shifted window depending on when it was asked, and a band placed on the wrong answer showed
- * whatever was behind it through its top two rows.
+ * Measured two at 125 % and none at 100 %; other fractional scales are assumed to keep the same one
+ * DIP. Decided from the scale and NOT read back from the window: `getBounds()` against
+ * `getContentBounds()` said one DIP or none for the very same shifted window depending on when it
+ * was asked, and a band placed on the wrong answer showed whatever was behind it through its top
+ * two rows. Whether it applies at all is `liftFor`'s call.
  */
 export function insetFor(scale: number): number {
   return Number.isInteger(scale) ? 0 : Math.ceil(scale);
+}
+
+/**
+ * The lift for a band whose top row is `top`, on a monitor whose top row is `origin`.
+ *
+ * None when the top is on the DIP grid (a whole number of DIP from the monitor's top, `step` pixels
+ * apart): a window there draws where it is. Measured on the 1920×1200 panel at 125 %: a bottom band
+ * whose snapped top was on the grid, placed two rows up as before, left its two lowest rows to the
+ * desktop above the taskbar; placed where it was, every row was its own. The shift `insetFor`
+ * describes belongs to a top that is NOT a whole DIP, which the grid snap already rules out for the
+ * open face — so in practice it is a left or right band under a taskbar of an odd height.
+ */
+export function liftFor(top: number, origin: number, step: number, scale: number): number {
+  if ((top - origin) % step === 0) return 0;
+  return insetFor(scale);
+}
+
+/**
+ * `rect` (physical) cut to the monitor it is on.
+ *
+ * Electron converts a DIP rectangle to pixels by rounding its origin and its size separately, so at
+ * 125 % a band asked for against the screen's right edge came back one pixel past it: 1306 DIP →
+ * 1633 px and 230 DIP → 288 px make a right edge of 1921 on a 1920-pixel screen (measured; 20 %
+ * happened to round the other way and was exact). The shell does not clamp either — it reserved,
+ * and the window sat, one column off the screen. Cutting is safe on every side: the docked face is
+ * put back on the screen's edge, and an open face inside the screen is left where it was.
+ */
+export function withinMonitor(rect: Rectangle, monitor: Rectangle): Rectangle {
+  const left = Math.max(rect.x, monitor.x);
+  const top = Math.max(rect.y, monitor.y);
+  const right = Math.min(rect.x + rect.width, monitor.x + monitor.width);
+  const bottom = Math.min(rect.y + rect.height, monitor.y + monitor.height);
+  return { x: left, y: top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
 }
 
 /**
@@ -766,8 +800,10 @@ export class Dock {
     // The band is what is reserved and what is seen; the window that shows it sits `lift` rows above
     // — except against the top of the screen, where the window draws where it is (measured), and
     // where a lifted window would start above the monitor.
-    const snapped = snapToGrid(screen.dipToScreenRect(null, band), edge, monitor, gridStep(display.scaleFactor));
-    const lift = snapped.y === monitor.y ? 0 : insetFor(display.scaleFactor);
+    // Cut to the monitor first (see withinMonitor), then the open face onto the grid.
+    const step = gridStep(display.scaleFactor);
+    const snapped = snapToGrid(withinMonitor(screen.dipToScreenRect(null, band), monitor), edge, monitor, step);
+    const lift = liftFor(snapped.y, monitor.y, step, display.scaleFactor);
     return { window: windowFor(snapped, lift), band: snapped, dip: this.dipOf(snapped, display), lift };
   }
 
