@@ -2,18 +2,21 @@
  * Claude Code's usage figures — the main side.
  *
  * Claude Code does not publish its rate limits anywhere on its own (measured: none of thousands of
- * transcript lines carry them). This feature installs a Stop hook into its settings that writes
- * them to a cache file, and reads that file back. The hook text itself is in core/usageHook.ts and
- * the reading in core/status.ts; this is the feature's edge.
+ * transcript lines carry them). Two sources, both landing in one cache file the gauges read: a Stop
+ * hook installed into Claude Code's settings that writes the figures as each turn ends
+ * (core/usageHook.ts), and — when the cache is missing or stale — Claude Code's own usage endpoint,
+ * asked with the login it keeps (core/usageEndpoint.ts). The reading is core/status.ts; this is the
+ * feature's edge.
  */
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { app } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
 import { homePaths } from "../../core/paths.js";
-import { readStatus, readStatusUpdatedAt } from "../../core/status.js";
+import { readStatus, readStatusJson, readStatusUpdatedAt } from "../../core/status.js";
+import { accessTokenFrom, cacheFromEndpoint, isStale, OAUTH_BETA, RETRY_MS, USAGE_ENDPOINT } from "../../core/usageEndpoint.js";
 import { hookCommand, hookFileName, hookInstalled, hookScript, withHook, withoutHook } from "../../core/usageHook.js";
 import type { ActionResult, SettingsPayload } from "../../main/ipc.js";
 import { usageContract, type UsageState } from "./contract.js";
@@ -62,12 +65,57 @@ function usageHookPath(): string {
 }
 
 function usageState(): UsageState {
+  const updatedAt = readStatusUpdatedAt();
+  const written = readStatusJson<{ source?: unknown }>(homePaths().rateLimits, {}).source;
   return {
     collecting: hookInstalled(readClaudeSettings().settings),
     portable: !app.isPackaged || Boolean(process.env["PORTABLE_EXECUTABLE_DIR"]),
-    updatedAt: readStatusUpdatedAt(),
+    updatedAt,
     reported: readStatus(undefined, { windows: null }).windows.length,
+    source: updatedAt === null ? null : written === "endpoint" ? "endpoint" : "hook",
   };
+}
+
+/** How long one request to the usage endpoint may take. */
+const ENDPOINT_TIMEOUT_MS = 8000;
+let lastAttempt = 0;
+let inFlight = false;
+
+/**
+ * Ask Claude Code's usage endpoint when the cache is stale, and say so when the answer has landed.
+ *
+ * Not awaited by the caller: the first status read happens on the way to the first paint. Guarded
+ * so that a machine with no login, an expired token, or a fresh cache costs nothing, and one that
+ * does ask never asks twice within RETRY_MS. The answer is written the way the hook writes, so the
+ * reader cannot tell the two apart — only the `source` field, for the settings screen, differs.
+ */
+function refreshFromEndpoint(landed: () => void): void {
+  const paths = homePaths();
+  const now = Date.now();
+  if (!isStale(readStatusUpdatedAt(), now) || inFlight || now - lastAttempt < RETRY_MS) return;
+  const token = accessTokenFrom(readStatusJson<unknown>(paths.credentials, null), now);
+  if (!token) return;
+  lastAttempt = now;
+  inFlight = true;
+  fetch(USAGE_ENDPOINT, {
+    headers: { Authorization: `Bearer ${token}`, "anthropic-beta": OAUTH_BETA },
+    signal: AbortSignal.timeout(ENDPOINT_TIMEOUT_MS),
+  })
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const cache = cacheFromEndpoint(await response.json(), Date.now());
+      if (!cache) return;
+      mkdirSync(dirname(paths.rateLimits), { recursive: true });
+      // Write then rename, so a read never catches a half-written file — the hook does the same.
+      const tmp = `${paths.rateLimits}.tmp`;
+      writeFileSync(tmp, JSON.stringify(cache), "utf8");
+      renameSync(tmp, paths.rateLimits);
+      landed();
+    })
+    .catch((error: unknown) => console.error("[hangar] usage endpoint:", (error as Error).message))
+    .finally(() => {
+      inFlight = false;
+    });
 }
 
 /**
@@ -112,7 +160,10 @@ function setUsageCollection(on: boolean): ActionResult {
 
 export function register(ctx: MainContext, wire: Wire, deps: UsageDeps): UsageFeature {
   wire.bind(usageContract, {
-    status: () => readStatus(undefined, ctx.config.status()),
+    status: () => {
+      refreshFromEndpoint(() => wire.emit(usageContract.onStatus, readStatus(undefined, ctx.config.status())));
+      return readStatus(undefined, ctx.config.status());
+    },
     setUsageHook: (on) => ({ ...setUsageCollection(on), settings: deps.settingsPayload() }),
   });
   return { state: usageState };

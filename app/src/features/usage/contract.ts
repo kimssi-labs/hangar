@@ -1,5 +1,5 @@
 /** Claude Code's usage figures: reading them, and installing the hook that publishes them. */
-import { invoke } from "../../bridge/contract.js";
+import { event, invoke } from "../../bridge/contract.js";
 import type { StatusSnapshot } from "../../core/types.js";
 import type { ActionResult, SettingsPayload } from "../../main/ipc.js";
 
@@ -13,11 +13,15 @@ export interface UsageState {
   reported: number;
   /** A copy with no installer behind it: deleting it cannot take the hook with it. */
   portable: boolean;
+  /** Who wrote the figures shown: the hook, Claude Code's usage endpoint, or nobody yet. */
+  source: "hook" | "endpoint" | null;
 }
 
 export const usageContract = {
   /** The usage windows as last published, filtered to the ones the settings show. */
   status: invoke<void, StatusSnapshot>("status:read"),
+  /** Fresh figures arrived from the usage endpoint between two polls. */
+  onStatus: event<StatusSnapshot>("status:push"),
   /**
    * Install or remove the Stop hook that publishes Claude Code's usage figures. Answers with the
    * whole settings payload, because the screen that asked shows the collection state from it.

@@ -30,6 +30,8 @@ export interface HomePaths {
   settings: string;
   /** Directory this app writes its hook script into. */
   hooks: string;
+  /** Claude Code's login, kept for its own requests; read here only to ask its usage endpoint. */
+  credentials: string;
 }
 
 export function homePaths(root = claudeHome()): HomePaths {
@@ -47,6 +49,7 @@ export function homePaths(root = claudeHome()): HomePaths {
     clips: join(root, "cache", "hangar-clips"),
     settings: join(root, "settings.json"),
     hooks: join(root, "hooks"),
+    credentials: join(root, ".credentials.json"),
   };
 }
 
