@@ -1,17 +1,32 @@
 /**
- * When a copied screenshot should be given a path, and which saved ones to throw away.
+ * When a copied screenshot should be given a path, where that path is wanted, and which saved
+ * screenshots to throw away.
  *
- * A terminal cannot paste a bitmap, but it can paste a path — and a clipboard may hold both at
- * once, each application taking the format it understands. So rather than intercepting anyone's
- * paste key, the screenshot is written to a file the moment it is copied and its path is added
- * alongside the image: Ctrl+V in a terminal gives the path, Ctrl+V in an image editor still gives
- * the picture.
+ * A terminal cannot paste a bitmap, but it can paste a path. Not every window takes the format it
+ * understands best when a clipboard holds both: Word, given a bitmap and a text, pastes the text
+ * (measured). So rather than intercepting anyone's paste key, the screenshot is written to a file
+ * the moment it is copied, and its path is put beside the picture only while a terminal is the
+ * window in front — Ctrl+V there gives the path, Ctrl+V anywhere else still gives the picture.
  *
  * The rules live here, away from the clipboard itself, so they can be exercised without one.
  */
 
 /** How many saved screenshots to keep. Copying a screenshot writes a file, so they accumulate. */
 export const CLIP_KEEP = 50;
+
+/**
+ * Programs whose window IS a terminal, by executable: a paste into one of these wants the path.
+ * Console windows belong to conhost/OpenConsole, whatever shell runs inside; editors with a
+ * terminal pane (VS Code) are not here — their own paste handles a picture.
+ */
+export const TERMINAL_HOSTS = ["WindowsTerminal.exe", "OpenConsole.exe", "conhost.exe", "mintty.exe", "wezterm-gui.exe", "alacritty.exe"];
+
+/** Whether `exe` (a file name, any case) is one of TERMINAL_HOSTS. */
+export function isTerminalHost(exe: string | null | undefined): boolean {
+  if (!exe) return false;
+  const name = exe.toLowerCase();
+  return TERMINAL_HOSTS.some((host) => host.toLowerCase() === name);
+}
 
 export interface ClipboardState {
   /** Formats the clipboard is offering, as Electron reports them. */

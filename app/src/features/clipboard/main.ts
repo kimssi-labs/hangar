@@ -60,13 +60,15 @@ export function register(ctx: MainContext, wire: Wire, deps: ClipboardDeps): Cli
     if (image.isEmpty()) return { ok: false, message: "No image on the clipboard." };
     const file = saveClipImage(image);
     if (!file) return { ok: false, message: "Could not save the image." };
-    clipboard.writeText(file);
+    // The picture stays: the shortcut was pressed for a terminal, and the next paste elsewhere
+    // should still find the screenshot.
+    clipboard.write({ text: file, image });
     return { ok: true, file, message: `Image ready to paste: ${file}` };
   }
 
   // Give copied screenshots a path, so the ordinary paste key works in a terminal. Nothing is
-  // intercepted: the clipboard is left holding the picture AND the path, and each window takes the
-  // one it understands.
+  // intercepted: the path is put beside the picture while a terminal is the window in front, and
+  // taken away again when another kind of window is (main/clipboardWatch says why).
   function applyClipboardWatch(): void {
     if (!ctx.config.launch().autoClipPath) {
       stopClipboardWatch();

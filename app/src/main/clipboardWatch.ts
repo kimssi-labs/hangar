@@ -1,23 +1,38 @@
 /**
- * Watching the clipboard so a copied screenshot arrives with its path attached.
+ * Watching the clipboard so a copied screenshot arrives with its path attached — in a terminal.
  *
- * The alternative was to take over Ctrl+V, which would put every paste on the machine through this
- * application. This does not touch anyone's keys: it only adds a text format next to the image
- * that is already there, and the terminal picks that up by itself.
+ * A terminal cannot paste a bitmap, but it can paste a path. Word can paste a bitmap, and given a
+ * bitmap with a text beside it Word pastes the TEXT (measured), as do its relatives. So the path is
+ * not simply added next to the picture: it is there only while a terminal is the window in front,
+ * and the clipboard goes back to the bare picture the moment another kind of window is. Nothing
+ * intercepts anyone's keys; the only thing that changes is the text part of the clipboard, and
+ * only for whoever is looking at a terminal.
  */
 import { clipboard, type NativeImage } from "electron";
 import { readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { clipsToPrune, shouldAddPath } from "../core/clipboardRules.js";
+import { clipsToPrune, isTerminalHost, shouldAddPath } from "../core/clipboardRules.js";
+import { foregroundExecutable } from "./foreground.js";
 
 /** Cheap enough to run often; a person notices a screenshot taking a second to be ready. */
 const POLL_MS = 600;
+/** For the tests, whose own window is in front: `terminal` counts that as a terminal. */
+export const FOCUS_OVERRIDE_ENV = "HANGAR_CLIP_FOCUS";
 
 type SequenceNumber = () => number;
+
+/** The screenshot last copied: kept so the clipboard can be given the picture back, or the path. */
+interface Clip {
+  image: NativeImage;
+  file: string;
+  /** The clipboard holds the path beside the picture right now. */
+  pathShown: boolean;
+}
 
 let timer: NodeJS.Timeout | null = null;
 let lastHandled = 0;
 let sequenceNumber: SequenceNumber | null | undefined;
+let clip: Clip | null = null;
 
 /**
  * Windows' clipboard sequence number: one call, no clipboard opened, changes on every write.
@@ -44,6 +59,14 @@ export interface ClipboardWatchOptions {
   save: (image: NativeImage) => string | null;
   /** Where the saved screenshots live, so the old ones can be cleared out. */
   clipsDir: string;
+  /** Whether the window in front is a terminal. Injected by tests; the default asks Windows. */
+  terminalInFront?: () => boolean;
+}
+
+/** Whether a paste right now would land in a terminal. */
+export function terminalInFront(): boolean {
+  if (process.env[FOCUS_OVERRIDE_ENV] === "terminal") return true;
+  return isTerminalHost(foregroundExecutable());
 }
 
 /** Start watching, or stop and start again with different options. */
@@ -59,29 +82,38 @@ export function startClipboardWatch(options: ClipboardWatchOptions): void {
 export function stopClipboardWatch(): void {
   if (timer) clearInterval(timer);
   timer = null;
+  clip = null;
 }
 
-function tick(sequence: SequenceNumber, { save, clipsDir }: ClipboardWatchOptions): void {
+function tick(sequence: SequenceNumber, options: ClipboardWatchOptions): void {
   const now = sequence();
-  if (now === lastHandled) return;             // nothing has been copied since we last looked
-  if (!shouldAddPath({ formats: clipboard.availableFormats(), sequence: now }, lastHandled)) {
-    lastHandled = now;                         // not ours, but we have seen it
-    return;
-  }
-  const image = clipboard.readImage();
-  if (image.isEmpty()) {
+  if (now !== lastHandled) {
+    // Someone has written to the clipboard since we last looked: whatever we were minding is gone.
+    clip = null;
+    if (!shouldAddPath({ formats: clipboard.availableFormats(), sequence: now }, lastHandled)) {
+      lastHandled = now;                       // not ours, but we have seen it
+      return;
+    }
+    const image = clipboard.readImage();
     lastHandled = now;
-    return;
+    if (image.isEmpty()) return;
+    const file = options.save(image);
+    if (!file) return;
+    clip = { image, file, pathShown: false };
+    prune(options.clipsDir);
   }
-  const file = save(image);
-  if (!file) {
-    lastHandled = now;
-    return;
+  if (!clip) return;
+  // The path rides along only while a terminal is in front; anywhere else the picture is on its own.
+  const inFront = (options.terminalInFront ?? terminalInFront)();
+  if (inFront && !clip.pathShown) {
+    clipboard.write({ text: clip.file, image: clip.image });
+    clip.pathShown = true;
+    lastHandled = sequence();                  // our own write, so we do not react to it
+  } else if (!inFront && clip.pathShown) {
+    clipboard.writeImage(clip.image);
+    clip.pathShown = false;
+    lastHandled = sequence();
   }
-  // Both formats together: the terminal takes the path, an image editor still takes the picture.
-  clipboard.write({ text: file, image });
-  lastHandled = sequence();                    // our own write, so we do not react to it
-  prune(clipsDir);
 }
 
 function prune(clipsDir: string): void {
