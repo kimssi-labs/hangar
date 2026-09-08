@@ -6,7 +6,7 @@
  * shows, and the collection switch — and the gauges themselves (`UsageGauges`): what a screen
  * places is one component, and what it shows is this feature's business alone.
  */
-import { useCallback, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 
 import { RATE_WINDOWS } from "@core/constants";
 import type { RateWindow, StatusConfig, StatusSnapshot } from "@core/types";
@@ -33,6 +33,8 @@ export interface Usage {
 export function useUsage(): Usage {
   const [status, setStatus] = useState<StatusSnapshot | null>(null);
   const refresh = useCallback(async () => { setStatus(await api.status()); }, []);
+  // Figures the endpoint fetched after a poll answered arrive here rather than a poll later.
+  useEffect(() => api.onStatus(setStatus), []);
   const collect = useCallback(async (on: boolean) => {
     const result = await api.setUsageHook(on);
     await refresh();
@@ -126,10 +128,13 @@ export function UsageSettings({ usage, onCollect }: { usage: UsageState; onColle
       <div className="text-[11px] text-bone-500">
         {t("settings.usage.writes", { file: HOOK_SCRIPT_NAME })}
       </div>
+      {usage.source === "endpoint" ? (
+        <div className="text-[11px] text-bone-500">{t("settings.usage.endpoint")}</div>
+      ) : null}
       {usage.portable && usage.collecting ? (
         <div className="text-[11px] text-warn">{t("settings.usage.portable")}</div>
       ) : null}
-      {usage.collecting && !usage.updatedAt ? (
+      {usage.collecting && !usage.updatedAt && usage.source !== "endpoint" ? (
         <div className="text-[11px] text-warn">{t("settings.usage.waiting")}</div>
       ) : null}
     </>

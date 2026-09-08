@@ -154,14 +154,15 @@ export const ko: Dictionary = {
 
   "settings.usage": "Claude 사용량 수집",
   "settings.usage.hint": "사용량 값을 어디서 가져올지",
-  "settings.usage.what": "Claude Code는 사용량을 실행 중인 자기 세션에만 알려줍니다. 훅을 추가하면 세션이 끝날 때마다 그 값을 파일에 남기므로, 세션이 없는 동안에도 사용량을 볼 수 있습니다.",
+  "settings.usage.what": "Claude Code는 사용량을 실행 중인 자기 세션에만 알려줍니다. 훅을 추가하면 세션이 끝날 때마다 그 값을 파일에 남기므로, 세션이 없는 동안에도 사용량을 볼 수 있습니다. 훅이 없거나 값이 10분 넘게 오래되면 Claude Code 로그인으로 Anthropic 사용량 API에서 직접 읽어옵니다(1분에 한 번 이하).",
   "settings.usage.collecting": "수집 중",
   "settings.usage.off": "꺼짐",
   "settings.usage.state": "{count}개 항목 · {when} 기록됨",
   "settings.usage.never": "아직 수집된 값 없음",
   "settings.usage.start": "수집 시작",
   "settings.usage.stop": "수집 중지",
-  "settings.usage.writes": "켜면 hooks/{file}을 만들고 settings.json에 Stop 훅 하나를 추가합니다. 기존 훅은 건드리지 않습니다. 끄면 둘 다 지웁니다. 값은 cache/rate-limits.json에만 저장되며, 외부로 보내거나 로그인 정보를 읽지 않습니다.",
+  "settings.usage.writes": "켜면 hooks/{file}을 만들고 settings.json에 Stop 훅 하나를 추가합니다. 기존 훅은 건드리지 않습니다. 끄면 둘 다 지웁니다. 값은 cache/rate-limits.json에 저장됩니다. 직접 읽어올 때는 .credentials.json의 로그인 토큰을 api.anthropic.com에만 보내며, 갱신하거나 다른 곳에 쓰지 않습니다.",
+  "settings.usage.endpoint": "지금 표시된 값은 Anthropic 사용량 API에서 직접 읽어온 것입니다. 훅이 없어도 동작합니다.",
   "settings.usage.portable": "설치본이 아닌 실행 파일입니다. 훅은 Claude Code 쪽에 남으므로 이 폴더만 지우면 훅이 그대로 동작합니다. 지우기 전에 수집을 꺼 주세요. 나중에 설치한 Hangar에서도 제거할 수 있습니다.",
   "settings.usage.waiting": "첫 세션이 끝나면 값이 들어옵니다. 계속 비어 있다면 Claude 구독이 아니라 API 키로 로그인된 PC일 수 있습니다. 이 경우 5시간·주간 사용량 자체가 제공되지 않습니다.",
 

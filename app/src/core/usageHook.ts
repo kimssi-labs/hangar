@@ -6,9 +6,11 @@
  * every other machine the gauges were silently blank however many sessions had run.
  *
  * Claude Code hands the current `rate_limits` to its Stop hook on stdin at the end of every turn,
- * piggybacked on a response it already made. Reading that costs nothing: no API call, no
- * credentials, and no polling of the usage endpoint, which rate-limits the very thing it reports.
- * So the fix is a small hook of our own that writes the figures where the gauges already look.
+ * piggybacked on a response it already made. Reading that costs nothing: no API call, and figures
+ * current to the last turn. So the first source is a small hook of our own that writes the figures
+ * where the gauges already look. It is off until asked for, though, and a machine where it never
+ * was showed nothing; there core/usageEndpoint.ts asks Claude Code's own usage endpoint instead,
+ * sparingly, with the login Claude Code keeps.
  *
  * A file rather than a POST to a port of our own — which is how a fleet manager with many panes to
  * attribute would do it — because this app is usually CLOSED. The hook keeps the file current
