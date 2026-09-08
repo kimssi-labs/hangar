@@ -155,6 +155,9 @@ export const en = {
   "settings.usage.stop": "Stop collecting",
   "settings.usage.writes": "Turning it on writes hooks/{file} and adds one Stop hook to settings.json, leaving any hook already there alone. Turning it off removes both. The figures land in cache/rate-limits.json. When Hangar asks directly, the login token from .credentials.json goes to api.anthropic.com and nowhere else; it is neither refreshed nor stored.",
   "settings.usage.endpoint": "The figures shown now were read from Anthropic's usage API directly; this works without the hook.",
+  "settings.usage.login.absent": "There is no Claude Code login (.credentials.json) to ask with. This machine uses an API key, or nobody has signed in yet.",
+  "settings.usage.login.expired": "Claude Code's login token has run out, so nothing is asked for now. Running Claude Code once refreshes it, and the figures follow.",
+  "settings.usage.rateLimited": "The usage API is refusing requests for the moment; the next try waits as long as it asked.",
   "settings.usage.portable": "This copy has no installer behind it. The hook lives with Claude Code, not with the application, so deleting this folder leaves it running — turn collection off first, or remove it from any later copy of Hangar, which will still find it here.",
   "settings.usage.waiting": "Waiting for the first turn to end. If nothing appears, this machine may sign in with an API key rather than a Claude subscription — those report no five-hour or weekly window.",
 

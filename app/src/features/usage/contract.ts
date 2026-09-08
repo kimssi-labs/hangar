@@ -15,6 +15,10 @@ export interface UsageState {
   portable: boolean;
   /** Who wrote the figures shown: the hook, Claude Code's usage endpoint, or nobody yet. */
   source: "hook" | "endpoint" | null;
+  /** Claude Code's login as the endpoint sees it: a token to send, one that ran out, or none (an API key, or nobody signed in). */
+  login: "fresh" | "expired" | "absent";
+  /** How the last request to the endpoint was refused, until one succeeds. */
+  endpointFailure: "stale-token" | "rate-limited" | "error" | null;
 }
 
 export const usageContract = {

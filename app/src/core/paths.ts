@@ -4,14 +4,20 @@
  * Everything is derived from one root so a test can point the whole app at a throwaway home, and
  * so Windows and Linux differ in nothing but the root itself.
  */
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 export const CLAUDE_HOME_ENV = "CLAUDE_HOME";
+/** Claude Code's own override of its home. A machine that set it moved its transcripts, registry and login there. */
+export const CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
 
-/** `~/.claude`, or whatever CLAUDE_HOME says — the single root every other path hangs off. */
+/**
+ * The single root every other path hangs off: CLAUDE_HOME (this app's own override, for the test
+ * suite and a build run beside the installed app), else Claude Code's CLAUDE_CONFIG_DIR, else `~/.claude`.
+ */
 export function claudeHome(env: NodeJS.ProcessEnv = process.env): string {
-  return env[CLAUDE_HOME_ENV] || join(homedir(), ".claude");
+  return env[CLAUDE_HOME_ENV] || env[CLAUDE_CONFIG_DIR_ENV]?.trim() || join(homedir(), ".claude");
 }
 
 export interface HomePaths {
@@ -40,8 +46,8 @@ export function homePaths(root = claudeHome()): HomePaths {
     projects: join(root, "projects"),
     liveSessions: join(root, "sessions"),
     history: join(root, "history.jsonl"),
-    // Claude Code's own settings file sits NEXT to the home directory, not inside it.
-    claudeJson: join(root, "..", ".claude.json"),
+    // Claude Code's own state file sits NEXT to a default home — and INSIDE a home CLAUDE_CONFIG_DIR moved.
+    claudeJson: existsSync(join(root, ".claude.json")) ? join(root, ".claude.json") : join(root, "..", ".claude.json"),
     config: join(root, "config"),
     managerConfig: join(root, "config", "manager.json"),
     aliases: join(root, "config", "project-aliases.json"),

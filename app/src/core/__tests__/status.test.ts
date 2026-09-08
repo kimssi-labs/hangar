@@ -30,6 +30,12 @@ describe("rate windows", () => {
   it("accepts the utilization spelling and clamps out-of-range values", () => {
     expect(rateWindows({ seven_day: { utilization: 140 } }, NOW)[0]?.usedPercent).toBe(100);
   });
+
+  it("names the weekly window scoped to one model after that model", () => {
+    const [scoped] = rateWindows({ weekly_scoped: { utilization: 16, resets_at: NOW / 1000 + 86400, model: "Fable" } }, NOW);
+    expect(scoped).toMatchObject({ key: "weekly_scoped", label: "1w Fable", short: "1w Fable", usedPercent: 16 });
+    expect(rateWindows({ weekly_scoped: { utilization: 16 } }, NOW)[0]?.label).toBe("1w model");
+  });
 });
 
 describe("readStatus", () => {

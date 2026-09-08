@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { accessTokenFrom, cacheFromEndpoint, isStale, STALE_MS } from "../usageEndpoint.js";
+import { accessTokenFrom, backoffFor, cacheFromEndpoint, failureFor, isStale, loginState, RETRY_MS, RETRY_ON_ERROR_MS, STALE_MS } from "../usageEndpoint.js";
 import { rateWindows } from "../status.js";
 
 const NOW = Date.parse("2026-09-08T09:00:00Z");
@@ -62,5 +62,55 @@ describe("cacheFromEndpoint", () => {
   it("copes with a window whose reset is unknown", () => {
     const cache = cacheFromEndpoint({ five_hour: { utilization: 0, resets_at: null } }, NOW) as Record<string, unknown>;
     expect(cache["five_hour"]).toEqual({ utilization: 0 });
+  });
+});
+
+describe("loginState", () => {
+  it("tells a token to send from one that ran out and from no login at all", () => {
+    expect(loginState({ claudeAiOauth: { accessToken: "x", expiresAt: NOW + 3600_000 } }, NOW)).toBe("fresh");
+    expect(loginState({ claudeAiOauth: { accessToken: "x", expiresAt: NOW - 1 } }, NOW)).toBe("expired");
+    expect(loginState({}, NOW)).toBe("absent");
+    expect(loginState(null, NOW)).toBe("absent");
+  });
+});
+
+describe("the weekly limit scoped to one model", () => {
+  it("is read from limits[] and named after the model, the way the endpoint answered here", () => {
+    const cache = cacheFromEndpoint({
+      five_hour: { utilization: 16, resets_at: "2026-09-08T10:39:59.882306+00:00" },
+      seven_day: { utilization: 12, resets_at: "2026-09-14T04:59:59.882329+00:00" },
+      limits: [
+        { kind: "session", percent: 16, resets_at: "2026-09-08T10:39:59.882306+00:00", is_active: true, scope: null },
+        { kind: "weekly_all", percent: 12, resets_at: "2026-09-14T04:59:59.882329+00:00", is_active: false, scope: null },
+        { kind: "weekly_scoped", percent: 16, resets_at: "2026-09-14T04:59:59.882582+00:00", is_active: false, scope: { model: { id: null, display_name: "Fable" }, surface: null } },
+      ],
+    }, NOW) as Record<string, unknown>;
+    expect(cache["weekly_scoped"]).toEqual({ utilization: 16, resets_at: Math.floor(Date.parse("2026-09-14T04:59:59.882582+00:00") / 1000), model: "Fable" });
+    const windows = rateWindows(cache, NOW);
+    expect(windows.map((w) => [w.key, w.label, w.usedPercent])).toEqual([["five_hour", "5h", 16], ["seven_day", "1w", 12], ["weekly_scoped", "1w Fable", 16]]);
+  });
+
+  it("is left out when limits[] has no model-scoped entry, or none", () => {
+    expect(cacheFromEndpoint({ five_hour: { utilization: 1 }, limits: [{ kind: "session", percent: 1 }] }, NOW)).not.toHaveProperty("weekly_scoped");
+    expect(cacheFromEndpoint({ five_hour: { utilization: 1 }, limits: null }, NOW)).not.toHaveProperty("weekly_scoped");
+  });
+});
+
+describe("after a refusal", () => {
+  it("waits as long as a rate limit asked, in seconds or as a date, but never more than a day", () => {
+    expect(backoffFor(429, "120", NOW)).toBe(120_000);
+    expect(backoffFor(429, new Date(NOW + 90_000).toUTCString(), NOW)).toBeGreaterThan(80_000);
+    expect(backoffFor(429, "999999999", NOW)).toBe(24 * 3600_000);
+    expect(backoffFor(429, "garbage", NOW)).toBe(RETRY_ON_ERROR_MS);
+    expect(backoffFor(429, null, NOW)).toBe(RETRY_ON_ERROR_MS);
+  });
+
+  it("gives a stale token five minutes and anything else the usual minute", () => {
+    expect(backoffFor(401, null, NOW)).toBe(RETRY_ON_ERROR_MS);
+    expect(backoffFor(403, null, NOW)).toBe(RETRY_ON_ERROR_MS);
+    expect(backoffFor(500, null, NOW)).toBe(RETRY_MS);
+    expect(failureFor(401)).toBe("stale-token");
+    expect(failureFor(429)).toBe("rate-limited");
+    expect(failureFor(502)).toBe("error");
   });
 });

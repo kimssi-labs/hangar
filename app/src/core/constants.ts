@@ -40,4 +40,7 @@ export const STACK_BELOW = { min: 360, max: 1600, default: 520, step: 20 } as co
 export const RATE_WINDOWS: { key: string; label: string; short: string }[] = [
   { key: "five_hour", label: "5h", short: "5h" },
   { key: "seven_day", label: "1w", short: "1w" },
+  // The weekly limit scoped to one model (Fable, say), from the endpoint's `limits[]`; the reader
+  // puts the model's name into the label when the cache carries it.
+  { key: "weekly_scoped", label: "1w model", short: "1w" },
 ];
