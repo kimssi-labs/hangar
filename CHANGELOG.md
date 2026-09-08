@@ -3,6 +3,30 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.16.0
+
+- **The Claude usage gauges no longer need setting up, and no longer lose the per-model window.**
+  The figures are read the way Claude Code's own `/usage` reads them — from the usage endpoint,
+  with the login Claude Code already keeps. Nothing to install, no separate key, and nothing spent:
+  it is a reading, not a model call. They refresh every minute while a Claude Code session is
+  running, every ten minutes otherwise, and a double-click on any gauge reads them again at once.
+- **The Stop hook that used to collect them is gone.** It was written to copy `rate_limits` from a
+  hook's stdin, and Claude Code hands that field to no hook at all (checked against 2.1.263: none
+  of its 33 hook events carries it). A hook an earlier version installed is removed at start-up —
+  that entry and its script, and nothing else in your settings file.
+- **The answer now lands in the app's own `cache/hangar-usage.json`.** It used to share
+  `cache/rate-limits.json` with anything else that publishes Claude Code's figures — a status line,
+  say — and each of those writes replaced the whole answer with the two windows Claude Code hands
+  out, so the weekly window scoped to one model kept disappearing.
+- **One settings card, "Claude usage", with On and Off.** It replaces the two cards that asked the
+  same question twice. Off hides the gauges and stops the app asking for anything.
+- **A narrow gauge keeps what fits.** An upright card measures its own text before drawing the
+  second line: the reset time, the clock speed or the gigabytes are dropped only when they would
+  overlap the card beside them, "1w Fable" shortens to "Fable", and the bar grows into the space
+  the dropped line leaves so a row of gauges stays level.
+- **A docked band on a fractional-scale monitor is cut to the screen Windows reports**, not to the
+  size Electron converts from its DIP bounds, which can be two pixels taller than the monitor is.
+
 ## v2.15.1
 
 - **Usage collection worked, and showed nothing, on a machine whose user name is not plain English.**
