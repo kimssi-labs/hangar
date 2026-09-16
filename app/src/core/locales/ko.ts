@@ -146,6 +146,10 @@ export const ko: Dictionary = {
   "settings.launch.fallbackNote": "스크린샷 이후에 다른 것이 텍스트를 복사하면 자동 경로가 비켜섭니다. 그때 터미널에서 이 키를 누르면 이미지를 파일로 저장하고 경로를 붙여넣습니다. CommandOrControl은 Electron이 Ctrl을 적는 방식입니다. 어느 쪽이든 Hangar가 실행 중이어야 합니다.",
   "settings.launch.taken": "다른 프로그램이 {key}를 쓰고 있습니다. 다른 키를 골라 주세요.",
 
+  "files.showAll": "전체",
+  "files.showAll.title": "프로젝트 폴더 전체를 보여줍니다",
+  "files.showChanged": "변경만",
+  "files.showChanged.title": "git이 변경했다고 한 파일만 보여줍니다",
   "files.title": "파일",
   "files.reading": "폴더를 읽는 중…",
   "files.unreadable": "폴더를 읽을 수 없습니다.",

@@ -30,7 +30,14 @@ const COUNT_TTL_MS = 15_000;
 
 interface Counted { at: number; dirty: number; statuses: Map<string, FileStatus> }
 const counts = new Map<string, Counted>();
-const running = new Set<string>();
+/**
+ * Who is waiting on the run for a directory — one entry per directory with a run in flight.
+ *
+ * A flag saying a run exists was not enough: a second caller was told "no answer" while the first
+ * caller's run was seconds from finishing, and the file panel drew "nothing has changed" for a
+ * repository with changes in it (measured). One run, and every caller is answered from it.
+ */
+const waiting = new Map<string, ((counted: Counted | null) => void)[]>();
 
 /**
  * The `.git` for `cwd`: the directory itself, the file a worktree leaves behind, or a parent's.
@@ -100,24 +107,27 @@ function porcelain(cwd: string, done: (counted: Counted | null) => void): void {
     done(cached);
     return;
   }
-  if (running.has(cwd) || !existsSync(cwd)) {
+  if (!existsSync(cwd)) {
     done(cached ?? null);                        // whatever is known, even if it is nothing
     return;
   }
-  running.add(cwd);
+  const queue = waiting.get(cwd);
+  if (queue) {
+    queue.push(done);                            // a run is already under way; its answer is ours too
+    return;
+  }
+  waiting.set(cwd, [done]);
   execFile(
     "git",
     ["--no-optional-locks", "status", "--porcelain", "--untracked-files=normal"],
     { cwd, timeout: STATUS_TIMEOUT_MS, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
     (error, stdout) => {
-      running.delete(cwd);
-      if (error) {
-        done(null);                              // no git on PATH, not a repo, or it took too long
-        return;
-      }
-      const counted = { at: Date.now(), dirty: countDirty(stdout), statuses: parsePorcelain(stdout) };
-      counts.set(cwd, counted);
-      done(counted);
+      const callers = waiting.get(cwd) ?? [];
+      waiting.delete(cwd);
+      // Null is "no answer": no git on PATH, not a repository, or it took too long.
+      const counted = error ? null : { at: Date.now(), dirty: countDirty(stdout), statuses: parsePorcelain(stdout) };
+      if (counted) counts.set(cwd, counted);
+      for (const caller of callers) caller(counted);
     },
   );
 }

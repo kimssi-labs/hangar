@@ -13,12 +13,15 @@ import type { Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
+import { shell } from "electron";
+
 import type { Wire } from "../../bridge/build.js";
 import {
   capEntries, changedPaths as sortChanged, childPath, type DirEntry, type DirListing,
   type FileStatus, isInsideProject, SKIPPED, sortEntries, statusOfDirectory,
 } from "../../core/fileTree.js";
 import { changedPaths } from "../../main/gitStatus.js";
+import type { ActionResult } from "../../main/ipc.js";
 import { filesContract, type ChangedFiles, type DirRequest } from "./contract.js";
 
 /**
@@ -71,6 +74,20 @@ async function changedFiles(cwd: string): Promise<ChangedFiles> {
   return sortChanged(await statusesOf(cwd));
 }
 
+/**
+ * Open one file with whatever the machine opens it with.
+ *
+ * The same thing a double-click in Explorer does, on a file of the user's own project — and only
+ * there: the path is checked against the project first, so nothing outside it can be asked for
+ * through this channel. Opening is the platform's business after that; a file type with nothing
+ * registered comes back as the message the platform gives, rather than as silence.
+ */
+async function openFile({ cwd, dir: path }: DirRequest): Promise<ActionResult> {
+  if (!cwd || !path || !isInsideProject(path)) return { ok: false, message: "That file is not in this project." };
+  const problem = await shell.openPath(resolve(cwd, path.split("/").join(sep)));
+  return problem ? { ok: false, message: problem } : { ok: true };
+}
+
 export function register(wire: Wire): void {
-  wire.bind(filesContract, { listDir, changedFiles });
+  wire.bind(filesContract, { listDir, changedFiles, openFile });
 }
