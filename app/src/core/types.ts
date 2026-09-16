@@ -146,6 +146,13 @@ export interface UiConfig {
   stackTop: number;
   /** Whether CPU and memory are sampled at all. Off costs nothing — the timer stops. */
   monitor: boolean;
+  /**
+   * Whether the project's folder is shown beside the lists.
+   *
+   * Off costs nothing: the page stops asking, and no directory is read. Worth turning off for a
+   * project on a network share, where reading one directory can take seconds.
+   */
+  files: boolean;
   project: string | null;
   cursor: number;
   /** "system" follows the OS setting and changes with it while the app is open. */

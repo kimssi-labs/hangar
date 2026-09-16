@@ -13,6 +13,7 @@ import type { LayoutMode, ThemeMode } from "@core/types";
 
 import { PasteSettings } from "../../features/clipboard/ui";
 import { DockSettings } from "../../features/dock/ui";
+import { FilesSettings } from "../../features/files/ui";
 import { GitSettings } from "../../features/git/ui";
 import { MonitorSettings } from "../../features/metrics/ui";
 import { LaunchSettings, PermissionSettings } from "../../features/projects/ui";
@@ -148,6 +149,10 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
 
       <Card title={t("settings.usage")} section="usage" focused={focused} onFocus={onFocus} hint={t("settings.usage.hint")} body="space-y-2">
         <UsageSettings status={draft.status} onChange={section("status")} usage={settings.usage} />
+      </Card>
+
+      <Card title={t("settings.files")} section="files" focused={focused} onFocus={onFocus} hint={t("settings.files.hint")}>
+        <FilesSettings on={draft.ui.files} onChange={(files) => section("ui")({ ...draft.ui, files })} />
       </Card>
 
       <Card title={t("settings.git")} section="git" focused={focused} onFocus={onFocus} hint={t("settings.git.hint")}>

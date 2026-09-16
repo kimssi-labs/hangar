@@ -105,6 +105,8 @@ describe("the surface the page can reach", () => {
       worktreeList: "invoke worktree:list",
       worktreeAdd: "invoke worktree:add",
       worktreeRemove: "invoke worktree:remove",
+      listDir: "invoke files:list",
+      changedFiles: "invoke files:changed",
       status: "invoke status:read",
       onStatus: "event status:push",
       refreshUsage: "invoke status:refresh",

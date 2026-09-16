@@ -19,6 +19,7 @@ import { Store } from "../core/store.js";
 import { followTheme, resolveTheme, surfaceFor, WindowChrome, withoutFrame } from "./chrome.js";
 import { register as registerClipboard } from "../features/clipboard/main.js";
 import { register as registerDock } from "../features/dock/main.js";
+import { register as registerFiles } from "../features/files/main.js";
 import { register as registerGit } from "../features/git/main.js";
 import { register as registerMetrics } from "../features/metrics/main.js";
 import { register as registerProjects } from "../features/projects/main.js";
@@ -170,6 +171,7 @@ const dockFeature = registerDock(context, wiring, {
 const updatesFeature = registerUpdates(context, wiring);
 // Git depends on the project rows, and says so: these are handed over rather than reached for.
 const gitFeature = registerGit(context, wiring, { findProject: projectsFeature.find, rescan: projectsFeature.scan, which });
+registerFiles(wiring);
 // Last, because it composes the others' slices. What a saved section sets in motion is decided here,
 // where every feature is in view — settings itself knows the config store and nothing else.
 const settingsFeature = registerSettings(context, wiring, {
