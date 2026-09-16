@@ -11,17 +11,28 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { DirListing, FileStatus } from "@core/fileTree";
+import { nameOf, type DirEntry, type DirListing, type FileStatus } from "@core/fileTree";
 
 import { api } from "../../renderer/api";
 import { Choice } from "../../renderer/components/SettingsCard";
 import { Truncated } from "../../renderer/components/Truncated";
 import { useText } from "../../renderer/useText";
-import type { ActionResult } from "../../renderer/api";
+import { api as bridge, MENU_SEPARATOR, type ActionResult, type MenuItemSpec } from "../../renderer/api";
+import type { Ask, AskResult } from "../../renderer/components/Modal";
+import type { Translate } from "@core/i18n";
 import type { ChangedFiles } from "./contract";
 
 /** How deep one level indents a row. Enough to read the shape, little enough to keep the name. */
 const INDENT = 14;
+
+/**
+ * The drag payload's type, which is also the check that a drop came from this panel.
+ *
+ * A type of our own rather than "text/plain": a path dragged out of a text editor is not a file of
+ * this project, and a drop that moved something because the string looked like a path would be a
+ * surprise nobody asked for.
+ */
+const DRAG_TYPE = "application/x-hangar-file";
 
 /** The mark and colour git's verdict gets, so a change is visible without reading the name. */
 const MARKS: Record<FileStatus, { mark: string; tone: string }> = {
@@ -48,6 +59,14 @@ export interface Files {
   choose(view: FilesView | null): void;
   /** Hand one file to whatever the machine opens it with. */
   open(path: string): Promise<ActionResult>;
+  /** Show it in the machine's own file manager. */
+  reveal(path: string): Promise<ActionResult>;
+  /** Give it a new name where it is. */
+  rename(path: string, name: string): Promise<ActionResult>;
+  /** Move it into another folder of this project. */
+  move(path: string, toDir: string): Promise<ActionResult>;
+  /** Put it in the recycle bin. */
+  trash(path: string): Promise<ActionResult>;
 }
 
 /**
@@ -125,7 +144,24 @@ export function useFiles(cwd: string | null, enabled: boolean): Files {
     [cwd],
   );
 
-  return { listings, expanded, changed, loading, toggle, refresh, view, choose, open };
+  const reveal = useCallback(
+    async (path: string): Promise<ActionResult> => (cwd ? api.revealFile({ cwd, dir: path }) : { ok: false }),
+    [cwd],
+  );
+  const rename = useCallback(
+    async (path: string, name: string): Promise<ActionResult> => (cwd ? api.renameFile({ cwd, path, name }) : { ok: false }),
+    [cwd],
+  );
+  const move = useCallback(
+    async (path: string, toDir: string): Promise<ActionResult> => (cwd ? api.moveFile({ cwd, path, toDir }) : { ok: false }),
+    [cwd],
+  );
+  const trash = useCallback(
+    async (path: string): Promise<ActionResult> => (cwd ? api.trashFile({ cwd, dir: path }) : { ok: false }),
+    [cwd],
+  );
+
+  return { listings, expanded, changed, loading, toggle, refresh, view, choose, open, reveal, rename, move, trash };
 }
 
 /**
@@ -141,15 +177,110 @@ function useOpen(files: Files, report?: (result: ActionResult) => void): (path: 
   });
 }
 
+/** What an operation on a row needs from the app around it — the same three the other rows use. */
+export interface FilesUi {
+  askUser(ask: Ask): Promise<AskResult>;
+  notify(result: ActionResult): void;
+  t: Translate;
+}
+
+export const FILE_ACTIONS = ["open", "reveal", "rename", "copyPath", "delete"] as const;
+export type FileAction = (typeof FILE_ACTIONS)[number];
+
+export function isFileAction(id: string | null): id is FileAction {
+  return (FILE_ACTIONS as readonly string[]).includes(id ?? "");
+}
+
+/** The right-click menu of a file or folder row. */
+export function fileMenuItems(entry: { directory: boolean }, t: Translate): MenuItemSpec[] {
+  return [
+    { id: "open", label: t("menu.file.open"), enabled: !entry.directory },
+    { id: "reveal", label: t("menu.showFolder") },
+    { id: MENU_SEPARATOR, label: "" },
+    { id: "rename", label: t("menu.rename") },
+    { id: "copyPath", label: t("menu.file.copyPath") },
+    { id: MENU_SEPARATOR, label: "" },
+    { id: "delete", label: t("menu.file.delete") },
+  ];
+}
+
+/**
+ * One row's menu, from the click to the change on disk.
+ *
+ * Renaming asks for the name in the same dialog the rest of the app asks in, and deleting asks
+ * first — it is the one operation people do by accident, even into a recycle bin. Every answer is
+ * reported; a refusal explains itself (a name that is not a name, something already there) rather
+ * than leaving a row that did not change.
+ */
+async function runFileMenu(entry: DirEntry, files: Files, ui: FilesUi): Promise<void> {
+  const { askUser, notify, t } = ui;
+  const choice = await bridge.contextMenu(fileMenuItems(entry, t));
+  if (!isFileAction(choice)) return;
+  switch (choice) {
+    case "open": {
+      const result = await files.open(entry.path);
+      if (!result.ok) notify(result);
+      break;
+    }
+    case "reveal":
+      notifyIfFailed(notify, await files.reveal(entry.path));
+      break;
+    case "copyPath":
+      await navigator.clipboard.writeText(entry.path);
+      notify({ ok: true, message: t("files.copied", { name: entry.path }) });
+      break;
+    case "rename": {
+      const name = await askUser({
+        title: t("dialog.renameFile", { name: entry.name }),
+        input: { initial: entry.name },
+        confirm: t("dialog.rename"),
+      });
+      if (typeof name !== "string" || !name.trim()) return;
+      const result = await files.rename(entry.path, name);
+      notifyIfFailed(notify, result);
+      if (result.ok) files.refresh();
+      break;
+    }
+    case "delete": {
+      const yes = await askUser({
+        title: t(entry.directory ? "dialog.deleteFolder" : "dialog.deleteFile", { name: entry.name }),
+        detail: t("dialog.deleteFile.detail"),
+        confirm: t("dialog.delete"),
+        danger: true,
+      });
+      if (!yes) return;
+      const result = await files.trash(entry.path);
+      notifyIfFailed(notify, result);
+      if (result.ok) files.refresh();
+      break;
+    }
+  }
+}
+
+/** Say nothing when it worked: a row that changed says it better than a message would. */
+function notifyIfFailed(notify: (result: ActionResult) => void, result: ActionResult): void {
+  if (!result.ok) notify(result);
+}
+
 function Mark({ status }: { status: FileStatus | null }) {
   if (!status) return null;
   const { mark, tone } = MARKS[status];
   return <span className={`shrink-0 text-[10px] tabular-nums ${tone}`}>{mark}</span>;
 }
 
+/** What every row in the tree needs beyond its own entry. */
+interface RowTools {
+  files: Files;
+  onOpen(path: string): void;
+  onMenu(entry: DirEntry): void;
+  /** A drop landed on this folder; null means the project's root. */
+  onDrop(path: string, toDir: string): void;
+}
+
 /** One directory's rows, and under each open one its own. */
-function Rows({ files, dir, depth, onOpen }: { files: Files; dir: string; depth: number; onOpen: (path: string) => void }) {
+function Rows({ files, dir, depth, tools }: { files: Files; dir: string; depth: number; tools: RowTools }) {
   const t = useText();
+  const [over, setOver] = useState<string | null>(null);
   const listing = files.listings.get(dir);
   if (!listing) return null;
   return (
@@ -160,11 +291,39 @@ function Rows({ files, dir, depth, onOpen }: { files: Files; dir: string; depth:
           <div key={entry.path}>
             <button
               type="button"
-              className="w-full flex items-center gap-1 rounded px-1 py-0.5 text-left text-xs hover:bg-ink-700/60"
+              className={`w-full flex items-center gap-1 rounded px-1 py-0.5 text-left text-xs hover:bg-ink-700/60 ${
+                over === entry.path ? "bg-accent/20 ring-1 ring-accent/60" : ""}`}
               style={{ paddingLeft: depth * INDENT + 4 }}
               title={entry.path}
               onClick={() => entry.directory && files.toggle(entry.path)}
-              onDoubleClick={() => { if (!entry.directory) onOpen(entry.path); }}
+              onDoubleClick={() => { if (!entry.directory) tools.onOpen(entry.path); }}
+              onContextMenu={() => tools.onMenu(entry)}
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.setData(DRAG_TYPE, entry.path);
+                event.dataTransfer.effectAllowed = "move";
+              }}
+              // Only a folder takes a drop, and only of something from this same panel.
+              onDragOver={(event) => {
+                if (!entry.directory || !event.dataTransfer.types.includes(DRAG_TYPE)) return;
+                event.preventDefault();
+                // The tree's own background is a drop target too (it means the project's root), and
+                // a drop handled here would otherwise bubble into it and be moved a second time —
+                // to the root, which for a file already in the root reads as "cannot go there".
+                event.stopPropagation();
+                event.dataTransfer.dropEffect = "move";
+                setOver(entry.path);
+              }}
+              onDragLeave={() => setOver((was) => (was === entry.path ? null : was))}
+              onDrop={(event) => {
+                setOver(null);
+                if (!entry.directory) return;
+                const path = event.dataTransfer.getData(DRAG_TYPE);
+                if (!path) return;
+                event.preventDefault();
+                event.stopPropagation();
+                tools.onDrop(path, entry.path);
+              }}
             >
               <span className={`w-3 shrink-0 text-[10px] ${entry.directory ? "text-bone-400" : "text-transparent"}`}>
                 {entry.directory ? (isOpen ? "▾" : "▸") : "·"}
@@ -176,7 +335,7 @@ function Rows({ files, dir, depth, onOpen }: { files: Files; dir: string; depth:
               </Truncated>
               <Mark status={entry.status} />
             </button>
-            {isOpen ? <Rows files={files} dir={entry.path} depth={depth + 1} onOpen={onOpen} /> : null}
+            {isOpen ? <Rows files={files} dir={entry.path} depth={depth + 1} tools={tools} /> : null}
           </div>
         );
       })}
@@ -190,15 +349,28 @@ function Rows({ files, dir, depth, onOpen }: { files: Files; dir: string; depth:
 }
 
 /** The whole folder, as a tree — for a panel with the width to draw one. */
-export function FileTree({ files, onOpen }: { files: Files; onOpen: (path: string) => void }) {
+export function FileTree({ files, tools }: { files: Files; tools: RowTools }) {
   const t = useText();
   const root = files.listings.get("");
   if (!root) return <div className="p-2 text-[11px] text-bone-500">{t("files.reading")}</div>;
   if (root.error) return <div className="p-2 text-[11px] text-bone-500">{t("files.unreadable")}</div>;
   if (!root.entries.length) return <div className="p-2 text-[11px] text-bone-500">{t("files.empty")}</div>;
-  return <div className="p-1">
-    <Rows files={files} dir="" depth={0} onOpen={onOpen} />
-  </div>;
+  // The space below the rows is the project's root: dragging a file there moves it out of
+  // whatever folder it was in, which is the only way back up without a folder row to aim at.
+  return (
+    <div
+      className="p-1 min-h-full"
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes(DRAG_TYPE)) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        const path = event.dataTransfer.getData(DRAG_TYPE);
+        if (path) tools.onDrop(path, "");
+      }}
+    >
+      <Rows files={files} dir="" depth={0} tools={tools} />
+    </div>
+  );
 }
 
 /**
@@ -207,7 +379,7 @@ export function FileTree({ files, onOpen }: { files: Files; onOpen: (path: strin
  * The path is shown whole rather than indented: at this width an indented name is mostly indent,
  * and "core/status.ts" says where the file is in the same space the tree would spend on arrows.
  */
-export function ChangedList({ files, onOpen }: { files: Files; onOpen: (path: string) => void }) {
+export function ChangedList({ files, tools }: { files: Files; tools: RowTools }) {
   const t = useText();
   if (!files.changed.items.length) {
     return <div className="px-2 py-1 text-[11px] text-bone-500">{t("files.noChanges")}</div>;
@@ -220,7 +392,8 @@ export function ChangedList({ files, onOpen }: { files: Files; onOpen: (path: st
           type="button"
           className="w-full flex items-center gap-1 rounded px-1 py-0.5 text-left text-xs hover:bg-ink-700/60"
           title={item.path}
-          onDoubleClick={() => onOpen(item.path)}
+          onDoubleClick={() => tools.onOpen(item.path)}
+          onContextMenu={() => tools.onMenu({ name: nameOf(item.path), path: item.path, directory: false, status: item.status })}
         >
           <Mark status={item.status} />
           <Truncated as="span" className="text-bone-300">{item.path}</Truncated>
@@ -241,14 +414,23 @@ export function ChangedList({ files, onOpen }: { files: Files; onOpen: (path: st
  * is how a narrow panel gets to the files that did not change and a wide one gets a short list of
  * the ones that did.
  */
-export function FilesPane({ files, roomy, onResult }: {
+export function FilesPane({ files, roomy, ui }: {
   files: Files;
   roomy: boolean;
-  /** Told when opening a file did not work; nothing is said when it did. */
-  onResult?: (result: ActionResult) => void;
+  /** How a row asks a question, says how it went, and reads the words it shows. */
+  ui: FilesUi;
 }) {
   const t = useText();
-  const onOpen = useOpen(files, onResult);
+  const onOpen = useOpen(files, ui.notify);
+  const tools: RowTools = {
+    files,
+    onOpen,
+    onMenu: (entry) => void runFileMenu(entry, files, ui),
+    onDrop: (path, toDir) => void files.move(path, toDir).then((result) => {
+      if (!result.ok) ui.notify(result);
+      else files.refresh();
+    }),
+  };
   const view: FilesView = files.view ?? (roomy ? "tree" : "changed");
   const other: FilesView = view === "tree" ? "changed" : "tree";
   return (
@@ -269,7 +451,7 @@ export function FilesPane({ files, roomy, onResult }: {
         </button>
       </div>
       <div className="flex-1 min-h-0 overflow-auto">
-        {view === "tree" ? <FileTree files={files} onOpen={onOpen} /> : <ChangedList files={files} onOpen={onOpen} />}
+        {view === "tree" ? <FileTree files={files} tools={tools} /> : <ChangedList files={files} tools={tools} />}
       </div>
     </>
   );

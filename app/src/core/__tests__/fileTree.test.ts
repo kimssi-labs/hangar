@@ -8,8 +8,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  capEntries, changedPaths, childPath, type DirEntry, ENTRY_CAP, isInsideProject,
-  parsePorcelain, sortEntries, statusOf, statusOfDirectory, worseOf,
+  canMoveInto, capEntries, changedPaths, childPath, type DirEntry, ENTRY_CAP, isInsideProject,
+  isValidName, moveTarget, nameOf, parentOf, parsePorcelain, renameTarget, sortEntries, statusOf,
+  statusOfDirectory, worseOf,
 } from "../fileTree.js";
 
 const entry = (name: string, directory = false): DirEntry => ({ name, path: name, directory, status: null });
@@ -131,5 +132,52 @@ describe("the paths the panel asks for", () => {
     expect(isInsideProject("src/../..")).toBe(false);
     expect(isInsideProject("C:\\Windows")).toBe(false);
     expect(isInsideProject("/etc")).toBe(false);
+  });
+});
+
+describe("renaming", () => {
+  it("takes a name, never a path and never a way out", () => {
+    expect(isValidName("notes.md")).toBe(true);
+    expect(isValidName(" spaced.md ")).toBe(true);           // trimmed before it is judged
+    expect(isValidName("한글 이름.txt")).toBe(true);
+    expect(isValidName("")).toBe(false);
+    expect(isValidName("   ")).toBe(false);
+    expect(isValidName("..")).toBe(false);
+    expect(isValidName("src/deep.ts")).toBe(false);
+    expect(isValidName("src\\deep.ts")).toBe(false);
+    expect(isValidName("what?.ts")).toBe(false);
+    expect(isValidName("C:file")).toBe(false);
+    expect(isValidName("trailing.")).toBe(false);            // Windows strips it and means something else
+  });
+
+  it("keeps the folder and changes only the name", () => {
+    expect(renameTarget("src/core/status.ts", "state.ts")).toBe("src/core/state.ts");
+    expect(renameTarget("readme.md", "README.md")).toBe("README.md");
+    expect(renameTarget("src/a.ts", "  b.ts  ")).toBe("src/b.ts");
+  });
+
+  it("knows a path's folder and its name", () => {
+    expect(parentOf("src/core/status.ts")).toBe("src/core");
+    expect(parentOf("readme.md")).toBe("");
+    expect(nameOf("src/core/status.ts")).toBe("status.ts");
+    expect(nameOf("readme.md")).toBe("readme.md");
+  });
+});
+
+describe("moving", () => {
+  it("puts the same name in the new folder", () => {
+    expect(moveTarget("src/core/status.ts", "docs")).toBe("docs/status.ts");
+    expect(moveTarget("readme.md", "docs")).toBe("docs/readme.md");
+    expect(moveTarget("src/a.ts", "")).toBe("a.ts");
+  });
+
+  it("refuses the three moves that mean nothing or lose the folder", () => {
+    expect(canMoveInto("src/core/status.ts", "docs")).toBe(true);
+    expect(canMoveInto("src/a.ts", "")).toBe(true);
+    expect(canMoveInto("src/core/status.ts", "src/core")).toBe(false);   // already there
+    expect(canMoveInto("src", "src")).toBe(false);                        // into itself
+    expect(canMoveInto("src", "src/core")).toBe(false);                   // into its own child
+    expect(canMoveInto("src", "../elsewhere")).toBe(false);               // out of the project
+    expect(canMoveInto("", "docs")).toBe(false);                          // the root is not a thing to move
   });
 });
