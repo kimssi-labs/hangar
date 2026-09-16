@@ -9,20 +9,21 @@
  * process, and this process is the one drawing the window — measured elsewhere in this app at
  * 10.9 s for an unreachable share (core/store.ts says the same about existsSync).
  */
-import type { Dirent } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { existsSync, type Dirent } from "node:fs";
+import { readdir, rename } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
 import { shell } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import {
-  capEntries, changedPaths as sortChanged, childPath, type DirEntry, type DirListing,
-  type FileStatus, isInsideProject, SKIPPED, sortEntries, statusOfDirectory,
+  canMoveInto, capEntries, changedPaths as sortChanged, childPath, type DirEntry, type DirListing,
+  type FileStatus, isInsideProject, isValidName, moveTarget, nameOf, renameTarget, SKIPPED,
+  sortEntries, statusOfDirectory,
 } from "../../core/fileTree.js";
 import { changedPaths } from "../../main/gitStatus.js";
 import type { ActionResult } from "../../main/ipc.js";
-import { filesContract, type ChangedFiles, type DirRequest } from "./contract.js";
+import { filesContract, type ChangedFiles, type DirRequest, type MoveRequest, type RenameRequest } from "./contract.js";
 
 /**
  * Git's verdict for this project, or an empty map.
@@ -88,6 +89,83 @@ async function openFile({ cwd, dir: path }: DirRequest): Promise<ActionResult> {
   return problem ? { ok: false, message: problem } : { ok: true };
 }
 
+/** The absolute path of something in the project, or null when it is not in the project at all. */
+function inProject(cwd: string, path: string): string | null {
+  if (!cwd || !path || !isInsideProject(path)) return null;
+  return resolve(cwd, path.split("/").join(sep));
+}
+
+/** Show it in the machine's own file manager, selected — Explorer, Finder, whatever is there. */
+function revealFile({ cwd, dir: path }: DirRequest): ActionResult {
+  const full = inProject(cwd, path);
+  if (!full) return { ok: false, message: "That file is not in this project." };
+  shell.showItemInFolder(full);
+  return { ok: true };
+}
+
+/**
+ * Rename, in the folder it is already in.
+ *
+ * Refused before anything is written when the name is not a name (a path, a way up, a character
+ * Windows will not have) or when something of that name is already there — `rename` would replace
+ * a file without a word, and a file view that silently eats a file is not one to trust.
+ */
+async function renameFile({ cwd, path, name }: RenameRequest): Promise<ActionResult> {
+  const from = inProject(cwd, path);
+  if (!from) return { ok: false, message: "That file is not in this project." };
+  if (!isValidName(name)) return { ok: false, message: `"${name}" cannot be a file name.` };
+  const target = renameTarget(path, name);
+  if (target === path) return { ok: true };
+  const to = inProject(cwd, target);
+  if (!to) return { ok: false, message: "That name would leave the project." };
+  if (existsSync(to)) return { ok: false, message: `"${nameOf(target)}" is already there.` };
+  try {
+    await rename(from, to);
+  } catch (error) {
+    return { ok: false, message: (error as Error).message };
+  }
+  return { ok: true };
+}
+
+/**
+ * Move it into another folder of this project — a drag onto a folder row.
+ *
+ * The same refusals as a rename, plus the three moves core knows mean nothing or lose the folder
+ * (into where it already is, into itself, into its own child).
+ */
+async function moveFile({ cwd, path, toDir }: MoveRequest): Promise<ActionResult> {
+  const from = inProject(cwd, path);
+  if (!from) return { ok: false, message: "That file is not in this project." };
+  if (!canMoveInto(path, toDir)) return { ok: false, message: "That file cannot go there." };
+  const target = moveTarget(path, toDir);
+  const to = inProject(cwd, target);
+  if (!to) return { ok: false, message: "That folder is not in this project." };
+  if (existsSync(to)) return { ok: false, message: `"${nameOf(target)}" is already there.` };
+  try {
+    await rename(from, to);
+  } catch (error) {
+    return { ok: false, message: (error as Error).message };
+  }
+  return { ok: true };
+}
+
+/**
+ * Into the recycle bin, not gone.
+ *
+ * `shell.trashItem` rather than `rm`: a delete from a list of files is the one operation someone
+ * does by accident, and the platform already has the place it can be got back from.
+ */
+async function trashFile({ cwd, dir: path }: DirRequest): Promise<ActionResult> {
+  const full = inProject(cwd, path);
+  if (!full) return { ok: false, message: "That file is not in this project." };
+  try {
+    await shell.trashItem(full);
+  } catch (error) {
+    return { ok: false, message: (error as Error).message };
+  }
+  return { ok: true };
+}
+
 export function register(wire: Wire): void {
-  wire.bind(filesContract, { listDir, changedFiles, openFile });
+  wire.bind(filesContract, { listDir, changedFiles, openFile, revealFile, renameFile, moveFile, trashFile });
 }

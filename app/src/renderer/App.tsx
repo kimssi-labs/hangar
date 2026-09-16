@@ -426,7 +426,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   }, [showFiles, column, windowWidth]);
   // Wide enough to draw a tree without it being mostly indentation; the panel's own button can
   // still ask for the other one.
-  const filesPane = <FilesPane files={files} roomy={fileColumn || showDetail} onResult={notify} />;
+  const filesPane = <FilesPane files={files} roomy={fileColumn || showDetail} ui={rowUi} />;
   // Both thin shapes lose the same things: the labels on buttons, and the space for two panes.
   const tight = band || column;
 

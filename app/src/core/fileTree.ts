@@ -5,8 +5,9 @@
  * appear in, the cap that keeps a folder of ten thousand files from becoming ten thousand rows, and
  * the translation of `git status --porcelain` into a mark per path.
  *
- * Only the read side. Nothing here creates, renames or deletes: this app opens sessions, and a file
- * tree that edits files is an editor someone would then expect to behave like one.
+ * Reading, and the few operations a folder view is expected to offer — rename, move, delete. Not an
+ * editor: nothing here opens or changes the CONTENT of a file. The decisions about whether an
+ * operation is allowed are here; the operations themselves are the feature's (features/files/main).
  */
 
 /** What git says about a path, in the four kinds a row can show. */
@@ -162,4 +163,58 @@ export function isInsideProject(dir: string): boolean {
   if (dir === "") return true;
   if (dir.startsWith("/") || dir.startsWith("\\") || /^[A-Za-z]:/.test(dir)) return false;
   return !dir.split(/[/\\]/).includes("..");
+}
+
+// ---- moving, renaming and deleting ----------------------------------------------------------------
+
+/**
+ * Characters Windows will not have in a name, plus the separators every platform reserves.
+ *
+ * Checked here rather than left to the filesystem so the answer is the same on every platform and
+ * arrives before anything is written: a name with a slash in it is not a rename, it is a move.
+ */
+const FORBIDDEN = /[\\/:*?"<>|]/;
+
+/** Whether `name` may be the new name of something — a name, not a path, and not a way back up. */
+export function isValidName(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === "." || trimmed === "..") return false;
+  if (FORBIDDEN.test(trimmed)) return false;
+  // Windows also refuses a trailing dot or space, quietly stripping them if it does not.
+  return !/[. ]$/.test(trimmed);
+}
+
+/** The directory a path sits in, from the project's root; "" for something in the root itself. */
+export function parentOf(path: string): string {
+  const cut = path.lastIndexOf("/");
+  return cut < 0 ? "" : path.slice(0, cut);
+}
+
+/** The name at the end of a path. */
+export function nameOf(path: string): string {
+  const cut = path.lastIndexOf("/");
+  return cut < 0 ? path : path.slice(cut + 1);
+}
+
+/** Where a rename would put it: the same folder, the new name. */
+export function renameTarget(path: string, name: string): string {
+  return childPath(parentOf(path), name.trim());
+}
+
+/** Where a move would put it: that folder, the same name. */
+export function moveTarget(path: string, toDir: string): string {
+  return childPath(toDir, nameOf(path));
+}
+
+/**
+ * Whether `path` can be moved into `toDir` at all.
+ *
+ * Three refusals, all of which the filesystem would also refuse — later, with a message about
+ * errno rather than about what the person tried to do: into the folder it is already in (nothing
+ * would happen), into itself, and into anything inside itself (which would take the folder with it).
+ */
+export function canMoveInto(path: string, toDir: string): boolean {
+  if (!isInsideProject(path) || !isInsideProject(toDir) || !path) return false;
+  if (parentOf(path) === toDir) return false;
+  return toDir !== path && !toDir.startsWith(`${path}/`);
 }

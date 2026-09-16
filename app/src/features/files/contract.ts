@@ -16,6 +16,22 @@ export interface ChangedFiles {
   hidden: number;
 }
 
+export interface RenameRequest {
+  cwd: string;
+  /** What to rename, from the project's root. */
+  path: string;
+  /** Its new name — a name, not a path. */
+  name: string;
+}
+
+export interface MoveRequest {
+  cwd: string;
+  /** What to move, from the project's root. */
+  path: string;
+  /** The directory to move it into, from the project's root; "" is the root itself. */
+  toDir: string;
+}
+
 export const filesContract = {
   /** One directory's entries, sorted and capped, each with git's verdict. */
   listDir: invoke<DirRequest, DirListing>("files:list"),
@@ -23,4 +39,12 @@ export const filesContract = {
   changedFiles: invoke<string, ChangedFiles>("files:changed"),
   /** Hand one file to whatever the machine opens it with. */
   openFile: invoke<DirRequest, ActionResult>("files:open"),
+  /** Show it in the machine's own file manager, selected. */
+  revealFile: invoke<DirRequest, ActionResult>("files:reveal"),
+  /** Give it a new name, in the folder it is already in. */
+  renameFile: invoke<RenameRequest, ActionResult>("files:rename"),
+  /** Move it into another folder of the same project — what a drag onto a folder does. */
+  moveFile: invoke<MoveRequest, ActionResult>("files:move"),
+  /** Put it in the machine's recycle bin, where it can be got back. */
+  trashFile: invoke<DirRequest, ActionResult>("files:trash"),
 } as const;

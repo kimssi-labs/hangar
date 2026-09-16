@@ -7,7 +7,7 @@
  * stacked branch drew nothing at all to the right of the lists.
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
@@ -29,7 +29,7 @@ test.afterAll(() => {
  * A project that is a real repository with one edited file and one new one, so the marks have
  * something true to say, and names that sort three ways: directories, numbers, letters.
  */
-function fixture(layout: "auto" | "vertical"): string {
+function fixture(layout: "auto" | "vertical"): { home: string; workspace: string } {
   const root = mkdtempSync(join(tmpdir(), "hangar-files-"));
   roots.push(root);
   const home = join(root, ".claude");
@@ -39,7 +39,7 @@ function fixture(layout: "auto" | "vertical"): string {
   mkdirSync(join(home, "config"), { recursive: true });
   mkdirSync(join(workspace, "src", "core"), { recursive: true });
   mkdirSync(join(workspace, "docs"), { recursive: true });
-  for (const name of ["src/core/status.ts", "src/main.ts", "docs/guide.md", "package.json", "9.log", "99.log", "100.log"]) {
+  for (const name of ["src/core/status.ts", "src/main.ts", "docs/guide.md", "docs/9.log", "package.json", "9.log", "99.log", "100.log"]) {
     writeFileSync(join(workspace, name), "first");
   }
   const git = (...args: string[]): void => { execFileSync("git", args, { cwd: workspace, stdio: "ignore" }); };
@@ -58,7 +58,7 @@ function fixture(layout: "auto" | "vertical"): string {
   writeFileSync(join(home, "history.jsonl"), `${JSON.stringify({ display: "프롬프트", sessionId: SESSION })}\n`);
   writeFileSync(join(root, ".claude.json"), JSON.stringify({ projects: { [workspace]: {} } }));
   writeFileSync(join(home, "config", "manager.json"), JSON.stringify({ ui: { layout } }));
-  return home;
+  return { home, workspace };
 }
 
 async function launch(home: string, width: number, height: number): Promise<{ app: ElectronApplication; page: Page }> {
@@ -74,7 +74,7 @@ async function launch(home: string, width: number, height: number): Promise<{ ap
 }
 
 test("a wide stacked window draws the folder in a column of its own, beside the two lists", async () => {
-  const { app, page } = await launch(fixture("vertical"), 1400, 900);
+  const { app, page } = await launch(fixture("vertical").home, 1400, 900);
   try {
     const column = page.getByTestId("files-column");
     await expect(column).toBeVisible();
@@ -100,7 +100,7 @@ test("a wide stacked window draws the folder in a column of its own, beside the 
 });
 
 test("a folder opens where it is clicked, and only that folder is read", async () => {
-  const { app, page } = await launch(fixture("vertical"), 1400, 900);
+  const { app, page } = await launch(fixture("vertical").home, 1400, 900);
   try {
     const column = page.getByTestId("files-column");
     const src = column.getByRole("button").filter({ hasText: "src" }).first();
@@ -122,7 +122,7 @@ test("a folder opens where it is clicked, and only that folder is read", async (
 });
 
 test("a narrow window shows what changed instead of a tree", async () => {
-  const { app, page } = await launch(fixture("vertical"), 700, 900);
+  const { app, page } = await launch(fixture("vertical").home, 700, 900);
   try {
     const section = page.getByTestId("files-section");
     await expect(section).toBeVisible();
@@ -137,7 +137,7 @@ test("a narrow window shows what changed instead of a tree", async () => {
 });
 
 test("a narrow panel can still be asked for the whole folder, and asked back", async () => {
-  const { app, page } = await launch(fixture("vertical"), 700, 900);
+  const { app, page } = await launch(fixture("vertical").home, 700, 900);
   try {
     const section = page.getByTestId("files-section");
     await expect(section).toBeVisible();
@@ -156,7 +156,7 @@ test("a narrow panel can still be asked for the whole folder, and asked back", a
 });
 
 test("turning the folder off in settings stops it being drawn at all", async () => {
-  const { app, page } = await launch(fixture("vertical"), 1400, 900);
+  const { app, page } = await launch(fixture("vertical").home, 1400, 900);
   try {
     await expect(page.getByTestId("files-column")).toBeVisible();
     await page.keyboard.press("s");
@@ -164,6 +164,100 @@ test("turning the folder off in settings stops it being drawn at all", async () 
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("files-column")).toHaveCount(0);
     await expect(page.getByTestId("files-section")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a drag onto a folder moves the file there, on disk", async () => {
+  const { home, workspace } = fixture("vertical");
+  const { app, page } = await launch(home, 1400, 900);
+  try {
+    // By title, which is the path: "9.log" as text also matches the row for "99.log".
+    const column = page.getByTestId("files-column");
+    const file = column.getByTitle("100.log", { exact: true });
+    await expect(file).toBeVisible();
+
+    await file.dragTo(column.getByTitle("docs", { exact: true }));
+    await expect.poll(() => existsSync(join(workspace, "docs", "100.log")), { timeout: 8000 }).toBe(true);
+    expect(existsSync(join(workspace, "100.log")), "it is not in both places").toBe(false);
+    // Nothing is said when it worked — the row moving is the answer. A complaint here meant the
+    // drop was being handled twice, once by the folder and once by the root behind it.
+    expect(await page.locator("body").innerText()).not.toContain("cannot go there");
+  } finally {
+    await app.close();
+  }
+});
+
+test("a move that would replace a file is refused, and says so", async () => {
+  const { home, workspace } = fixture("vertical");
+  const { app, page } = await launch(home, 1400, 900);
+  try {
+    // docs already has a 9.log of its own; the one in the root must not quietly replace it.
+    const column = page.getByTestId("files-column");
+    const file = column.getByTitle("9.log", { exact: true });
+    await expect(file).toBeVisible();
+    await file.dragTo(column.getByTitle("docs", { exact: true }));
+
+    // The toast clears itself after four seconds, so this looks for it as it appears.
+    // The toast clears itself after four seconds, so this looks for it as it appears.
+    await expect.poll(async () => (await page.locator("body").innerText()).includes("is already there"), { timeout: 8000 })
+      .toBe(true);
+    expect(existsSync(join(workspace, "9.log")), "the file stayed where it was").toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * The right-click menu goes through the platform's own menu, which Playwright cannot click. The
+ * operations behind it are reached the way the menu reaches them, so what is tested here is the
+ * operation and its guard rather than the menu widget.
+ */
+async function callFiles(page: Page, method: "renameFile" | "trashFile", request: unknown): Promise<{ ok: boolean; message?: string }> {
+  return page.evaluate(
+    ({ method: name, request: args }) => {
+      const bridge = window as unknown as { hangar: Record<string, (r: unknown) => Promise<{ ok: boolean; message?: string }>> };
+      return bridge.hangar[name]!(args);
+    },
+    { method, request },
+  );
+}
+
+test("renaming writes the new name, and refuses one that is a path", async () => {
+  const { home, workspace } = fixture("vertical");
+  const { app, page } = await launch(home, 1400, 900);
+  try {
+    await expect(page.getByTestId("files-column")).toBeVisible();
+
+    expect(await callFiles(page, "renameFile", { cwd: workspace, path: "package.json", name: "pkg.json" })).toMatchObject({ ok: true });
+    expect(existsSync(join(workspace, "pkg.json"))).toBe(true);
+    expect(existsSync(join(workspace, "package.json"))).toBe(false);
+
+    // A name is a name: a path would be a move, and "up" would leave the project.
+    expect(await callFiles(page, "renameFile", { cwd: workspace, path: "pkg.json", name: "docs/pkg.json" })).toMatchObject({ ok: false });
+    expect(await callFiles(page, "renameFile", { cwd: workspace, path: "pkg.json", name: ".." })).toMatchObject({ ok: false });
+    // And it never replaces something already there.
+    expect(await callFiles(page, "renameFile", { cwd: workspace, path: "pkg.json", name: "99.log" })).toMatchObject({ ok: false });
+    expect(existsSync(join(workspace, "pkg.json")), "the file is still there under its own name").toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
+test("deleting takes the file off disk, and never anything outside the project", async () => {
+  const { home, workspace } = fixture("vertical");
+  const { app, page } = await launch(home, 1400, 900);
+  try {
+    await expect(page.getByTestId("files-column")).toBeVisible();
+
+    expect(await callFiles(page, "trashFile", { cwd: workspace, dir: "99.log" })).toMatchObject({ ok: true });
+    expect(existsSync(join(workspace, "99.log")), "it went to the recycle bin").toBe(false);
+
+    // The guard, not the filesystem's: nothing above the project can be named at all.
+    const outside = await callFiles(page, "trashFile", { cwd: workspace, dir: "../workspace/9.log" });
+    expect(outside.ok).toBe(false);
+    expect(existsSync(join(workspace, "9.log")), "and it is still there").toBe(true);
   } finally {
     await app.close();
   }
