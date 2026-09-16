@@ -3,6 +3,29 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.17.0
+
+- **The project's folder is drawn beside the lists.** Where the window has room it is a tree in a
+  column of its own — in a stacked window that makes three panes, projects, sessions and files,
+  each resizable — and where it does not, it is a list of the files git says changed, which is the
+  question a session manager is usually asked anyway. The button beside the heading switches
+  between the two, so a narrow panel can still be asked for the whole folder.
+- **Only what is opened is read.** A directory is read when its folder is expanded, never
+  recursively, and a folder with thousands of entries stops at five hundred and says how many it
+  left out. Changed files are marked — edited, new, staged, conflicted — from the `git status` the
+  project rows already run.
+- **Files can be worked with.** Double-click opens one with whatever the machine opens it with;
+  right-click offers open, show in Explorer, rename, copy path and delete; a drag onto a folder
+  moves it, and a drag onto the empty space below moves it to the project's root. Deleting goes to
+  the recycle bin and asks first. Renaming and moving refuse before they write: a name must be a
+  name, nothing may leave the project, and neither ever replaces a file that is already there.
+- **Settings · Project files** turns the whole panel off, and then no directory is read at all —
+  worth having for a project on a network share, where one directory can take seconds to answer.
+- **A count that was sometimes wrong**: while a `git status` was already running for a folder, a
+  second reader was told "no answer" rather than waiting for the one in flight. The project rows
+  hid it by keeping their previous count; the new panel showed "nothing has changed" for a
+  repository full of changes. Every reader now waits for the one run.
+
 ## v2.16.0
 
 - **The Claude usage gauges no longer need setting up, and no longer lose the per-model window.**
