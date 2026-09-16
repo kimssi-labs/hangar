@@ -138,6 +138,10 @@ export const en = {
   "settings.launch.fallbackNote": "When something copied text after the screenshot, the automatic path stands aside; this key, pressed in the terminal, writes the image out and pastes its path anyway. (CommandOrControl is Electron's spelling of Ctrl.) Hangar has to be running either way.",
   "settings.launch.taken": "Another application is holding {key} — choose a different one.",
 
+  "files.showAll": "All",
+  "files.showAll.title": "Show the whole project folder",
+  "files.showChanged": "Changed",
+  "files.showChanged.title": "Show only what git says changed",
   "files.title": "Files",
   "files.reading": "Reading the folder…",
   "files.unreadable": "That folder could not be read.",

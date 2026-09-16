@@ -136,6 +136,25 @@ test("a narrow window shows what changed instead of a tree", async () => {
   }
 });
 
+test("a narrow panel can still be asked for the whole folder, and asked back", async () => {
+  const { app, page } = await launch(fixture("vertical"), 700, 900);
+  try {
+    const section = page.getByTestId("files-section");
+    await expect(section).toBeVisible();
+    // It opens on what changed; package.json did not, so it is not in the list.
+    await expect(section.getByText("package.json")).toHaveCount(0);
+
+    await section.getByRole("button", { name: "All" }).click();
+    await expect(section.getByRole("button").filter({ hasText: "package.json" })).toBeVisible();
+    await expect(section.getByRole("button").filter({ hasText: "docs" })).toBeVisible();
+
+    await section.getByRole("button", { name: "Changed" }).click();
+    await expect(section.getByText("package.json")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
 test("turning the folder off in settings stops it being drawn at all", async () => {
   const { app, page } = await launch(fixture("vertical"), 1400, 900);
   try {

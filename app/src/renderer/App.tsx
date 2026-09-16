@@ -30,7 +30,7 @@ import { TitleBar } from "./components/TitleBar";
 import { Splitter } from "./components/Splitter";
 import { Truncated } from "./components/Truncated";
 import { WindowControls } from "./components/WindowControls";
-import { ChangedList, FilesHeading, FileTree, useFiles } from "../features/files/ui";
+import { FilesPane, useFiles } from "../features/files/ui";
 import { hasFileColumn, STACK_MIN, stackedTopHeight, useLayoutMode } from "./useLayoutMode";
 import { useTheme } from "./useTheme";
 import { TextProvider, useText } from "./useText";
@@ -424,14 +424,9 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   useLayoutEffect(() => {
     setFileColumn((had) => showFiles && column && hasFileColumn(windowWidth, had));
   }, [showFiles, column, windowWidth]);
-  const filesPane = (
-    <>
-      <FilesHeading files={files} title={t("files.title")} />
-      <div className="flex-1 min-h-0 overflow-auto">
-        {fileColumn || showDetail ? <FileTree files={files} /> : <ChangedList files={files} />}
-      </div>
-    </>
-  );
+  // Wide enough to draw a tree without it being mostly indentation; the panel's own button can
+  // still ask for the other one.
+  const filesPane = <FilesPane files={files} roomy={fileColumn || showDetail} onResult={notify} />;
   // Both thin shapes lose the same things: the labels on buttons, and the space for two panes.
   const tight = band || column;
 
