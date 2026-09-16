@@ -6,6 +6,7 @@
  */
 import { clipboardContract } from "../features/clipboard/contract.js";
 import { dockContract } from "../features/dock/contract.js";
+import { filesContract } from "../features/files/contract.js";
 import { gitContract } from "../features/git/contract.js";
 import { metricsContract } from "../features/metrics/contract.js";
 import { projectsContract } from "../features/projects/contract.js";
@@ -18,6 +19,7 @@ export const CONTRACTS = {
   ...settingsContract,
   ...updatesContract,
   ...gitContract,
+  ...filesContract,
   ...usageContract,
   ...metricsContract,
   ...clipboardContract,

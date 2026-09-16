@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { BAND_MAX_HEIGHT, COLUMN_MAX_WIDTH, COMPACT_MAX_WIDTH, layoutFor, STACK_MIN, stackedTopHeight } from "../useLayoutMode";
 import { CARD_INSET, fitsUpright, isNarrow, NARROW_CARD, textWidth, WIDE_CARD } from "../components/Chart";
+import { FILES_COLUMN_BACK, FILES_COLUMN_MIN, hasFileColumn } from "../useLayoutMode";
 
 describe("layoutFor", () => {
   it("treats a wide, short dock as a band", () => {
@@ -120,5 +121,34 @@ describe("fitsUpright", () => {
   it("measures against the card's usable width, which is less than the card", () => {
     expect(CARD_INSET).toBeGreaterThan(0);
     expect(CARD_INSET).toBeLessThan(NARROW_CARD);
+  });
+});
+
+/**
+ * The file column appears by width, not by which layout the settings chose: "stacked" is a choice
+ * about the lists, and a stacked window 1400 px wide has a column's worth of room going spare.
+ */
+describe("hasFileColumn", () => {
+  it("keeps what it has through the gap between the two thresholds", () => {
+    const between = (FILES_COLUMN_MIN + FILES_COLUMN_BACK) / 2;
+    expect(hasFileColumn(between, true)).toBe(true);
+    expect(hasFileColumn(between, false)).toBe(false);
+  });
+
+  it("appears in a wide window and goes when the window really is narrow", () => {
+    expect(hasFileColumn(FILES_COLUMN_BACK, false)).toBe(true);
+    expect(hasFileColumn(FILES_COLUMN_MIN - 1, true)).toBe(false);
+    expect(hasFileColumn(480, false)).toBe(false);
+  });
+
+  it("never oscillates, and does not guess before the window has been measured", () => {
+    for (const width of [400, FILES_COLUMN_MIN, 950, FILES_COLUMN_BACK, 1600]) {
+      let shape = hasFileColumn(width, false);
+      const settled = shape;
+      for (let i = 0; i < 10; i += 1) shape = hasFileColumn(width, shape);
+      expect(shape, `width ${width} settles`).toBe(settled);
+    }
+    expect(hasFileColumn(0, true)).toBe(true);
+    expect(hasFileColumn(0, false)).toBe(false);
   });
 });

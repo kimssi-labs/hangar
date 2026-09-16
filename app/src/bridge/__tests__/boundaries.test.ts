@@ -42,7 +42,7 @@ describe("feature boundaries", () => {
   const features = readdirSync(FEATURES).filter((name) => statSync(join(FEATURES, name)).isDirectory());
 
   it("has the features it is meant to have", () => {
-    expect(features.sort()).toEqual(["clipboard", "dock", "git", "metrics", "projects", "settings", "updates", "usage"]);
+    expect(features.sort()).toEqual(["clipboard", "dock", "files", "git", "metrics", "projects", "settings", "updates", "usage"]);
   });
 
   it("lets no feature import another feature", () => {

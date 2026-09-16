@@ -41,6 +41,23 @@ export function stackedTopHeight(saved: number, available: number): number {
   return Math.min(saved, most);
 }
 
+/**
+ * Narrowest window that still has room for the file column beside the lists, and the width at
+ * which it comes back.
+ *
+ * Two numbers for the same reason the gauge cards have two (components/Chart.tsx): taking the
+ * column away gives its width back to the lists, which at one threshold would put the window over
+ * the line again and bring it straight back. The gap is wider than the column's own minimum.
+ */
+export const FILES_COLUMN_MIN = 900;
+export const FILES_COLUMN_BACK = 1000;
+
+/** Whether the file column fits, given whether it is there now — sticky at the boundary. */
+export function hasFileColumn(width: number, had: boolean): boolean {
+  if (width <= 0) return had;                             // not measured yet: do not flip on a guess
+  return had ? width >= FILES_COLUMN_MIN : width >= FILES_COLUMN_BACK;
+}
+
 export function layoutFor(
   width: number,
   height: number,

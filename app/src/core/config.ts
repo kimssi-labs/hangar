@@ -228,6 +228,7 @@ export class ConfigStore {
       // Unset means follow the machine, which is what a first run on a Korean PC should do.
       language: LANGUAGES.some((l) => l.key === raw["language"]) ? raw["language"] as Language : "system",
       monitor: raw["monitor"] !== false,          // on unless it was explicitly turned off
+      files: raw["files"] !== false,              // same: shown unless it was turned off
       layout: LAYOUT_MODES.includes(raw["layout"] as LayoutMode) ? (raw["layout"] as LayoutMode) : "auto",
       stackBelow: Number.isFinite(Number(raw["stackBelow"])) && Number(raw["stackBelow"]) > 0
         ? clamp(Math.round(Number(raw["stackBelow"])), STACK_BELOW.min, STACK_BELOW.max)

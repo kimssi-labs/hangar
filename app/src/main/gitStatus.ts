@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 
 import { randomUUID } from "node:crypto";
 
+import { parsePorcelain, type FileStatus } from "../core/fileTree.js";
 import { countDirty, parseHead, type GitInfo } from "../core/git.js";
 import {
   classify, defaultBaseFrom, fetchArgs, reconcileArgs, splitBase, FETCH_TIMEOUT_MS, STEP_TIMEOUT_MS,
@@ -27,7 +28,7 @@ const STATUS_TIMEOUT_MS = 4_000;
 /** A count this old is re-taken. Long enough that scrolling a list costs nothing. */
 const COUNT_TTL_MS = 15_000;
 
-interface Counted { at: number; dirty: number }
+interface Counted { at: number; dirty: number; statuses: Map<string, FileStatus> }
 const counts = new Map<string, Counted>();
 const running = new Set<string>();
 
@@ -86,14 +87,23 @@ export function headOf(cwd: string): GitInfo | null {
  * One run per directory at a time, and at most one per TTL: a list that refreshes every fifteen
  * seconds must not turn into a git process per project per refresh.
  */
-export function countChanges(cwd: string, done: (dirty: number) => void): void {
+/**
+ * `git status --porcelain` for this directory, cached — and ALWAYS answered.
+ *
+ * Null means "no answer": not a repository, no git on PATH, a run already in flight, or a folder
+ * that is not there. Callers decide what that means for them. It has to call back either way: the
+ * file panel waits on this to draw a folder, and a silent return left it reading forever.
+ */
+function porcelain(cwd: string, done: (counted: Counted | null) => void): void {
   const cached = counts.get(cwd);
   if (cached && Date.now() - cached.at < COUNT_TTL_MS) {
-    done(cached.dirty);
+    done(cached);
     return;
   }
-  if (running.has(cwd)) return;
-  if (!existsSync(cwd)) return;
+  if (running.has(cwd) || !existsSync(cwd)) {
+    done(cached ?? null);                        // whatever is known, even if it is nothing
+    return;
+  }
   running.add(cwd);
   execFile(
     "git",
@@ -101,12 +111,30 @@ export function countChanges(cwd: string, done: (dirty: number) => void): void {
     { cwd, timeout: STATUS_TIMEOUT_MS, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
     (error, stdout) => {
       running.delete(cwd);
-      if (error) return;                         // no git on PATH, not a repo, or it took too long
-      const dirty = countDirty(stdout);
-      counts.set(cwd, { at: Date.now(), dirty });
-      done(dirty);
+      if (error) {
+        done(null);                              // no git on PATH, not a repo, or it took too long
+        return;
+      }
+      const counted = { at: Date.now(), dirty: countDirty(stdout), statuses: parsePorcelain(stdout) };
+      counts.set(cwd, counted);
+      done(counted);
     },
   );
+}
+
+export function countChanges(cwd: string, done: (dirty: number) => void): void {
+  // Only a real count: a row that cannot be counted shows nothing, never a wrong zero.
+  porcelain(cwd, (counted) => { if (counted) done(counted.dirty); });
+}
+
+/**
+ * What git says about each path — the file panel's colours, from the run the count already makes.
+ *
+ * One process for both readers: the panel and the project rows ask within the same TTL, and a
+ * second `git status` per refresh is a process per project the app does not need to spawn.
+ */
+export function changedPaths(cwd: string, done: (statuses: Map<string, FileStatus>) => void): void {
+  porcelain(cwd, (counted) => done(counted?.statuses ?? new Map()));
 }
 
 /**

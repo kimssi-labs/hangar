@@ -4,7 +4,7 @@
  * Selection and screen live here because the keyboard drives them — every list is a controlled
  * view of this state, so a key and a click end up in exactly the same place.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { nextIndex, resolveAction, SHORTCUTS, type Screen } from "@core/keymap";
 import type { Language } from "@core/i18n";
@@ -30,7 +30,8 @@ import { TitleBar } from "./components/TitleBar";
 import { Splitter } from "./components/Splitter";
 import { Truncated } from "./components/Truncated";
 import { WindowControls } from "./components/WindowControls";
-import { STACK_MIN, stackedTopHeight, useLayoutMode } from "./useLayoutMode";
+import { ChangedList, FilesHeading, FileTree, useFiles } from "../features/files/ui";
+import { hasFileColumn, STACK_MIN, stackedTopHeight, useLayoutMode } from "./useLayoutMode";
 import { useTheme } from "./useTheme";
 import { TextProvider, useText } from "./useText";
 
@@ -99,6 +100,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   /** Measured height of the stacked pair, so the divider can be kept inside it. */
   const [stackHeight, setStackHeight] = useState(0);
   const stackRef = useRef<HTMLDivElement | null>(null);
+  const [fileColumn, setFileColumn] = useState(false);
+  const filesRef = useRef<() => void>(() => undefined);
   useTheme(theme);
   const { mode, width: windowWidth, height: windowHeight } = useLayoutMode(settings?.ui.layout ?? "auto", settings?.ui.stackBelow ?? 520);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -106,6 +109,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
 
   const refresh = useCallback(async () => {
     const [scanned] = await Promise.all([scan(), usage.refresh()]);
+    filesRef.current?.();
     return scanned;
   }, [scan, usage.refresh]);
 
@@ -396,6 +400,15 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
 
   const usageWindows = usage.status?.windows ?? [];
 
+  // The project's folder, for whichever shape has room to draw it. Nothing is read while the
+  // setting is off, and nothing while no project is selected.
+  const showFiles = settings?.ui.files ?? true;
+  const filesCwd = (screen === "sessions" ? openProjectInfo?.cwd : project?.cwd) ?? null;
+  const files = useFiles(showFiles ? filesCwd : null, showFiles);
+  // The list refresh runs on a timer that must not restart whenever this callback is rebuilt, so
+  // the tick reaches the panel through a ref rather than through the dependency list.
+  filesRef.current = files.refresh;
+
   // Monitoring off means there is nothing to draw — and nothing being measured, which is the point.
   const monitoring = settings?.ui.monitor ?? true;
   // Fractions turned back into pixels against what is on screen right now, then clamped so no pane
@@ -406,6 +419,19 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const band = mode === "band";
   const column = mode === "column";
   const showDetail = mode === "full";
+  // Stacked is a choice about the lists, not about the window: a stacked window can be wide, and
+  // when it is, the room to its right is a file column rather than nothing (useLayoutMode).
+  useLayoutEffect(() => {
+    setFileColumn((had) => showFiles && column && hasFileColumn(windowWidth, had));
+  }, [showFiles, column, windowWidth]);
+  const filesPane = (
+    <>
+      <FilesHeading files={files} title={t("files.title")} />
+      <div className="flex-1 min-h-0 overflow-auto">
+        {fileColumn || showDetail ? <FileTree files={files} /> : <ChangedList files={files} />}
+      </div>
+    </>
+  );
   // Both thin shapes lose the same things: the labels on buttons, and the space for two panes.
   const tight = band || column;
 
@@ -565,6 +591,12 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                     <div data-testid="stack-sessions" className="flex-1 min-h-0 overflow-auto p-1 space-y-0.5">
                       {sessionRows}
                     </div>
+                    {/* Too narrow for a column of its own: what changed, under the sessions. */}
+                    {showFiles && !fileColumn && filesCwd ? (
+                      <div data-testid="files-section" className="shrink-0 max-h-48 flex flex-col border-t border-ink-600">
+                        {filesPane}
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                 <div className={`flex-1 min-w-0 overflow-auto space-y-0.5 ${tight ? "p-1" : "p-2"}`}>
@@ -572,6 +604,25 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 </div>
                 )}
 
+                {column && fileColumn && filesCwd ? (
+                  <>
+                    <Splitter
+                      width={asideWidth || 320}
+                      side="right"
+                      min={ASIDE_MIN}
+                      max={ASIDE_MAX}
+                      onDrag={(width) => setAsideFraction(windowWidth ? width / windowWidth : 0)}
+                      onCommit={(width) => void api.saveUi({ asideWidth: windowWidth ? width / windowWidth : 0 })}
+                    />
+                    <aside
+                      data-testid="files-column"
+                      className={`${asideWidth ? "" : "w-80"} shrink-0 border-l border-ink-600 flex flex-col`}
+                      style={asideWidth ? { width: asideWidth } : undefined}
+                    >
+                      {filesPane}
+                    </aside>
+                  </>
+                ) : null}
                 {column ? null : (
                   <Splitter
                     width={asideWidth || (showDetail ? 320 : 208)}
@@ -584,16 +635,25 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 )}
                 {column ? null : showDetail ? (
                 <aside
-                  className={`${asideWidth ? "" : "w-80"} shrink-0 border-l border-ink-600 overflow-auto`}
+                  className={`${asideWidth ? "" : "w-80"} shrink-0 border-l border-ink-600 flex flex-col`}
                   style={asideWidth ? { width: asideWidth } : undefined}
                 >
-                  {screen === "sessions" && session ? (
-                    <SessionDetail session={session} samples={monitoring ? sessionHistory[session.id] ?? [] : []} />
-                  ) : project ? (
-                    <ProjectDetail project={project} worktrees={worktrees} />
-                  ) : null}
+                  {/* Three bands: what is selected, the folder, the gauges. Only the middle one
+                      scrolls — with one scrollbar for the lot, the gauges left the screen. */}
+                  <div className="shrink-0 max-h-[50%] overflow-auto">
+                    {screen === "sessions" && session ? (
+                      <SessionDetail session={session} samples={monitoring ? sessionHistory[session.id] ?? [] : []} />
+                    ) : project ? (
+                      <ProjectDetail project={project} worktrees={worktrees} />
+                    ) : null}
+                  </div>
+                  {showFiles && filesCwd ? (
+                    <div data-testid="files-section" className="flex-1 min-h-0 flex flex-col border-t border-ink-600">
+                      {filesPane}
+                    </div>
+                  ) : <div className="flex-1" />}
 
-                  <div className="p-3 space-y-2 border-t border-ink-600">
+                  <div className="shrink-0 p-3 space-y-2 border-t border-ink-600">
                     <UsageGauges windows={usageWindows} />
                     {monitoring ? <MachineGauges metrics={metrics} wide /> : null}
                     <div className="text-[11px] text-bone-500">
