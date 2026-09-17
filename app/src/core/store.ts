@@ -294,11 +294,20 @@ export class Store {
     return data.customTitle || null;
   }
 
+  /**
+   * Note who is running what, so a session replaced by /clear can be folded under its successor.
+   *
+   * Called on a timer of its own, not only from a scan: the list is re-read when the page asks, and
+   * a page in a minimised or covered window is throttled by Chromium — a clear during a quiet hour
+   * would be seen too late, or between two swaps, and the pair would never be linked.
+   */
+  watchRegistry(): void {
+    this.links.observe(this.registry());
+  }
+
   /** Every project, newest use first. */
   scan(): ProjectInfo[] {
-    // Read the registry before anything else: a session that was replaced since the last scan is
-    // only visible in this moment, and the swap is what makes a cleared conversation one row.
-    this.links.observe(this.registry());
+    this.watchRegistry();
     const live = this.liveSessions();
     const titles = this.historyTitles();
     const known = this.knownPaths();

@@ -391,6 +391,20 @@ function registerIpc(): void {
 }
 
 /** Start-up, once the platform is ready: splash, scan, window, monitor. */
+/**
+ * How often the live-session registry is read for a session that changed hands.
+ *
+ * Cheap — a readdir and a few small files — and independent of the page, which Chromium throttles
+ * once the window is minimised or covered (measured: the swap went unnoticed for minutes that way).
+ */
+const REGISTRY_WATCH_MS = 10_000;
+let registryTimer: NodeJS.Timeout | null = null;
+
+function watchRegistry(): void {
+  context.store.watchRegistry();
+  registryTimer = setInterval(() => context.store.watchRegistry(), REGISTRY_WATCH_MS);
+}
+
 async function start(): Promise<void> {
   followTheme(config.ui().theme);                 // before any window: the splash is painted in it too
   openSplash();
@@ -406,6 +420,7 @@ async function start(): Promise<void> {
   splashSays("Starting the monitor…");
   metricsFeature.start();
   usageFeature.start();                           // the usage figures start keeping themselves current
+  watchRegistry();                                // and a cleared session is noticed whatever the window does
   clipboardFeature.rearm();
 
   closeSplash();
@@ -513,6 +528,7 @@ function leave(): Promise<void> {
 app.on("window-all-closed", () => {
   console.log("[hangar] window-all-closed -> quitting");
   usageFeature.stop();
+  if (registryTimer) clearInterval(registryTimer);
   if (process.platform === "win32") {
     void leave();                               // under way already when the window's `close` ran
     return;

@@ -317,6 +317,23 @@ describe("a clear the app watched happen", () => {
   });
 });
 
+describe("watching the live registry", () => {
+  it("notices a session changing hands without anyone asking for the list", () => {
+    const { home } = makeHome();
+    const file = join(home, "sessions", "4242.json");
+    const entry = (id: string) => JSON.stringify({ pid: 4242, sessionId: id, procStart: "13434117720165242" });
+    const store = new Store(home, { isAlive: () => false });
+
+    writeFileSync(file, entry("first"));
+    store.watchRegistry();                       // no scan(): the page may be throttled or closed
+    writeFileSync(file, entry("second"));
+    store.watchRegistry();
+
+    const chains = JSON.parse(readFileSync(join(home, "cache", "hangar-chains.json"), "utf8"));
+    expect(chains).toEqual({ chains: [{ from: "first", to: "second" }] });
+  });
+});
+
 describe("a conversation split by /clear", () => {
   it("is one row: the new transcript, counting the finished one folded under it", async () => {
     const { home, cwd, dir } = makeHome();
