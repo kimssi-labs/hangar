@@ -31,6 +31,8 @@ export interface HomePaths {
   aliases: string;
   /** The usage figures, this app's own file: written from the usage endpoint and by nothing else. */
   hangarUsage: string;
+  /** Which session replaced which, this app's own file — see core/sessionLinks.ts. */
+  hangarChains: string;
   /** Where a pasted screenshot is written, so a terminal session can be given its path. */
   clips: string;
   /** Claude Code's own settings file; read only to take an older version's hook back out. */
@@ -53,6 +55,7 @@ export function homePaths(root = claudeHome()): HomePaths {
     managerConfig: join(root, "config", "manager.json"),
     aliases: join(root, "config", "project-aliases.json"),
     hangarUsage: join(root, "cache", "hangar-usage.json"),
+    hangarChains: join(root, "cache", "hangar-chains.json"),
     clips: join(root, "cache", "hangar-clips"),
     settings: join(root, "settings.json"),
     hooks: join(root, "hooks"),
