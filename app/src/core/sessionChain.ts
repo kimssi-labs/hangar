@@ -46,6 +46,10 @@ function isContinuation(session: SessionWithOrigin): boolean {
  * `candidates` are the sessions not already folded elsewhere. A transcript that only carries a name
  * must find that same name, which is what separates "the conversation moved here" from "a new
  * session was started with a name of its own a moment later".
+ *
+ * Of several sessions that ended around the birth, the one whose name this transcript carried in is
+ * the predecessor — the name IS the link, and it holds however close the others stopped. Time only
+ * breaks the tie when nothing carried a name.
  */
 function predecessorOf(successor: SessionWithOrigin, candidates: SessionWithOrigin[]): SessionWithOrigin | undefined {
   return candidates
@@ -59,7 +63,13 @@ function predecessorOf(successor: SessionWithOrigin, candidates: SessionWithOrig
       && p.modifiedAt <= successor.modifiedAt
       && Math.abs(p.modifiedAt - successor.startedAt) <= CLEAR_TOLERANCE_MS
       && (successor.startedByClear || p.title === successor.carriedTitle))
-    .sort((a, b) => Math.abs(a.modifiedAt - successor.startedAt) - Math.abs(b.modifiedAt - successor.startedAt))[0];
+    .sort((a, b) => (namesake(b, successor) - namesake(a, successor))
+      || (Math.abs(a.modifiedAt - successor.startedAt) - Math.abs(b.modifiedAt - successor.startedAt)))[0];
+}
+
+/** 1 if this candidate is the one whose name the successor carried in. */
+function namesake(candidate: SessionWithOrigin, successor: SessionWithOrigin): number {
+  return successor.carriedTitle !== null && candidate.title === successor.carriedTitle ? 1 : 0;
 }
 
 /** The sessions with every continuation's predecessor folded under it, in the order given. */

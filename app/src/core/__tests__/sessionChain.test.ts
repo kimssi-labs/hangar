@@ -88,6 +88,13 @@ describe("foldClears", () => {
     expect(foldClears([NEW, nearest, earlier]).map((r) => r.id)).toEqual(["new", "earlier"]);
   });
 
+  it("folds the session whose name it carried, not whichever stopped nearest", () => {
+    // What broke on Linux CI and not on Windows: two finished sessions, both within the minute, and
+    // the list folded whichever the filesystem happened to stamp nearer. The carried name says which.
+    const alsoJustEnded = session({ id: "other", title: "다른 일", startedAt: T0, modifiedAt: NEW.startedAt - 1 });
+    expect(foldClears([NEW, alsoJustEnded, OLD]).map((r) => r.id)).toEqual(["new", "other"]);
+  });
+
   it("folds them even when the filesystem gives both the same birth, to the second", () => {
     // Linux CI kept both rows where Windows folded them: /clear writes the new transcript within a
     // millisecond of the old one's last line, and a clock that only counts seconds cannot tell the
