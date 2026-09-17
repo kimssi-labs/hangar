@@ -3,6 +3,26 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.17.1
+
+- **`/clear` replaces a session's row instead of adding one.** Clearing does not empty a session: it
+  starts a new session id in the same terminal and leaves the finished transcript on disk, so the
+  list grew a row every time. The app now watches the swap happen — Claude Code's live-session
+  registry keeps the process and changes the session id — and shows one row for the conversation,
+  saying how many transcripts came before it. Timestamps could not do this: a clear typed after a
+  pause leaves the old transcript minutes, hours, sometimes days behind the new one's first line.
+- **Deleting such a row deletes all of it.** It used to remove only the newest transcript, and the
+  earlier ones reappeared as rows of their own; the confirmation now says how many files go.
+- **A session that has not been named yet reads "Claude Code"**, which is what the terminal calls
+  it, rather than "(no prompt)".
+- **The tab keeps the name Claude Code gives it.** Only a session you renamed passes a title of its
+  own to the new tab — Claude Code names the tab from the same session name the row shows, and
+  keeps renaming it as the conversation grows, so the two agree without competing.
+- **A new session keeps its transcript.** Started from a terminal that was itself opened inside a
+  Claude Code session, it inherited that session's markers and Claude Code answered by turning
+  transcript saving off — the session could not be resumed and never appeared in the list. The
+  markers are cleared inside the new tab, whatever environment the terminal was holding.
+
 ## v2.17.0
 
 - **The project's folder is drawn beside the lists.** Where the window has room it is a tree in a
