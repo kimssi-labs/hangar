@@ -241,12 +241,17 @@ export function launchCommand(request: LaunchRequest, have: (exe: string) => boo
   }
   const argv = claudeArgv(request);
   const hosted = hostedCommand(argv, request.config.shell, request.platform, have);
-  const title = request.tabTitle || request.displayName || "Claude";
+  // Only a name a person chose. Claude Code titles the tab itself — its own name for the session,
+  // with a spinner glyph while it works — and it does that from the moment it starts, so a title of
+  // ours would only be overwritten a second later. A renamed session is the one case worth stating:
+  // the tab then says what the row says even before Claude Code has read the name.
+  const title = request.tabTitle?.trim() ?? "";
 
   if (request.platform === "win32" && request.hasWindowsTerminal) {
     return {
       exe: WT_EXE,
-      args: ["-w", windowArgument(request.target), "nt", "--title", title, "-d", request.cwd, hosted.exe, ...hosted.args],
+      args: ["-w", windowArgument(request.target), "nt",
+        ...(title ? ["--title", title] : []), "-d", request.cwd, hosted.exe, ...hosted.args],
       cwd: request.cwd,
       ownsWindow: true,
       shell: hosted.exe,

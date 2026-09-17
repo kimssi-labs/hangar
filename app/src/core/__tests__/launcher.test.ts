@@ -140,9 +140,9 @@ describe("choosing a shell that is actually installed", () => {
 
 describe("launch command", () => {
   it("opens a titled tab in the sessions window on Windows", () => {
-    const command = launchCommand(request({ displayName: "데모" }));
+    const command = launchCommand(request({ displayName: "데모", tabTitle: "데모" }));   // a renamed session passes both
     expect(command.exe).toBe(WT_EXE);
-    expect(command.args.slice(0, 6)).toEqual(["-w", SESSIONS_WINDOW, "nt", "--title", "데모", "-d"]);
+    expect(command.args.slice(0, 6)).toEqual(["-w", SESSIONS_WINDOW, "nt", "--title", "데모", "-d"]);   // renamed session
     expect(command.ownsWindow).toBe(true);
   });
 
@@ -262,18 +262,18 @@ describe("the markers a new session must not inherit", () => {
 });
 
 describe("what the terminal tab is called", () => {
-  it("is the session's own name, whether or not a person chose it", () => {
+  it("is the name a person chose, so tab and row agree from the first moment", () => {
     const named = launchCommand(request({ displayName: "번역기", tabTitle: "번역기" }));
     expect(named.args[named.args.indexOf("--title") + 1]).toBe("번역기");
-
-    // Claude Code's own name for the session: the row and the tab then say the same thing.
-    const generated = launchCommand(request({ displayName: null, tabTitle: "WMX3 오류 분석" }));
-    expect(generated.args[generated.args.indexOf("--title") + 1]).toBe("WMX3 오류 분석");
-    expect(generated.args).not.toContain(NAME_FLAG);           // and Claude Code keeps naming it
   });
 
-  it("falls back to Claude for a session with no name at all", () => {
+  it("says nothing for a session nobody renamed: Claude Code names its own tab", () => {
+    // Measured: Claude Code writes the tab title itself (`◑ <session name>`) within a second of
+    // starting, and keeps it in step with the name it generates. A title of ours would be replaced.
     const fresh = launchCommand(request({ displayName: null, tabTitle: null }));
-    expect(fresh.args[fresh.args.indexOf("--title") + 1]).toBe("Claude");
+    expect(fresh.args).not.toContain("--title");
+    expect(fresh.args).not.toContain(NAME_FLAG);
+    expect(fresh.args.slice(0, 3)).toEqual(["-w", SESSIONS_WINDOW, "nt"]);
+    expect(fresh.args[3]).toBe("-d");
   });
 });
