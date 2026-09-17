@@ -127,6 +127,29 @@ describe("foldClears", () => {
     expect(rows[0]!.continues).toBe(1);
   });
 
+  it("collapses a session cleared again and again into one row", () => {
+    const first = session({ id: "first", title: "1", startedAt: T0, modifiedAt: T0 + 1000 });
+    const second = session({ id: "second", title: "2", startedAt: T0 + 2000, modifiedAt: T0 + 3000 });
+    const third = session({ id: "third", title: "3", startedAt: T0 + 4000, modifiedAt: T0 + 5000, live: true, pid: 9 });
+    const watched = new Map([["second", "first"], ["third", "second"]]);
+    const rows = foldClears([third, second, first], watched);
+    expect(rows.map((r) => r.id)).toEqual(["third"]);
+    expect(rows[0]!.continues).toBe(2);
+    expect(rows[0]!.folded).toEqual(["first", "second"]);       // oldest first: delete takes all three
+  });
+
+  it("still folds the one in the middle when two clears fell between two ticks", () => {
+    // The registry is read every ten seconds; clear twice inside one of those and the app sees the
+    // first session become the third. The middle transcript is then folded the old way — it stopped
+    // as its successor was born, which after a double clear is true to the second.
+    const first = session({ id: "first", title: "1", startedAt: T0, modifiedAt: T0 + 1000 });
+    const middle = session({ id: "middle", title: "2", startedAt: T0 + 2000, modifiedAt: T0 + 3000, startedByClear: true });
+    const last = session({ id: "last", title: "3", startedAt: T0 + 4000, modifiedAt: T0 + 5000, startedByClear: true });
+    const rows = foldClears([last, middle, first], new Map([["last", "first"]]));
+    expect(rows.map((r) => r.id)).toEqual(["last"]);
+    expect(rows[0]!.continues).toBe(2);
+  });
+
   it("ignores a record whose other half is not in this project", () => {
     expect(foldClears([NEW], new Map([["new", "elsewhere"]])).map((r) => r.id)).toEqual(["new"]);
   });
