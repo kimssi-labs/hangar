@@ -41,6 +41,15 @@ export interface LaunchRequest {
    * same thing; leaving it null lets Claude Code name the session from the conversation.
    */
   displayName?: string | null;
+  /**
+   * What the terminal tab is called at first.
+   *
+   * The session's own name, so the tab and the row read alike from the moment it opens. Only the
+   * first word on it: Claude Code renames the tab as the conversation goes, and for a session it
+   * has named that is the same name again. For a session with no name yet — a new one — the
+   * project is the best a tab can say.
+   */
+  tabTitle?: string | null;
   config: LaunchConfig;
   target: OpenTarget;
   platform: NodeJS.Platform;
@@ -76,8 +85,8 @@ export function psQuote(value: string): string {
 }
 
 /** UTF-16LE base64, so a Korean title or a path with spaces needs no escaping rules at all. */
-export function psEncode(argv: string[]): string {
-  const command = `& ${argv.map(psQuote).join(" ")}`;
+export function psEncode(argv: string[], before: string[] = []): string {
+  const command = [...before, `& ${argv.map(psQuote).join(" ")}`].join("; ");
   return Buffer.from(command, "utf16le").toString("base64");
 }
 
@@ -125,6 +134,43 @@ export function resolveShell(
 }
 
 /**
+ * What Claude Code stamps on the environment of every process it starts, to tell a child session
+ * from a top-level one. Config a user sets in their profile (CLAUDE_CODE_USE_BEDROCK, say) is not
+ * in this list and passes through.
+ */
+export const SESSION_MARKERS = [
+  "CLAUDECODE",
+  "CLAUDE_CODE_CHILD_SESSION",
+  // Measured in this shell: set beside the others, and it tells a new session it was spawned by
+  // an attended one (setSpawnedByAttendedSession). A session opened from the app was not.
+  "CLAUDE_CODE_SESSION_ATTENDED",
+  "CLAUDE_CODE_SESSION_ID",
+  "CLAUDE_CODE_ENTRYPOINT",
+  "CLAUDE_CODE_EXECPATH",
+  "CLAUDE_CODE_MESSAGING_SOCKET",
+  "CLAUDE_CODE_MESSAGING_TOKEN",
+  "CLAUDE_PID",
+  "CLAUDE_EFFORT",
+];
+
+/**
+ * The markers, cleared inside the shell rather than only in the environment we spawn with.
+ *
+ * Cleaning our own child's environment is not enough on Windows: `wt.exe` does not run the tab, it
+ * asks the Windows Terminal process that is already running to, and that process hands the tab ITS
+ * environment. A terminal first opened from inside a Claude Code session therefore gives every tab
+ * the child-session marker, and Claude Code answers by turning transcript saving off —
+ * "Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker" — so the session cannot
+ * be resumed and this app never sees it. Unsetting them in the command itself works wherever the
+ * environment came from.
+ */
+export function clearMarkers(shell: string): string[] {
+  if (shell === "cmd.exe") return SESSION_MARKERS.map((name) => `set "${name}="`);
+  if (shell === "bash" || shell === "sh") return [`unset ${SESSION_MARKERS.join(" ")}`];
+  return SESSION_MARKERS.map((name) => `Remove-Item Env:${name} -ErrorAction SilentlyContinue`);
+}
+
+/**
  * Wrap the claude invocation in the configured shell, so the window survives claude exiting.
  * `none` runs claude directly and the window closes with it.
  */
@@ -134,13 +180,18 @@ export function hostedCommand(
   platform: NodeJS.Platform,
   have: (exe: string) => boolean = () => true,
 ): { exe: string; args: string[]; fellBack: boolean } {
+  // Nothing hosts it: the environment we spawn with is the only one there is, and main has already
+  // cleaned that (sessionEnvironment).
   if (shell === "none") return { exe: argv[0] as string, args: argv.slice(1), fellBack: false };
   const { exe, fellBack } = resolveShell(shell, platform, have);
-  if (exe === "cmd.exe") return { exe, args: ["/k", argv.map(cmdQuote).join(" ")], fellBack };
-  if (exe === "bash" || exe === "sh") {
-    return { exe, args: ["-lc", `${argv.map(shQuote).join(" ")}; exec ${exe}`], fellBack };
+  const clear = clearMarkers(exe);
+  if (exe === "cmd.exe") {
+    return { exe, args: ["/k", [...clear, argv.map(cmdQuote).join(" ")].join(" & ")], fellBack };
   }
-  return { exe, args: ["-NoExit", "-EncodedCommand", psEncode(argv)], fellBack };
+  if (exe === "bash" || exe === "sh") {
+    return { exe, args: ["-lc", `${clear.join("; ")}; ${argv.map(shQuote).join(" ")}; exec ${exe}`], fellBack };
+  }
+  return { exe, args: ["-NoExit", "-EncodedCommand", psEncode(argv, clear)], fellBack };
 }
 
 export function shQuote(value: string): string {
@@ -164,23 +215,6 @@ export function windowArgument(target: OpenTarget): string {
  * Windows Terminal is present; on Linux it is the detected terminal emulator; and where neither
  * exists the hosted shell is started directly.
  */
-/**
- * What Claude Code stamps on the environment of every process it starts, to tell a child session
- * from a top-level one. Config a user sets in their profile (CLAUDE_CODE_USE_BEDROCK, say) is not
- * in this list and passes through.
- */
-export const SESSION_MARKERS = [
-  "CLAUDECODE",
-  "CLAUDE_CODE_CHILD_SESSION",
-  "CLAUDE_CODE_SESSION_ID",
-  "CLAUDE_CODE_ENTRYPOINT",
-  "CLAUDE_CODE_EXECPATH",
-  "CLAUDE_CODE_MESSAGING_SOCKET",
-  "CLAUDE_CODE_MESSAGING_TOKEN",
-  "CLAUDE_PID",
-  "CLAUDE_EFFORT",
-];
-
 /**
  * The environment a launched session runs in: ours, minus the marks of a session we were started
  * from.
@@ -207,7 +241,7 @@ export function launchCommand(request: LaunchRequest, have: (exe: string) => boo
   }
   const argv = claudeArgv(request);
   const hosted = hostedCommand(argv, request.config.shell, request.platform, have);
-  const title = request.displayName || "Claude";
+  const title = request.tabTitle || request.displayName || "Claude";
 
   if (request.platform === "win32" && request.hasWindowsTerminal) {
     return {
