@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { ConfigStore } from "../config.js";
 import { encodeProjectPath } from "../paths.js";
-import { Store } from "../store.js";
+import { NO_NAME_YET, Store } from "../store.js";
 
 /** Fixed times, so "which is newer" is never decided by how fast the test happened to run. */
 const NOW = new Date();
@@ -314,6 +314,19 @@ describe("a clear the app watched happen", () => {
     const sessions = new Store(home, { isAlive: () => false }).scan().find((p) => p.dir === dir)?.sessions ?? [];
     expect(sessions.map((s) => s.id)).not.toContain(older);
     expect(sessions.find((s) => s.id === newer)?.continues).toBe(1);
+  });
+});
+
+describe("a session with nothing in it yet", () => {
+  it("is called what Claude Code calls it, not \"(no prompt)\"", () => {
+    const { home, cwd, dir } = makeHome();
+    const id = "eeeeeeee-1111-2222-3333-444444444444";
+    // What /clear leaves behind for a moment: the echo of the command and nothing else.
+    writeFileSync(join(home, "projects", dir, `${id}.jsonl`), JSON.stringify({
+      type: "user", cwd, sessionId: id, message: { content: "<command-name>/clear</command-name>" },
+    }) + LINE);
+    const sessions = new Store(home, { isAlive: () => false }).scan().find((p) => p.dir === dir)?.sessions ?? [];
+    expect(sessions.find((s) => s.id === id)?.title).toBe(NO_NAME_YET);
   });
 });
 

@@ -38,8 +38,12 @@ const HEAD_BYTES = 64 * 1024;
  * not found, and the row falls back to the first prompt — which is what it showed before.
  */
 const TAIL_BYTES = 512 * 1024;
-/** What a row says when the session has no name of any kind yet — and what a tab must not say. */
-export const NO_PROMPT = "(no prompt)";
+/**
+ * What a row says for a session with no name of any kind yet — the moment after /clear, before a
+ * word has been typed. Claude Code's own default name for such a session, so the row reads like the
+ * terminal rather than announcing that a field is empty.
+ */
+export const NO_NAME_YET = "Claude Code";
 
 interface CacheEntry<T> { signature: string; value: T }
 
@@ -369,7 +373,7 @@ export class Store {
         // and /resume picker show; then the name it was handed when the conversation moved into
         // this file, which is what its tab says until it has thought of its own; then the question
         // that started it.
-        title: custom || facts.aiTitle || facts.carriedTitle || prompt || NO_PROMPT,
+        title: custom || facts.aiTitle || facts.carriedTitle || prompt || NO_NAME_YET,
         named: Boolean(custom),
         prompt,
         startedAt: st.birthtimeMs || st.ctimeMs,
