@@ -72,7 +72,38 @@ describe("factsFrom", () => {
   });
 
   it("has nothing to say about an empty file", () => {
-    expect(factsFrom("", "", true)).toEqual({ aiTitle: null, firstPrompt: null, conversation: false, startedByClear: false });
+    expect(factsFrom("", "", true)).toEqual({ aiTitle: null, firstPrompt: null, conversation: false, startedByClear: false, carriedTitle: null });
+  });
+});
+
+describe("the name a transcript is handed", () => {
+  const line = (entry: Record<string, unknown>): string => `${JSON.stringify(entry)}
+`;
+
+  it("is read when it arrives before anyone has spoken — that is a conversation that moved here", () => {
+    // Measured: Claude Code opens the new transcript with the old session's name as its first lines.
+    const head = line({ type: "ai-title", aiTitle: "WMX3_ENGINE CreateDevice 오류 268" })
+      + line({ type: "agent-name", agentName: "WMX3_ENGINE CreateDevice 오류 268" })
+      + line({ type: "mode", mode: "normal" })
+      + line({ type: "user", origin: { kind: "human" }, message: { content: "이어서 봐줘" } });
+    expect(factsFrom(head, "", true).carriedTitle).toBe("WMX3_ENGINE CreateDevice 오류 268");
+    expect(factsFrom(head, "", true).firstPrompt).toBe("이어서 봐줘");
+  });
+
+  it("reads the custom title the same way, and prefers the last name before the talking starts", () => {
+    const head = line({ type: "custom-title", customTitle: "번역기" })
+      + line({ type: "agent-name", agentName: "번역기" })
+      + line({ type: "user", origin: { kind: "human" }, message: { content: "안녕" } });
+    expect(factsFrom(head, "", true).carriedTitle).toBe("번역기");
+  });
+
+  it("is null for a title the session earned later, which is written after the conversation", () => {
+    const head = line({ type: "user", origin: { kind: "human" }, message: { content: "첫 질문" } })
+      + line({ type: "assistant", message: { content: "답" } })
+      + line({ type: "ai-title", aiTitle: "스스로 붙인 이름" });
+    const facts = factsFrom(head, "", true);
+    expect(facts.carriedTitle).toBeNull();
+    expect(facts.aiTitle).toBe("스스로 붙인 이름");
   });
 });
 

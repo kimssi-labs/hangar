@@ -37,7 +37,8 @@ const HEAD_BYTES = 64 * 1024;
  * not found, and the row falls back to the first prompt — which is what it showed before.
  */
 const TAIL_BYTES = 512 * 1024;
-const NO_PROMPT = "(no prompt)";
+/** What a row says when the session has no name of any kind yet — and what a tab must not say. */
+export const NO_PROMPT = "(no prompt)";
 
 interface CacheEntry<T> { signature: string; value: T }
 
@@ -337,9 +338,11 @@ export class Store {
       return [{
         id,
         file,
-        // A name the user chose wins; then the one Claude Code wrote, which is what its own tab and
-        // /resume picker show; then the question that started it.
-        title: custom || facts.aiTitle || prompt || NO_PROMPT,
+        // A name the user chose wins; then the one Claude Code wrote, which is what its own tab
+        // and /resume picker show; then the name it was handed when the conversation moved into
+        // this file, which is what its tab says until it has thought of its own; then the question
+        // that started it.
+        title: custom || facts.aiTitle || facts.carriedTitle || prompt || NO_PROMPT,
         named: Boolean(custom),
         prompt,
         startedAt: st.birthtimeMs || st.ctimeMs,
@@ -350,6 +353,7 @@ export class Store {
         pinned: pins.sessions.includes(id),
         continues: 0,
         startedByClear: facts.startedByClear,
+        carriedTitle: facts.carriedTitle,
       }];
     });
     // A conversation /clear split into several transcripts is one row (core/sessionChain.ts).

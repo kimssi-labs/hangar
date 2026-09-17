@@ -31,6 +31,16 @@ export interface TranscriptFacts {
    */
   startedByClear: boolean;
   /**
+   * The name this transcript was handed before anyone spoke in it, or null.
+   *
+   * The other mark of a continuation, and the only one in some of them: Claude Code opens the new
+   * transcript with the old one's name — `custom-title`, `ai-title` and `agent-name` as the first
+   * lines of the file (measured on this machine: a session whose conversation moved into a new
+   * transcript carried "WMX3_ENGINE CreateDevice 오류 268" in at line 0 with no /clear echo at all).
+   * A transcript that earns its title later writes it at the end, not the beginning.
+   */
+  carriedTitle: string | null;
+  /**
    * Whether anyone ever spoke here.
    *
    * False only for the title-carrying stubs Claude Code leaves behind — files of a few hundred
@@ -41,6 +51,8 @@ export interface TranscriptFacts {
 }
 
 const AI_TITLE = "ai-title";
+const CUSTOM_TITLE = "custom-title";
+const AGENT_NAME = "agent-name";
 const USER = "user";
 /** What Claude Code writes into the transcript /clear opens, as the echo of the command itself. */
 const CLEAR_ECHO = "<command-name>/clear</command-name>";
@@ -50,8 +62,19 @@ const HUMAN = "human";
 interface Entry {
   type?: string;
   aiTitle?: string;
+  customTitle?: string;
+  agentName?: string;
   origin?: { kind?: string };
   message?: { content?: unknown };
+}
+
+/** The name an entry carries, whichever of the three ways it spells one. */
+function titleOf(entry: Entry): string | null {
+  const value = entry.type === CUSTOM_TITLE ? entry.customTitle
+    : entry.type === AI_TITLE ? entry.aiTitle
+      : entry.type === AGENT_NAME ? entry.agentName
+        : null;
+  return value?.trim() || null;
 }
 
 /** Parsed objects from `text`, silently dropping the lines a byte window cuts in half. */
@@ -95,6 +118,13 @@ export function factsFrom(head: string, tail: string, complete: boolean): Transc
     if (entry.type === AI_TITLE && entry.aiTitle?.trim()) aiTitle = entry.aiTitle.trim();
   }
 
+  // A name in the file before anyone has spoken came from the session this one replaced.
+  let carriedTitle: string | null = null;
+  for (const entry of early) {
+    if (entry.type === USER || entry.type === ASSISTANT) break;
+    carriedTitle = titleOf(entry) ?? carriedTitle;
+  }
+
   let firstPrompt: string | null = null;
   let startedByClear = false;
   let conversation = !complete;
@@ -110,5 +140,5 @@ export function factsFrom(head: string, tail: string, complete: boolean): Transc
     firstPrompt = firstLine(entry.message?.content);
   }
 
-  return { aiTitle, firstPrompt, conversation, startedByClear };
+  return { aiTitle, firstPrompt, conversation, startedByClear, carriedTitle };
 }
