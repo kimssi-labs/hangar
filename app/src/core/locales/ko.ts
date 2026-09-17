@@ -291,6 +291,7 @@ export const ko: Dictionary = {
   "dialog.deleteProject.memory": "memory 폴더도 함께 삭제됩니다.",
   "dialog.deleteSession": "{name}을(를) 삭제할까요?",
   "dialog.deleteSession.detail": "대화 기록 파일이 디스크에서 지워집니다.",
+  "dialog.deleteSession.detail.chain": "clear로 나뉜 이전 기록까지, 이 대화의 기록 파일 {count}개가 디스크에서 지워집니다.",
   "dialog.background": "{name} 세션이 백그라운드에서 실행 중입니다",
   "dialog.background.detail": "창이 없는 프로세스(pid {pid})가 이 세션을 잡고 있습니다. 그 프로세스를 종료하고 새 창에서 이어서 열까요?",
   "dialog.background.busy": "지금 작업 중입니다. 종료하면 진행 중인 응답이 끊깁니다.",

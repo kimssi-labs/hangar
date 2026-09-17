@@ -282,6 +282,7 @@ export const en = {
   "dialog.deleteProject.memory": "Its memory/ folder goes too.",
   "dialog.deleteSession": "Delete {name}?",
   "dialog.deleteSession.detail": "The transcript is removed from disk.",
+  "dialog.deleteSession.detail.chain": "All {count} transcripts of this conversation are removed from disk, including the ones /clear split off.",
   "dialog.background": "{name} is running in the background",
   "dialog.background.detail": "A process without a window (pid {pid}) holds this session. Stop it and continue in a new window?",
   "dialog.background.busy": "It is working right now: stopping it cuts off the response in progress.",

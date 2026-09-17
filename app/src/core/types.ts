@@ -20,6 +20,8 @@ export interface SessionInfo {
   pinned: boolean;
   /** Earlier transcripts of this same conversation, split off by /clear and folded under this row. */
   continues: number;
+  /** Their ids, oldest first. Deleting this row deletes them: one row is one conversation. */
+  folded: string[];
 }
 
 export interface ProjectInfo {

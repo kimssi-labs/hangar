@@ -317,6 +317,33 @@ describe("a clear the app watched happen", () => {
   });
 });
 
+describe("deleting a cleared conversation", () => {
+  it("takes the transcripts folded under it, so nothing reappears as its own row", () => {
+    const { home, cwd, dir } = makeHome();
+    const project = join(home, "projects", dir);
+    const older = "ffffffff-1111-2222-3333-444444444444";
+    const newer = "99999999-1111-2222-3333-444444444444";
+    for (const [id, text] of [[older, "어제"], [newer, "오늘"]] as const) {
+      writeFileSync(join(project, `${id}.jsonl`), [
+        JSON.stringify({ type: "user", cwd, sessionId: id, message: { content: text }, origin: { kind: "human" } }),
+        JSON.stringify({ type: "assistant", message: { content: "…" } }),
+      ].join(LINE) + LINE);
+      mkdirSync(join(project, id), { recursive: true });
+      writeFileSync(join(project, id, "custom-title.json"), JSON.stringify({ customTitle: text }));
+    }
+    mkdirSync(join(home, "cache"), { recursive: true });
+    writeFileSync(join(home, "cache", "hangar-chains.json"), JSON.stringify({ chains: [{ from: older, to: newer }] }));
+
+    const store = new Store(home, { isAlive: () => false });
+    const row = store.scan().find((p) => p.dir === dir)?.sessions.find((s) => s.id === newer);
+    expect(row?.folded).toEqual([older]);
+    store.deleteSession(row!);
+    expect(existsSync(join(project, `${older}.jsonl`))).toBe(false);
+    expect(existsSync(join(project, older))).toBe(false);
+    expect(existsSync(join(project, `${newer}.jsonl`))).toBe(false);
+  });
+});
+
 describe("a session with nothing in it yet", () => {
   it("is called what Claude Code calls it, not \"(no prompt)\"", () => {
     const { home, cwd, dir } = makeHome();

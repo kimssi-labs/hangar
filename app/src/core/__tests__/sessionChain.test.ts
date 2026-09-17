@@ -24,6 +24,7 @@ function session(over: Partial<SessionWithOrigin> & { id: string }): SessionWith
     pid: null,
     pinned: false,
     continues: 0,
+    folded: [],
     startedByClear: false,
     carriedTitle: null,
     ...over,
@@ -72,6 +73,12 @@ describe("foldClears", () => {
     expect(foldClears([NEW, OLD])[0]!.prompt).toBe("아래 내용을 영어 메시지로 번역해줘");
     const typed = { ...NEW, prompt: "새 질문" };
     expect(foldClears([typed, OLD])[0]!.prompt).toBe("새 질문");
+  });
+
+  it("names every transcript it folded, oldest first, so the row deletes as one conversation", () => {
+    const oldest = session({ id: "oldest", title: "번역기", named: true, startedAt: T0 - 3600_000, modifiedAt: T0 - 1000 });
+    const middle = { ...OLD, startedByClear: true, carriedTitle: "번역기", startedAt: T0 };
+    expect(foldClears([NEW, middle, oldest])[0]!.folded).toEqual(["oldest", "old"]);
   });
 
   it("counts a chain of clears on its newest head", () => {

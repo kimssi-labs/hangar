@@ -382,6 +382,7 @@ export class Store {
         live: live.has(id),
         pid: live.get(id) ?? null,
         pinned: pins.sessions.includes(id),
+        folded: [],
         continues: 0,
         startedByClear: facts.startedByClear,
         carriedTitle: facts.carriedTitle,
@@ -449,10 +450,18 @@ export class Store {
     return dir;
   }
 
+  /**
+   * Delete a session — and the earlier transcripts folded under it.
+   *
+   * A row that says "continues 2" IS those three transcripts: deleting only the newest left the
+   * older ones to reappear as rows of their own, which is not what "delete this session" means.
+   */
   deleteSession(session: SessionInfo): void {
     const dir = session.file.slice(0, session.file.lastIndexOf(sep()));
-    try { unlinkSync(session.file); } catch { /* already gone */ }
-    rmSync(join(dir, session.id), { recursive: true, force: true });
+    for (const id of [...session.folded, session.id]) {
+      try { unlinkSync(join(dir, `${id}${TRANSCRIPT_EXT}`)); } catch { /* already gone */ }
+      rmSync(join(dir, id), { recursive: true, force: true });
+    }
   }
 
   deleteProject(project: ProjectInfo): void {
