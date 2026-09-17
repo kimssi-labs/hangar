@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  claudeArgv, cmdQuote, hostedCommand, launchCommand, psEncode, psQuote, resolveShell,
+  claudeArgv, clearMarkers, cmdQuote, hostedCommand, launchCommand, psEncode, psQuote, resolveShell,
   sessionEnvironment, shellChain, shQuote,
-  CURRENT_WINDOW, NEW_WINDOW, SESSIONS_WINDOW, WT_EXE,
+  CURRENT_WINDOW, NAME_FLAG, NEW_WINDOW, SESSION_MARKERS, SESSIONS_WINDOW, WT_EXE,
 } from "../launcher.js";
 import type { LaunchRequest } from "../launcher.js";
 import type { LaunchConfig as Config } from "../types.js";
@@ -217,5 +217,63 @@ describe("sessionEnvironment", () => {
       PATH: "C:\\bin",
     });
     expect(inherited.CLAUDECODE).toBe("1");                   // the caller's copy is untouched
+  });
+});
+
+/**
+ * A session Hangar opens must not start with the marks of the session Hangar was started from.
+ *
+ * Cleaning the environment of the process we spawn is not enough on Windows: `wt.exe` hands the
+ * request to the Windows Terminal already running, and that process gives the tab ITS environment.
+ * A terminal first opened from inside a Claude Code session then hands every tab the child-session
+ * marker, and Claude Code answers by turning transcript saving off — the session cannot be resumed
+ * and this app never sees it.
+ */
+describe("the markers a new session must not inherit", () => {
+  it("is unset in the command, in each shell's own way", () => {
+    expect(clearMarkers("cmd.exe")).toContain('set "CLAUDE_CODE_CHILD_SESSION="');
+    expect(clearMarkers("bash").join(" ")).toMatch(/^unset CLAUDECODE CLAUDE_CODE_CHILD_SESSION/);
+    expect(clearMarkers("pwsh.exe")).toContain("Remove-Item Env:CLAUDE_CODE_CHILD_SESSION -ErrorAction SilentlyContinue");
+  });
+
+  it("covers every marker, not only the one the warning names", () => {
+    for (const shell of ["cmd.exe", "bash", "pwsh.exe"]) {
+      const cleared = clearMarkers(shell).join(" ");
+      for (const marker of SESSION_MARKERS) expect(cleared, `${shell} clears ${marker}`).toContain(marker);
+    }
+  });
+
+  it("is in the command every hosted shell runs, before claude", () => {
+    const argv = ["claude", "--resume", "abc"];
+    const cmd = hostedCommand(argv, "cmd", "win32");
+    expect(cmd.args[1]!.indexOf("CLAUDE_CODE_CHILD_SESSION")).toBeLessThan(cmd.args[1]!.indexOf("claude"));
+
+    const sh = hostedCommand(argv, "bash", "linux");
+    expect(sh.args[1]!.indexOf("unset")).toBeLessThan(sh.args[1]!.indexOf("claude"));
+
+    const ps = hostedCommand(argv, "pwsh", "win32");
+    const decoded = Buffer.from(ps.args[2]!, "base64").toString("utf16le");
+    expect(decoded.indexOf("Remove-Item Env:CLAUDECODE")).toBeLessThan(decoded.indexOf("claude"));
+  });
+
+  it("leaves a session run with no shell alone: there main cleaned the environment itself", () => {
+    expect(hostedCommand(["claude"], "none", "win32")).toEqual({ exe: "claude", args: [], fellBack: false });
+  });
+});
+
+describe("what the terminal tab is called", () => {
+  it("is the session's own name, whether or not a person chose it", () => {
+    const named = launchCommand(request({ displayName: "번역기", tabTitle: "번역기" }));
+    expect(named.args[named.args.indexOf("--title") + 1]).toBe("번역기");
+
+    // Claude Code's own name for the session: the row and the tab then say the same thing.
+    const generated = launchCommand(request({ displayName: null, tabTitle: "WMX3 오류 분석" }));
+    expect(generated.args[generated.args.indexOf("--title") + 1]).toBe("WMX3 오류 분석");
+    expect(generated.args).not.toContain(NAME_FLAG);           // and Claude Code keeps naming it
+  });
+
+  it("falls back to Claude for a session with no name at all", () => {
+    const fresh = launchCommand(request({ displayName: null, tabTitle: null }));
+    expect(fresh.args[fresh.args.indexOf("--title") + 1]).toBe("Claude");
   });
 });

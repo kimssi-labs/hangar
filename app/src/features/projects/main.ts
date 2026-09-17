@@ -23,6 +23,7 @@ import { focusSession, helperExecutable, stopSession } from "../../main/liveSess
 import type { ActionResult, AddProjectResult } from "../../main/ipc.js";
 import type { SessionTarget } from "../../main/sampler.js";
 import { projectsContract, type OpenSessionResult } from "./contract.js";
+import { NO_PROMPT } from "../../core/store.js";
 
 /** A scan slower than this is worth a line in the log. */
 const SLOW_SCAN_MS = 200;
@@ -148,6 +149,11 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
         // its own tab and /resume picker too. Left alone, it keeps refining that title as the
         // conversation grows, and this app now reads it rather than competing with it.
         displayName: session?.named ? session.title : null,
+        // The tab opens under the name the row shows, so the two agree from the first moment. For a
+        // session nobody named that name IS Claude Code's own, and Claude Code goes on renaming the
+        // tab as the conversation grows — this only spares the tab from saying "Claude" until then.
+        // A session with no name at all is left to name its own tab.
+        tabTitle: session?.title && session.title !== NO_PROMPT ? session.title : null,
         config: launch,
         target: request.target,
         platform: process.platform,
