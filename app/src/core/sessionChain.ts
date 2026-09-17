@@ -72,15 +72,23 @@ function namesake(candidate: SessionWithOrigin, successor: SessionWithOrigin): n
   return successor.carriedTitle !== null && candidate.title === successor.carriedTitle ? 1 : 0;
 }
 
-/** The sessions with every continuation's predecessor folded under it, in the order given. */
-export function foldClears(sessions: SessionWithOrigin[]): SessionInfo[] {
+/**
+ * The sessions with every continuation's predecessor folded under it, in the order given.
+ *
+ * `replaced` is what the app WATCHED happen — successor id → the session it replaced, from the live
+ * registry (core/sessionLinks.ts). A recorded pair is folded whatever the clock says: a clear typed
+ * after a long pause leaves the old transcript hours behind, which no timestamp rule can catch.
+ */
+export function foldClears(sessions: SessionWithOrigin[], replaced?: Map<string, string>): SessionInfo[] {
   const folded = new Set<string>();
   const byStart = [...sessions].sort((a, b) => a.startedAt - b.startedAt);
   const rows = new Map(sessions.map((s) => [s.id, { ...s }]));
   // Oldest first, so a chain accumulates: the second head counts the first head's predecessors too.
   for (const successor of byStart) {
-    if (!isContinuation(successor)) continue;
-    const predecessor = predecessorOf(successor, byStart.filter((p) => !folded.has(p.id)));
+    const free = byStart.filter((p) => !folded.has(p.id) && p.id !== successor.id);
+    const watched = free.find((p) => p.id === replaced?.get(successor.id));
+    if (!watched && !isContinuation(successor)) continue;
+    const predecessor = watched ?? predecessorOf(successor, free);
     if (!predecessor) continue;
     folded.add(predecessor.id);
     const head = rows.get(successor.id) as SessionWithOrigin;

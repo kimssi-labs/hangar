@@ -292,6 +292,31 @@ describe("sessionStatus", () => {
   });
 });
 
+const LINE = String.fromCharCode(10);
+
+describe("a clear the app watched happen", () => {
+  it("is one row even though the old transcript stopped hours earlier", () => {
+    const { home, cwd, dir } = makeHome();
+    const project = join(home, "projects", dir);
+    const older = "cccccccc-1111-2222-3333-444444444444";
+    const newer = "dddddddd-1111-2222-3333-444444444444";
+    for (const [id, text] of [[older, "어제 하던 일"], [newer, "오늘 할 일"]] as const) {
+      writeFileSync(join(project, `${id}.jsonl`), [
+        JSON.stringify({ type: "user", cwd, sessionId: id, message: { content: text }, origin: { kind: "human" } }),
+        JSON.stringify({ type: "assistant", message: { content: "…" } }),
+      ].join(LINE) + LINE);
+    }
+    const day = 24 * 3600_000;
+    utimesSync(join(project, `${older}.jsonl`), new Date(Date.now() - day), new Date(Date.now() - day));
+    mkdirSync(join(home, "cache"), { recursive: true });
+    writeFileSync(join(home, "cache", "hangar-chains.json"), JSON.stringify({ chains: [{ from: older, to: newer }] }));
+
+    const sessions = new Store(home, { isAlive: () => false }).scan().find((p) => p.dir === dir)?.sessions ?? [];
+    expect(sessions.map((s) => s.id)).not.toContain(older);
+    expect(sessions.find((s) => s.id === newer)?.continues).toBe(1);
+  });
+});
+
 describe("a conversation split by /clear", () => {
   it("is one row: the new transcript, counting the finished one folded under it", async () => {
     const { home, cwd, dir } = makeHome();

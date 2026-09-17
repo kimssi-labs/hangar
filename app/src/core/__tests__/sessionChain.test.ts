@@ -109,6 +109,21 @@ describe("foldClears", () => {
     expect(foldClears([NEW, younger]).map((r) => r.id)).toEqual(["new", "old"]);
   });
 
+  it("folds a pair it watched swap, however long the first one had been idle", () => {
+    // The real shape a timestamp rule cannot reach (measured on this home: 10 min, 7 h, 5.6 days
+    // between the old transcript's last line and the cleared session's birth).
+    const idle = { ...OLD, modifiedAt: T0 + 60_000, title: "다른 이름" };
+    const fresh = { ...NEW, startedAt: T0 + 7 * 3600_000, modifiedAt: T0 + 8 * 3600_000, startedByClear: false, carriedTitle: null };
+    expect(foldClears([fresh, idle]).map((r) => r.id)).toEqual(["new", "old"]);
+    const rows = foldClears([fresh, idle], new Map([["new", "old"]]));
+    expect(rows.map((r) => r.id)).toEqual(["new"]);
+    expect(rows[0]!.continues).toBe(1);
+  });
+
+  it("ignores a record whose other half is not in this project", () => {
+    expect(foldClears([NEW], new Map([["new", "elsewhere"]])).map((r) => r.id)).toEqual(["new"]);
+  });
+
   it("leaves a predecessor that is still running: two processes are two rows", () => {
     expect(foldClears([NEW, { ...OLD, live: true, pid: 7 }]).map((r) => r.id)).toEqual(["new", "old"]);
   });

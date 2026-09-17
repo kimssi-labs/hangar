@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { ConfigStore } from "./config.js";
 import { encodeProjectPath, homePaths, type HomePaths } from "./paths.js";
 import { foldClears, type SessionWithOrigin } from "./sessionChain.js";
+import { type RegistryEntry, SessionLinks } from "./sessionLinks.js";
 import { factsFrom, type TranscriptFacts } from "./transcript.js";
 import type { ProjectInfo, SessionInfo } from "./types.js";
 
@@ -155,6 +156,8 @@ export class Store {
   private cwds = new Map<string, CacheEntry<string | null>>();
   /** Per transcript, re-read when it grows — unlike the cwd, the title keeps changing. */
   private facts = new Map<string, CacheEntry<TranscriptFacts>>();
+  /** Every session swap this app has watched happen — see core/sessionLinks.ts. */
+  private readonly links: SessionLinks;
   /** Answers for `folderExists`, filled in by a background probe — see `folderReachable`. */
   private folders = new Map<string, boolean>();
   private probing = new Set<string>();
@@ -163,25 +166,35 @@ export class Store {
     this.paths = homePaths(home);
     this.config = new ConfigStore(home);
     this.isAlive = options.isAlive ?? defaultIsAlive;
+    this.links = new SessionLinks(this.paths.hangarChains);
     // The default is deliberately NOT existsSync: a project on an unreachable network share makes
     // it wait for the SMB timeout — measured at 10.9 s here, on the thread that draws the window.
     this.folderExists = options.folderExists ?? ((path) => this.folderReachable(path));
   }
 
+  /** The registry Claude Code writes, one entry per running session. */
+  private registry(): RegistryEntry[] {
+    let files: string[] = [];
+    try {
+      files = readdirSync(this.paths.liveSessions);
+    } catch {
+      return [];
+    }
+    const entries: RegistryEntry[] = [];
+    for (const file of files) {
+      if (!file.endsWith(".json")) continue;
+      const data = readJsonFile<{ sessionId?: string; pid?: number; procStart?: string }>(join(this.paths.liveSessions, file), {});
+      const pid = Number(data.pid);
+      if (data.sessionId && Number.isFinite(pid)) entries.push({ pid, sessionId: data.sessionId, procStart: data.procStart });
+    }
+    return entries;
+  }
+
   /** Session ids with a living process behind them, from the registry Claude Code writes. */
   liveSessions(): Map<string, number> {
     const live = new Map<string, number>();
-    let entries: string[] = [];
-    try {
-      entries = readdirSync(this.paths.liveSessions);
-    } catch {
-      return live;
-    }
-    for (const entry of entries) {
-      if (!entry.endsWith(".json")) continue;
-      const data = readJsonFile<{ sessionId?: string; pid?: number }>(join(this.paths.liveSessions, entry), {});
-      const pid = Number(data.pid);
-      if (data.sessionId && Number.isFinite(pid) && this.isAlive(pid)) live.set(data.sessionId, pid);
+    for (const entry of this.registry()) {
+      if (this.isAlive(entry.pid)) live.set(entry.sessionId, entry.pid);
     }
     return live;
   }
@@ -283,6 +296,9 @@ export class Store {
 
   /** Every project, newest use first. */
   scan(): ProjectInfo[] {
+    // Read the registry before anything else: a session that was replaced since the last scan is
+    // only visible in this moment, and the swap is what makes a cleared conversation one row.
+    this.links.observe(this.registry());
     const live = this.liveSessions();
     const titles = this.historyTitles();
     const known = this.knownPaths();
@@ -294,7 +310,8 @@ export class Store {
     } catch {
       return [];
     }
-    const projects = dirs.map((name) => this.readProject(name, live, titles, known, aliases, pins));
+    const replaced = this.links.map();
+    const projects = dirs.map((name) => this.readProject(name, live, titles, known, aliases, pins, replaced));
     // Pinned rows first, then newest use first — a pin is the user overruling the clock.
     return projects.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastUsed - a.lastUsed);
   }
@@ -306,6 +323,7 @@ export class Store {
     known: Map<string, string>,
     aliases: Record<string, string>,
     pins: { projects: string[]; sessions: string[] },
+    replaced: Map<string, string>,
   ): ProjectInfo {
     const dir = join(this.paths.projects, dirName);
     // Stat once per file and sort on that: comparing with statSync() inside the comparator asks
@@ -357,7 +375,7 @@ export class Store {
       }];
     });
     // A conversation /clear split into several transcripts is one row (core/sessionChain.ts).
-    const sessions: SessionInfo[] = foldClears(transcripts)
+    const sessions: SessionInfo[] = foldClears(transcripts, replaced)
       .sort((a, b) => Number(b.pinned) - Number(a.pinned));   // stable: newest first within each group
 
     const dirMtime = statSync(dir).mtimeMs;
