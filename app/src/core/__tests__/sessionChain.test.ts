@@ -88,6 +88,20 @@ describe("foldClears", () => {
     expect(foldClears([NEW, nearest, earlier]).map((r) => r.id)).toEqual(["new", "earlier"]);
   });
 
+  it("folds them even when the filesystem gives both the same birth, to the second", () => {
+    // Linux CI kept both rows where Windows folded them: /clear writes the new transcript within a
+    // millisecond of the old one's last line, and a clock that only counts seconds cannot tell the
+    // two births apart. What orders them then is which one stopped being written.
+    const ended = { ...OLD, startedAt: T0, modifiedAt: T0 };          // wrote its last line at T0
+    const sameSecond = { ...NEW, startedAt: T0, modifiedAt: T0 + 3600_000 };   // and this one was born at T0 too
+    expect(foldClears([sameSecond, ended]).map((r) => r.id)).toEqual(["new"]);
+  });
+
+  it("never folds a session that is still being written under one that stopped first", () => {
+    const younger = { ...OLD, modifiedAt: NEW.modifiedAt + 1000 };
+    expect(foldClears([NEW, younger]).map((r) => r.id)).toEqual(["new", "old"]);
+  });
+
   it("leaves a predecessor that is still running: two processes are two rows", () => {
     expect(foldClears([NEW, { ...OLD, live: true, pid: 7 }]).map((r) => r.id)).toEqual(["new", "old"]);
   });

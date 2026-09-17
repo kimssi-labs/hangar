@@ -51,7 +51,12 @@ function predecessorOf(successor: SessionWithOrigin, candidates: SessionWithOrig
   return candidates
     .filter((p) => p.id !== successor.id
       && !p.live
-      && p.startedAt < successor.startedAt
+      // Born no later, and finished first. Not "born strictly earlier": a filesystem that keeps
+      // times to the second gives both transcripts the same birth — /clear makes them within a
+      // millisecond of each other — and the pair would never fold on such a machine (it did not,
+      // on Linux CI, while Windows folded them).
+      && p.startedAt <= successor.startedAt
+      && p.modifiedAt <= successor.modifiedAt
       && Math.abs(p.modifiedAt - successor.startedAt) <= CLEAR_TOLERANCE_MS
       && (successor.startedByClear || p.title === successor.carriedTitle))
     .sort((a, b) => Math.abs(a.modifiedAt - successor.startedAt) - Math.abs(b.modifiedAt - successor.startedAt))[0];
