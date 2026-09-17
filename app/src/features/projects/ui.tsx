@@ -137,7 +137,10 @@ export async function deleteSession(projectDir: string, target: SessionInfo, ui:
   const { askUser, notify, refresh, t } = ui;
   const yes = await askUser({
     title: t("dialog.deleteSession", { name: target.title }),
-    detail: t("dialog.deleteSession.detail"),
+    // A folded row is several transcripts, and all of them go — say so before they do.
+    detail: target.continues
+      ? t("dialog.deleteSession.detail.chain", { count: String(target.continues + 1) })
+      : t("dialog.deleteSession.detail"),
     confirm: t("dialog.delete"),
     danger: true,
   });

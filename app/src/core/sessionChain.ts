@@ -94,6 +94,8 @@ export function foldClears(sessions: SessionWithOrigin[], replaced?: Map<string,
     const head = rows.get(successor.id) as SessionWithOrigin;
     const prior = rows.get(predecessor.id) as SessionWithOrigin;
     head.continues = prior.continues + 1;
+    // The whole chain, oldest first, so the row can be deleted as the one conversation it shows.
+    head.folded = [...prior.folded, predecessor.id];
     // The new conversation has not been typed into yet: show what the last one was about until it has.
     if (!head.prompt) head.prompt = prior.prompt;
   }
