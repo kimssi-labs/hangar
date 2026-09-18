@@ -54,11 +54,32 @@ function since(t: ReturnType<typeof useText>, ms: number): string {
   return key === "since.absolute" ? formatTime(ms) : t(key, vars as Record<string, number>);
 }
 
-/** Keeps the selected row in view when the keyboard moves it off screen. */
+/**
+ * Whether the pointer is doing the selecting.
+ *
+ * A row you clicked is already under your eye — often one the list's top edge clips, and bringing
+ * THAT fully into view drags everything down a row (measured: 308 -> 286 in a band-width window,
+ * which reads as the list bouncing). Only the keyboard needs the list to move, so a click says so
+ * here and the row's effect takes it back out again.
+ */
+let pointerPicked = false;
+
+export function notePointerSelect(): void {
+  pointerPicked = true;
+}
+
+/** Keeps the selected row in view when the keyboard moves it off screen — never after a click. */
 function useScrollIntoView(selected: boolean): React.RefObject<HTMLDivElement> {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (selected) ref.current?.scrollIntoView({ block: "nearest" });
+    // Only the row that just became selected may take the flag: the one being deselected runs this
+    // effect too, and if it cleared the flag the new row would scroll after all.
+    if (!selected) return;
+    if (pointerPicked) {
+      pointerPicked = false;
+      return;
+    }
+    ref.current?.scrollIntoView({ block: "nearest" });
   }, [selected]);
   return ref;
 }
@@ -83,6 +104,7 @@ export function ProjectRow({
       ref={ref}
       className={`row ${selected ? "row-selected" : "hover:bg-ink-700/60"} ${stacked ? "flex-wrap" : ""}`}
       style={depth ? { marginLeft: depth * 14 } : undefined}
+      onMouseDown={notePointerSelect}
       onClick={onSelect}
       onDoubleClick={onOpen}
       onContextMenu={(event) => { event.preventDefault(); onContextMenu?.(); }}
@@ -140,6 +162,7 @@ export function SessionRow({
     <div
       ref={ref}
       className={`row ${selected ? "row-selected" : "hover:bg-ink-700/60"} ${stacked ? "flex-wrap" : ""}`}
+      onMouseDown={notePointerSelect}
       onClick={onSelect}
       onDoubleClick={onOpen}
       onContextMenu={(event) => { event.preventDefault(); onContextMenu?.(); }}
