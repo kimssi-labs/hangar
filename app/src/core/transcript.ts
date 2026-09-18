@@ -50,6 +50,27 @@ export interface TranscriptFacts {
   conversation: boolean;
 }
 
+/**
+ * The session a transcript carried on from, as Claude Code itself recorded it.
+ *
+ * When a conversation moves into a new transcript — /clear, a rewind — Claude Code re-emits the
+ * context attachments, and each of those entries carries `session_id`: the id of the session the
+ * attachment came from, not this one. It is the exact link between the two files, written whether
+ * or not this app was running at the time, which is what the live registry cannot offer.
+ *
+ * Measured on this machine: three pairs, every one naming its predecessor (694e6864 -> ec62f76b,
+ * bad71a7d -> 43ce707b, 7d5dbcf0 -> 638c5ffa), and a session started fresh names nobody. The line
+ * sits around 145 KB into the file, past the head read for titles, so this is given its own window
+ * and scanned as text: no parsing, first id that is not our own.
+ */
+export function previousSession(window: string, ownId: string): string | null {
+  for (const match of window.matchAll(/"session_id":"([0-9a-fA-F-]{36})"/g)) {
+    const id = match[1] as string;
+    if (id !== ownId) return id;
+  }
+  return null;
+}
+
 const AI_TITLE = "ai-title";
 const CUSTOM_TITLE = "custom-title";
 const AGENT_NAME = "agent-name";

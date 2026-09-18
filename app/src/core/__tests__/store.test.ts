@@ -294,6 +294,29 @@ describe("sessionStatus", () => {
 
 const LINE = String.fromCharCode(10);
 
+describe("a clear that happened while the app was closed", () => {
+  it("is still one row: the transcript names the session it carried on from", () => {
+    const { home, cwd, dir } = makeHome();
+    const project = join(home, "projects", dir);
+    const older = "12341234-1111-2222-3333-444444444444";
+    const newer = "56785678-1111-2222-3333-444444444444";
+    writeFileSync(join(project, `${older}.jsonl`), [
+      JSON.stringify({ type: "user", cwd, sessionId: older, message: { content: "어제 하던 일" }, origin: { kind: "human" } }),
+      JSON.stringify({ type: "assistant", message: { content: "…" } }),
+    ].join(LINE) + LINE);
+    writeFileSync(join(project, `${newer}.jsonl`), [
+      JSON.stringify({ type: "user", cwd, sessionId: newer, message: { content: "<command-name>/clear</command-name>" } }),
+      // What Claude Code re-emits into the new transcript: the context attachments of the old one.
+      JSON.stringify({ type: "attachment", sessionId: newer, session_id: older, attachment: { type: "file" } }),
+      JSON.stringify({ type: "assistant", message: { content: "…" } }),
+    ].join(LINE) + LINE);
+    // No cache/hangar-chains.json at all: nothing watched this happen.
+    const sessions = new Store(home, { isAlive: () => false }).scan().find((p) => p.dir === dir)?.sessions ?? [];
+    expect(sessions.map((s) => s.id)).not.toContain(older);
+    expect(sessions.find((s) => s.id === newer)?.continues).toBe(1);
+  });
+});
+
 describe("a clear the app watched happen", () => {
   it("is one row even though the old transcript stopped hours earlier", () => {
     const { home, cwd, dir } = makeHome();
