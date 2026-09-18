@@ -16,6 +16,7 @@ import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
 import { percentFloor } from "../../core/config.js";
 import { DOCK_PERCENT } from "../../core/constants.js";
+import { windowTakesKeyboard } from "../../core/keyboardHold.js";
 import type { DockConfig } from "../../core/types.js";
 import type { WindowChrome } from "../../main/chrome.js";
 import { bandRect, bandThickness, Dock, displayKey, pickDisplay, setupKey } from "../../main/dock.js";
@@ -74,12 +75,27 @@ export interface DockFeature {
 
 export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeature {
   let dock: Dock | null = null;
+  /** Set while the page has a field open — see core/keyboardHold.ts. */
+  let needsTyping = false;
   let resizeTimer: NodeJS.Timeout | null = null;
   let clearingStruts = false;
 
   const current = (): DockConfig => ctx.config.dock(null, setupKey());
   const state = (): DockState => ({ docked: dock?.isDocked === true, edge: current().edge });
   const emitState = (): void => wire.emit(dockContract.onDockState, state());
+
+  /**
+   * A docked band answers the mouse but leaves the keyboard with whatever the user was typing in.
+   * Re-applied whenever either half of the decision changes.
+   */
+  function applyKeyboardHold(): void {
+    const window = ctx.window();
+    if (!window || window.isDestroyed()) return;
+    const takes = windowTakesKeyboard(dock?.isDocked === true, needsTyping);
+    if (window.isFocusable() === takes) return;
+    window.setFocusable(takes);
+    if (takes && needsTyping) window.focus();        // the field the page just opened is waiting for keys
+  }
 
   /** Put the window in the band `wanted` describes, and report what the platform actually gave. */
   async function applyConfig(wanted: DockConfig): Promise<ActionResult & { settings?: SettingsPayload }> {
@@ -99,6 +115,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
     if (got > asked + FLOOR_SLACK_PX) ctx.config.saveDockFloor(applied.edge, got);
     else ctx.config.saveDockFloor(applied.edge, 0);   // it fitted, so nothing is stopping it here
     emitState();
+    applyKeyboardHold();
     return { ok: true, message: placement.note ?? undefined, settings: deps.settingsPayload() };
   }
 
@@ -124,6 +141,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
     }
     // Plugging a monitor in or out docks and undocks the window on its own; say so, on both paths.
     emitState();
+    applyKeyboardHold();
     deps.pushSettings();
   }
 
@@ -145,6 +163,10 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
   }
 
   wire.bind(dockContract, {
+    holdKeyboard: (wanted) => {
+      needsTyping = wanted;
+      applyKeyboardHold();
+    },
     displays: () => displays(),
     applyDock: (wanted) => applyConfig(wanted),
     dockState: () => state(),
@@ -158,6 +180,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
       deps.placeFloating();
       ctx.config.saveDock({ ...current(), enabled: false }, setupKey());
       emitState();
+    applyKeyboardHold();
       return deps.settingsPayload();
     },
     // The band's own resize grip. The window frame does not resize while docked — that is what
@@ -243,6 +266,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
         if (!config.enabled) return;
         ctx.config.saveDock({ ...config, enabled: false }, setupKey());
         emitState();
+    applyKeyboardHold();
         deps.pushSettings();
       };
     },
@@ -256,6 +280,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
       // Told even when nothing was applied: the page asked for this state while it was first
       // rendering, which is before any band above could exist.
       emitState();
+    applyKeyboardHold();
     },
 
     isDocked: () => dock?.isDocked === true,

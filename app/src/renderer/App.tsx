@@ -139,6 +139,12 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   }, [settings?.ui.language, info?.locale, onLanguage, settings, info]);
   useEffect(() => api.onWindowState(setWindowState), []);
 
+  // A docked band answers the mouse and leaves the keyboard with whatever the user was typing in
+  // (core/keyboardHold.ts). It asks for the keyboard only while this page has a field open.
+  useEffect(() => {
+    api.holdKeyboard(Boolean(editing) || screen === "settings" || dialog !== null);
+  }, [editing, screen, dialog]);
+
   // Measure the room the two stacked panes share, rather than guessing it from the window: the
   // header and toolbar above them came to 149 px here, which is more than a divider can spare.
   useEffect(() => {

@@ -35,6 +35,11 @@ export const dockContract = {
   dragDock: send<DockDrag>("dock:drag"),
   /** Give the edge back and become a window again. */
   releaseDock: invoke<void, SettingsPayload>("dock:release"),
+  /**
+   * The page has something to type into (a rename editor, the settings screen, a dialog with a
+   * field), or no longer has. A band takes the keyboard only for as long as that lasts.
+   */
+  holdKeyboard: send<boolean>("dock:keyboard"),
   /** The caption button: dock to the remembered edge, or undock. */
   dockToggle: invoke<void, DockState>("dock:toggle"),
   /** As it stands — asked once when the page first renders. */
