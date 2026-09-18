@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
 
-import { mainWindow } from "./app.spec.js";
+import { mainWindow } from "./appWindow.js";
 
 /** As narrow as the user's band, which is where the jump was seen. */
 const BAND = { x: 40, y: 40, width: 230, height: 1400 };

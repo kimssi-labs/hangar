@@ -9,6 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
 
+import { mainWindow } from "./appWindow.js";
+
 const SESSION_ONE = "aaaaaaaa-1111-2222-3333-444444444444";
 const SESSION_TWO = "bbbbbbbb-1111-2222-3333-444444444444";
 
@@ -62,15 +64,6 @@ async function launch(home: string, env: Record<string, string> = {}): Promise<{
   const page = await mainWindow(app);
   await page.waitForLoadState("domcontentloaded");
   return { app, page };
-}
-
-/** The app's own window — `firstWindow()` can hand back the splash, which then closes. */
-export async function mainWindow(app: ElectronApplication): Promise<Page> {
-  for (;;) {
-    const found = app.windows().find((w) => w.url().includes("index.html"));
-    if (found) return found;
-    await app.waitForEvent("window");
-  }
 }
 
 test("shows the fixture's project and its sessions, and moves with the keyboard", async () => {
