@@ -27,6 +27,7 @@ function session(over: Partial<SessionWithOrigin> & { id: string }): SessionWith
     folded: [],
     startedByClear: false,
     carriedTitle: null,
+    carriedFrom: null,
     ...over,
   };
 }
@@ -114,6 +115,19 @@ describe("foldClears", () => {
   it("never folds a session that is still being written under one that stopped first", () => {
     const younger = { ...OLD, modifiedAt: NEW.modifiedAt + 1000 };
     expect(foldClears([NEW, younger]).map((r) => r.id)).toEqual(["new", "old"]);
+  });
+
+  it("folds the predecessor Claude Code named in the transcript, with no watched swap at all", () => {
+    // The case the registry cannot cover: the clear happened while this app was closed. Claude Code
+    // re-emits the context attachments in the new transcript, each carrying the id of the session
+    // they came from (measured on three pairs here), so the link survives on disk.
+    const idle = { ...OLD, modifiedAt: T0 + 60_000, title: "다른 이름" };
+    const named = { ...NEW, startedAt: T0 + 5 * 3600_000, modifiedAt: T0 + 6 * 3600_000,
+      startedByClear: false, carriedTitle: null, carriedFrom: "old" };
+    const rows = foldClears([named, idle]);
+    expect(rows.map((r) => r.id)).toEqual(["new"]);
+    expect(rows[0]!.continues).toBe(1);
+    expect(rows[0]!.folded).toEqual(["old"]);
   });
 
   it("folds a pair it watched swap, however long the first one had been idle", () => {

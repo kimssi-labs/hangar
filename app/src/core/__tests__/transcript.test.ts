@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { factsFrom } from "../transcript.js";
+import { factsFrom, previousSession } from "../transcript.js";
 
 const line = (value: unknown): string => `${JSON.stringify(value)}\n`;
 
@@ -121,5 +121,25 @@ describe("startedByClear", () => {
     expect(factsFrom(STUB, "", true).startedByClear).toBe(false);
     const later = fresh + line({ type: "user", message: { content: "<command-name>/clear</command-name>" } });
     expect(factsFrom(later, "", true).startedByClear).toBe(false);
+  });
+});
+
+describe("previousSession", () => {
+  const own = "11111111-2222-3333-4444-555555555555";
+  const prev = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+  it("is the first id in an attachment that is not this session's own", () => {
+    const window = [
+      JSON.stringify({ type: "user", sessionId: own }),
+      JSON.stringify({ type: "attachment", sessionId: own, session_id: own }),
+      JSON.stringify({ type: "attachment", sessionId: own, session_id: prev }),
+    ].join(String.fromCharCode(10));
+    expect(previousSession(window, own)).toBe(prev);
+  });
+
+  it("is nothing for a session that carried on from nobody", () => {
+    const window = JSON.stringify({ type: "attachment", sessionId: own, session_id: own });
+    expect(previousSession(window, own)).toBeNull();
+    expect(previousSession("", own)).toBeNull();
   });
 });

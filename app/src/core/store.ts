@@ -13,7 +13,7 @@ import { ConfigStore } from "./config.js";
 import { encodeProjectPath, homePaths, type HomePaths } from "./paths.js";
 import { foldClears, type SessionWithOrigin } from "./sessionChain.js";
 import { type RegistryEntry, SessionLinks } from "./sessionLinks.js";
-import { factsFrom, type TranscriptFacts } from "./transcript.js";
+import { factsFrom, previousSession, type TranscriptFacts } from "./transcript.js";
 import type { ProjectInfo, SessionInfo } from "./types.js";
 
 const TRANSCRIPT_EXT = ".jsonl";
@@ -39,6 +39,14 @@ const HEAD_BYTES = 64 * 1024;
  */
 const TAIL_BYTES = 512 * 1024;
 /**
+ * How far in to look for the id of the session a continuation carried on from.
+ *
+ * Measured at roughly 145 KB into the three pairs on this machine — the context attachments come
+ * after everything Claude Code writes when a session opens. Only a transcript that already looks
+ * like a continuation is read this far; an ordinary session stops at the 64 KB head.
+ */
+const LINK_BYTES = 256 * 1024;
+/**
  * What a row says for a session with no name of any kind yet — the moment after /clear, before a
  * word has been typed. Claude Code's own default name for such a session, so the row reads like the
  * terminal rather than announcing that a field is empty.
@@ -46,6 +54,9 @@ const TAIL_BYTES = 512 * 1024;
 export const NO_NAME_YET = "Claude Code";
 
 interface CacheEntry<T> { signature: string; value: T }
+
+/** What a transcript says about itself, plus the session it carried on from (see LINK_BYTES). */
+type Facts = TranscriptFacts & { carriedFrom: string | null };
 
 function readLines(file: string, limit?: number): unknown[] {
   let text: string;
@@ -135,6 +146,11 @@ function readJsonFile<T>(file: string, fallback: T): T {
   }
 }
 
+/** A transcript's session id is its file name. */
+function idOf(file: string): string {
+  return file.slice(file.lastIndexOf(sep()) + 1, -TRANSCRIPT_EXT.length);
+}
+
 function signature(file: string): string {
   try {
     const st = statSync(file);
@@ -159,7 +175,7 @@ export class Store {
   private titles: CacheEntry<Map<string, string>> | null = null;
   private cwds = new Map<string, CacheEntry<string | null>>();
   /** Per transcript, re-read when it grows — unlike the cwd, the title keeps changing. */
-  private facts = new Map<string, CacheEntry<TranscriptFacts>>();
+  private facts = new Map<string, CacheEntry<Facts>>();
   /** Every session swap this app has watched happen — see core/sessionLinks.ts. */
   private readonly links: SessionLinks;
   /** Answers for `folderExists`, filled in by a background probe — see `folderReachable`. */
@@ -248,13 +264,18 @@ export class Store {
    * Two bounded reads — the start for the prompt, the end for the newest `ai-title` — cached
    * against size and mtime, so a session being appended to is re-read only when it actually grows.
    */
-  transcriptFacts(file: string, st: { size: number; mtimeMs: number }): TranscriptFacts {
+  transcriptFacts(file: string, st: { size: number; mtimeMs: number }): Facts {
     const sig = `${st.size}:${st.mtimeMs}`;
     const hit = this.facts.get(file);
     if (hit?.signature === sig) return hit.value;
     const head = readHead(file, HEAD_BYTES);
     const complete = st.size <= HEAD_BYTES;
-    const value = factsFrom(head, complete ? "" : readTail(file, TAIL_BYTES, st.size), complete);
+    const facts = factsFrom(head, complete ? "" : readTail(file, TAIL_BYTES, st.size), complete);
+    // Only a transcript that already looks like a continuation earns the deeper read.
+    const carriedFrom = facts.startedByClear || facts.carriedTitle !== null
+      ? previousSession(complete ? head : readHead(file, LINK_BYTES), idOf(file))
+      : null;
+    const value = { ...facts, carriedFrom };
     this.facts.set(file, { signature: sig, value });
     return value;
   }
@@ -362,7 +383,7 @@ export class Store {
       // Not a session anyone can open: a few hundred bytes holding a title and no conversation.
       // Claude Code leaves one behind whenever the talking ends up in a different file.
       if (!facts.conversation) return [];
-      const id = file.slice(file.lastIndexOf(sep()) + 1, -TRANSCRIPT_EXT.length);
+      const id = idOf(file);
       const custom = this.customTitle(dir, id);
       // The history file is the last resort now, not the first: it is not reliably per-session.
       const prompt = facts.firstPrompt || titles.get(id) || "";
@@ -386,6 +407,7 @@ export class Store {
         continues: 0,
         startedByClear: facts.startedByClear,
         carriedTitle: facts.carriedTitle,
+        carriedFrom: facts.carriedFrom,
       }];
     });
     // A conversation /clear split into several transcripts is one row (core/sessionChain.ts).

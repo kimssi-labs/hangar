@@ -33,11 +33,13 @@ export interface SessionWithOrigin extends SessionInfo {
   startedByClear: boolean;
   /** The name the transcript was handed before anyone spoke in it, or null. */
   carriedTitle: string | null;
+  /** The session Claude Code says this transcript carried on from — see transcript.ts. */
+  carriedFrom: string | null;
 }
 
 /** Whether this transcript was opened to carry on from another one. */
 function isContinuation(session: SessionWithOrigin): boolean {
-  return session.startedByClear || session.carriedTitle !== null;
+  return session.startedByClear || session.carriedTitle !== null || session.carriedFrom !== null;
 }
 
 /**
@@ -86,7 +88,11 @@ export function foldClears(sessions: SessionWithOrigin[], replaced?: Map<string,
   // Oldest first, so a chain accumulates: the second head counts the first head's predecessors too.
   for (const successor of byStart) {
     const free = byStart.filter((p) => !folded.has(p.id) && p.id !== successor.id);
-    const watched = free.find((p) => p.id === replaced?.get(successor.id));
+    // Either record is exact: the swap this app watched in the live registry, or the predecessor
+    // Claude Code itself named in the transcript. The second also covers a clear that happened
+    // while this app was closed, which the registry can say nothing about.
+    const recorded = replaced?.get(successor.id) ?? successor.carriedFrom;
+    const watched = recorded ? free.find((p) => p.id === recorded) : undefined;
     if (!watched && !isContinuation(successor)) continue;
     const predecessor = watched ?? predecessorOf(successor, free);
     if (!predecessor) continue;
@@ -103,6 +109,6 @@ export function foldClears(sessions: SessionWithOrigin[], replaced?: Map<string,
 }
 
 function withoutOrigin(session: SessionWithOrigin): SessionInfo {
-  const { startedByClear: _clear, carriedTitle: _carried, ...rest } = session;
+  const { startedByClear: _clear, carriedTitle: _carried, carriedFrom: _from, ...rest } = session;
   return rest;
 }
