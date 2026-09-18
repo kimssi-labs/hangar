@@ -3,6 +3,24 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.17.2
+
+- **A docked band no longer takes the keyboard.** Clicking it used to move the keyboard to Hangar,
+  which Windows shows by turning the taskbar's input indicator into an X — the focused window
+  accepts no text — so the next keystrokes meant for the terminal went nowhere and Korean input had
+  to be started again. The band answers the mouse instead: clicking, double-clicking, the context
+  menu and dragging all work with the keyboard left where it was. It asks for the keyboard only
+  while something in the page needs typing — renaming, the settings screen, a dialog — and hands it
+  straight back. An undocked window behaves like any other window. What this costs: while docked,
+  the band's own arrows / Enter / F2 wait until a field is open.
+- **A conversation cleared while Hangar was closed is one row too.** Until now the fold needed the
+  app to have watched the session change hands, so a `/clear` with Hangar shut left both rows for
+  good. Claude Code names the previous session inside the new transcript, and that is read now, so
+  the rows come together whenever the app is next opened.
+- **Clicking a row no longer bounces the list.** Selecting a row scrolled it into view, and for the
+  row the top edge clips that pulled the whole list down — the jump seen when double-clicking a
+  session in a narrow band. Only the keyboard moves the list now.
+
 ## v2.17.1
 
 - **`/clear` replaces a session's row instead of adding one.** Clearing does not empty a session: it
