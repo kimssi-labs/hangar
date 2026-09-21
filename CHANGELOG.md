@@ -3,6 +3,17 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.17.3
+
+- **An automatic update can no longer leave a machine with no app.** The installer removes the old
+  version before it writes the new one, and the update that runs when the app quits runs silently —
+  so a copy installed for all users, which needs administrator rights to replace, had no way to ask
+  for them and could be removed without being replaced. Such a copy now keeps the download and
+  installs it when you press the button, where Windows can show its prompt. A copy installed for one
+  user updates itself on quit exactly as before.
+- **The updater keeps a log**, `cache/hangar-update.log`, so an update that fails on a machine you
+  are not sitting at can be read afterwards rather than guessed at.
+
 ## v2.17.2
 
 - **A docked band no longer takes the keyboard.** Clicking it used to move the keyboard to Hangar,
