@@ -7,10 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import {
-  actionLabel, describe as describeState, initialState, MIN_CHECK_GAP_MS, shouldCheck,
-  type UpdateState,
-} from "../updates.js";
+import { actionLabel, describe as describeState, initialState, mayInstallOnQuit, MIN_CHECK_GAP_MS, shouldCheck, type UpdateState } from "../updates.js";
 import { en } from "../locales/en.js";
 
 const NOW = 1_700_000_000_000;
@@ -89,5 +86,17 @@ describe("what the screen says", () => {
       expect(en).toHaveProperty(describeState(state({ phase })).key);
       expect(en).toHaveProperty(actionLabel(state({ phase })));
     }
+  });
+});
+
+describe("mayInstallOnQuit", () => {
+  it("lets a copy in the user's own folder install itself at quit", () => {
+    expect(mayInstallOnQuit("C:\\Users\\Terry\\AppData\\Local\\Programs\\Hangar\\Hangar.exe")).toBe(true);
+    expect(mayInstallOnQuit("/home/terry/.local/bin/hangar")).toBe(true);
+  });
+
+  it("makes a per-machine copy wait for the button, where Windows can ask for rights", () => {
+    expect(mayInstallOnQuit("C:\\Program Files\\Hangar\\Hangar.exe")).toBe(false);
+    expect(mayInstallOnQuit("c:/program files (x86)/Hangar/Hangar.exe")).toBe(false);
   });
 });

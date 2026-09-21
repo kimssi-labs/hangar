@@ -12,9 +12,10 @@
 import { app } from "electron";
 
 import {
-  CHECK_INTERVAL_MS, FIRST_CHECK_DELAY_MS, initialState, shouldCheck,
+  CHECK_INTERVAL_MS, FIRST_CHECK_DELAY_MS, initialState, mayInstallOnQuit, shouldCheck,
   type UpdateConfig, type UpdateState,
 } from "../core/updates.js";
+import { updateLogger } from "./updateLog.js";
 
 type Updater = {
   autoDownload: boolean;
@@ -129,7 +130,11 @@ export class UpdateService {
       // Downloading is a decision of its own: an update found is announced, and fetched when the
       // setting says to or the user asks. Silent downloads on a metered connection are rude.
       autoUpdater.autoDownload = this.config.automatic;
-      autoUpdater.autoInstallOnAppQuit = true;
+      // Every step of an update, in a file: when one goes wrong on someone else's machine, this is
+      // the only thing that can say which step it was.
+      autoUpdater.logger = updateLogger();
+      // A per-machine copy waits for the button instead — see core/updates.ts mayInstallOnQuit.
+      autoUpdater.autoInstallOnAppQuit = mayInstallOnQuit(app.getPath("exe"));
       autoUpdater.on("update-available", (info: { version?: string }) => {
         this.set({
           phase: this.config.automatic ? "downloading" : "available",
