@@ -37,6 +37,22 @@ export interface UpdateConfig {
 
 export const UPDATE_DEFAULTS: UpdateConfig = { automatic: true };
 
+/**
+ * Whether a downloaded update may install itself when the app quits.
+ *
+ * Only for a copy that lives in the user's own folder. A per-machine install — anything under
+ * Program Files — needs administrator rights to replace, and a silent install at quit has no way to
+ * ask for them: the installer removes the old version first, so a refused or unanswered elevation
+ * is how an app disappears from a machine. Such a copy keeps the download and installs it when the
+ * user presses the button, where Windows can put its prompt on screen.
+ *
+ * Measured here: both scopes had been used on this machine at different times — an empty
+ * `%LOCALAPPDATA%\Programs\Hangar` beside a live `C:\Program Files\Hangar`.
+ */
+export function mayInstallOnQuit(exePath: string): boolean {
+  return !/^[a-z]:[\\/]+program files/i.test(exePath);
+}
+
 /** Wait before the first check, so a launch is not held up by the network. */
 export const FIRST_CHECK_DELAY_MS = 30_000;
 /** And between checks after that. Six hours: releases are not that frequent. */
