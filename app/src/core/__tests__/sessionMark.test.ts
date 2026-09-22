@@ -32,9 +32,9 @@ describe("statusLabel", () => {
     expect(statusLabel(true, "idle")).toBe("idle");
   });
 
-  it("calls a session that is not running disable, and one that says nothing idle", () => {
-    expect(statusLabel(false, "busy")).toBe("disable");
-    expect(statusLabel(false, null)).toBe("disable");
+  it("calls a session that is not running closed, and one that says nothing idle", () => {
+    expect(statusLabel(false, "busy")).toBe("closed");
+    expect(statusLabel(false, null)).toBe("closed");
     expect(statusLabel(true, null)).toBe("idle");
     expect(statusLabel(true, "  ")).toBe("idle");
   });
@@ -53,8 +53,8 @@ describe("projectState", () => {
     expect(projectState([session(true, "idle"), session(false, "busy")])).toBe("idle");
   });
 
-  it("is disable when nothing in it is running", () => {
-    expect(projectState([session(false, "busy"), session(false, null)])).toBe("disable");
-    expect(projectState([])).toBe("disable");
+  it("is closed when nothing in it is running", () => {
+    expect(projectState([session(false, "busy"), session(false, null)])).toBe("closed");
+    expect(projectState([])).toBe("closed");
   });
 });

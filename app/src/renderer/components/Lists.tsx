@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef } from "react";
 
-import { projectState, sessionMark, statusLabel } from "@core/sessionMark";
+import { NOT_RUNNING, projectState, sessionMark, statusLabel } from "@core/sessionMark";
 import type { MetricSample, ProjectInfo, SessionInfo } from "@core/types";
 
 import { Sparkline, useElementWidth } from "./Chart";
@@ -30,15 +30,15 @@ const SESSION_STACK_WIDTH = 300;
 const LIVE_SESSION_STACK_WIDTH = 520;
 
 /**
- * The state, and what it means, for the pointer to rest on.
+ * The state for the pointer to rest on, in the language the window is in.
  *
- * The state name is Claude Code's own and stays as it is in every language; the words after it are
- * translated, so the tooltip reads `busy — 답변 중` here and `busy — working on an answer` in English.
+ * One word, not two languages at once: `대기 중` in Korean, `idle` in English. A state this app has
+ * no wording for — the registry may learn new ones — is shown exactly as it came.
  */
 function stateTitle(state: string, t: ReturnType<typeof useText>): string {
   const key = `state.${state}`;
-  const meaning = t(key as Parameters<typeof t>[0]);
-  return meaning === key ? state : `${state} — ${meaning}`;
+  const said = t(key as Parameters<typeof t>[0]);
+  return said === key ? state : said;
 }
 
 /** A project's own mark: the busiest thing happening inside it. */
@@ -47,7 +47,7 @@ function ProjectMark({ project }: { project: ProjectInfo }) {
   const state = projectState(project.sessions);
   return (
     <span
-      className={`w-2 h-2 rounded-full shrink-0 ${state === "disable"
+      className={`w-2 h-2 rounded-full shrink-0 ${state === NOT_RUNNING
         ? "bg-ink-500"
         : state === "busy" ? "bg-ok shadow-[0_0_6px] shadow-ok/60 animate-pulse" : "bg-ok shadow-[0_0_6px] shadow-ok/60"}`}
       title={stateTitle(state, t)}

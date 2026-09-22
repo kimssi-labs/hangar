@@ -17,8 +17,13 @@ export function sessionMark(live: boolean, status: string | null): SessionMark {
 
 /** The states a running session reports. Anything else it might say is shown as it comes. */
 export const SESSION_STATES = ["busy", "waiting", "idle"] as const;
-/** What a session that is not running is called. */
-export const NOT_RUNNING = "disable";
+/**
+ * What a session that is not running is called.
+ *
+ * Not a state Claude Code reports — it writes nothing for a session with no process — so this is our
+ * word, and "closed" is what it is: the conversation is on disk, nobody is holding it open.
+ */
+export const NOT_RUNNING = "closed";
 
 /**
  * A project's state: the busiest thing happening inside it.
