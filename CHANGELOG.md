@@ -3,6 +3,18 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.18.0
+
+- **A row says what its session is doing, before its name.** Claude Code writes that into its own
+  registry — busy while it answers, waiting while it stops to ask you something, idle once the turn
+  is yours — so the row draws a pulsing dot while it works and a bell once it wants you. A session
+  that is not running keeps the quiet dot it always had. The pointer names the state in the window's
+  language: `busy`, `waiting`, `idle`, `closed`, or 답변 중, 확인 대기, 대기 중, 닫힘.
+- **A project row says the same thing about itself**: the busiest state among its sessions, in the
+  same four words, so a glance down the project list finds the one waiting for you.
+- The readme now describes the window rather than its shortcuts, and covers the project's file panel,
+  the folded `/clear` row and the settings cards that had been added since it was last written.
+
 ## v2.17.3
 
 - **An automatic update can no longer leave a machine with no app.** The installer removes the old
