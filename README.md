@@ -4,8 +4,7 @@
 
 **Session manager for [Claude Code](https://claude.com/claude-code).** Where your sessions are kept
 between flights: Hangar lists every project you have ever opened, drills into that project's
-sessions, and resumes, renames or deletes them — in one window, by mouse or keyboard, with no LLM
-tokens spent.
+sessions, and resumes, renames or deletes them — in one window, with no LLM tokens spent.
 
 It can also **dock to a screen edge**: not merely a window parked at the side, but a reserved band
 the desktop works around, so a maximised window stops at it instead of covering it.
@@ -59,45 +58,29 @@ function claude {
 Then `claude --p` opens the manager. The permission mode sessions start in is a setting
 (**Settings · Permissions**), not something the wrapper decides.
 
-## Keys
+## Projects and sessions
 
-In a window, everything is reachable from the keyboard; `?` shows this list in the app.
+A project row carries its folder, the branch when it is a repository, and a mark for each session
+running in it; a session row carries its name, its size, when it was last written, and — while it is
+running — its own CPU and memory.
 
-**Docked, the band does not take the keyboard.** Clicking it would otherwise move the keyboard away
-from the terminal you are typing in — on Windows the taskbar's input indicator turns into an X and
-the next keystrokes go nowhere — so the band answers the mouse and leaves the keyboard where it was.
-It takes the keyboard only while it has a field open: renaming, the settings screen, a dialog. The
-keys below are therefore for the undocked window; docked, the same verbs are in every row's
-right-click menu.
+Every row's **right-click menu** holds what can be done to it — open the sessions, start a new one,
+resume in this window or a new one, rename, delete, and **Pin to top**, which keeps a project or
+session at the head of its list until it is unpinned. Deletions ask first and refuse anything still
+running. Renaming a session writes the same `custom-title.json` Claude Code's own `/rename` writes, so
+the new name also shows up in `/resume`.
 
-| Key | Projects | Sessions |
-|---|---|---|
-| `↑` `↓` `PgUp` `PgDn` `Home` `End` | move | move |
-| `Enter` | open the project's sessions | resume in a new terminal |
-| `O` | new session in a new window | resume in a new window |
-| `N` | new session in the project | new session in the project |
-| `F2` | set a display alias | rename the session |
-| `Del` | delete the project folder | delete the session |
-| `V` | save the clipboard image, copy its path | same |
-| `/` | search projects | search projects |
-| `S` | settings | settings |
-| `←` `Esc` | — | back to projects |
-| `Tab` | — (settings: next section) | — |
-| `F5` / `Ctrl+Q` | refresh / quit | refresh / quit |
-
-A folder that has never had a session is not in the list yet: the **+** beside the search box opens
-a folder picker and adds it, ready for **New**. Every row also has a right-click menu with the same
-verbs, plus **Pin to top** — a pinned project or session stays at the head of its list, marked with a
-pin, until it is unpinned. Deletions ask first and refuse anything still running. Renaming a session writes the same
-`custom-title.json` Claude Code's own `/rename` writes, so the new name also shows up in `/resume`.
+A folder that has never had a session is not in the list yet: the **+** beside the search box opens a
+folder picker and adds it, ready for a first session. The search box filters the list as you type.
 
 **`/clear` replaces a row rather than adding one.** Clearing does not empty a session: Claude Code
 starts a new session id in the same terminal and leaves the finished transcript on disk. Hangar shows
 the conversation as one row — the newest transcript, saying how many came before it — and deleting
-that row deletes the earlier transcripts with it, telling you how many first. The pairing is read from what
-Claude Code records (the live session registry while Hangar is running, and the previous session's id
-inside the new transcript afterwards), so a clear that happened while Hangar was closed folds as well.
-A session nobody has named yet, the moment after a clear, reads **Claude Code** until it earns a name.
+that row deletes the earlier transcripts with it, telling you how many first. The pairing is read from
+what Claude Code records (the live session registry while Hangar is running, and the previous
+session's id inside the new transcript afterwards), so a clear that happened while Hangar was closed
+folds as well. A session nobody has named yet, the moment after a clear, reads **Claude Code** until
+it earns a name.
 
 ## The project's files
 
@@ -129,11 +112,11 @@ that file's path, so `Ctrl+V` in a terminal pastes the path while `Ctrl+V` in an
 pastes the image. Each window takes the format it understands; nothing is intercepted, so no other
 application's paste is touched.
 
-**Settings · Launch** turns it off. **Ctrl+Alt+V** remains for a clipboard that already carries text,
-and `V` in Hangar's own window does the same without sending the keystroke.
+**Settings · Launch** turns it off, and sets the shortcut for the other direction: a clipboard that
+already carries text, where the picture has to be written out on request.
 
-Images are written to `~/.claude/cache/hangar-clips/`, most recent 50 kept. The automatic path is
-Windows-only — elsewhere the shortcut is the way.
+Images are written to `~/.claude/cache/hangar-clips/`, most recent 50 kept. Adding the path
+automatically is Windows-only; elsewhere the shortcut in **Settings · Launch** does it on request.
 
 ## Monitoring
 
@@ -256,11 +239,10 @@ English by default, Korean available, and a new install follows the machine's ow
 **Settings · Language** overrides it. It covers the manager's own text: menus, tooltips, settings and
 relative times. What Claude Code itself prints is untouched.
 
-## Settings (`S`)
+## Settings
 
 One screen of cards — **Appearance**, **Language**, **Layout**, **Monitoring**, **Dock**,
-**Claude usage**, **Project files**, **Git**, **Updates**, **Launch**, **Permissions**. `Tab` moves
-between them, `Esc` closes. Every choice, and the project and row you were last on, is kept in
+**Claude usage**, **Project files**, **Git**, **Updates**, **Launch**, **Permissions**. Every choice, and the project and row you were last on, is kept in
 `config/manager.json`.
 
 ![Appearance, layout and monitoring](docs/screens/settings.png)
@@ -269,7 +251,9 @@ between them, `Esc` closes. Every choice, and the project and row you were last 
 a restart.
 
 **Dock** places the manager as a reserved band on a monitor edge — pick the monitor, then the edge,
-size and on/off. Dragging the band's inner edge sets its size; dragging the window anywhere else
+size and on/off. A docked band answers the mouse and leaves the keyboard with whatever you were
+typing in, so clicking it never interrupts the terminal beside it; it takes the keyboard only while
+it has a field open, such as a rename or this settings screen. Dragging the band's inner edge sets its size; dragging the window anywhere else
 undocks it. Monitors are remembered by where they are and how big they are, because Electron's
 display ids are not the same from one run to the next.
 
