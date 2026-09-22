@@ -14,3 +14,19 @@ export function sessionMark(live: boolean, status: string | null): SessionMark {
   if (!live) return null;
   return status === "busy" ? "working" : "turn";
 }
+
+/** The states a running session reports. Anything else it might say is shown as it comes. */
+export const SESSION_STATES = ["busy", "waiting", "idle"] as const;
+/** What a session that is not running is called. */
+export const NOT_RUNNING = "disable";
+
+/**
+ * The word the mark shows when the pointer rests on it.
+ *
+ * Claude Code's own state name, left in English in every language: these are the four words the
+ * registry deals in, and translating them would only make them harder to match up with it.
+ */
+export function statusLabel(live: boolean, status: string | null): string {
+  if (!live) return NOT_RUNNING;
+  return status && status.trim() ? status.trim() : "idle";
+}
