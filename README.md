@@ -4,7 +4,7 @@
 
 **Session manager for [Claude Code](https://claude.com/claude-code).** Where your sessions are kept
 between flights: Hangar lists every project you have ever opened, drills into that project's
-sessions, and resumes, renames or deletes them — in one window, driven by the keyboard, with no LLM
+sessions, and resumes, renames or deletes them — in one window, by mouse or keyboard, with no LLM
 tokens spent.
 
 It can also **dock to a screen edge**: not merely a window parked at the side, but a reserved band
@@ -29,7 +29,7 @@ Download from [Releases](../../releases):
 
 | Platform | File |
 |---|---|
-| Windows | `Hangar Setup <version>.exe` (installer) or `Hangar <version>.exe` (portable) |
+| Windows | `Hangar-Setup-<version>.exe` (installer) or `Hangar-<version>.exe` (portable) |
 | Linux | `.AppImage` (any distribution) or `.deb` |
 
 Nothing else is needed — the app only reads files Claude Code already writes, and launches `claude`
@@ -50,7 +50,9 @@ Optional — make it a flag on `claude` itself, by adding this to your PowerShel
 function claude {
     $i = [array]::IndexOf($args, '--p')
     if ($i -lt 0) { & (Get-Command claude -CommandType Application) @args; return }
-    Start-Process "$env:LOCALAPPDATA\Programs\Hangar\Hangar.exe"
+    $exe = "$env:LOCALAPPDATA\Programs\Hangar\Hangar.exe"          # installed for you
+    if (-not (Test-Path $exe)) { $exe = "$env:ProgramFiles\Hangar\Hangar.exe" }   # installed for everyone
+    Start-Process $exe
 }
 ```
 
@@ -59,7 +61,14 @@ Then `claude --p` opens the manager. The permission mode sessions start in is a 
 
 ## Keys
 
-Everything is reachable from the keyboard; `?` shows this list in the app.
+In a window, everything is reachable from the keyboard; `?` shows this list in the app.
+
+**Docked, the band does not take the keyboard.** Clicking it would otherwise move the keyboard away
+from the terminal you are typing in — on Windows the taskbar's input indicator turns into an X and
+the next keystrokes go nowhere — so the band answers the mouse and leaves the keyboard where it was.
+It takes the keyboard only while it has a field open: renaming, the settings screen, a dialog. The
+keys below are therefore for the undocked window; docked, the same verbs are in every row's
+right-click menu.
 
 | Key | Projects | Sessions |
 |---|---|---|
@@ -81,6 +90,35 @@ a folder picker and adds it, ready for **New**. Every row also has a right-click
 verbs, plus **Pin to top** — a pinned project or session stays at the head of its list, marked with a
 pin, until it is unpinned. Deletions ask first and refuse anything still running. Renaming a session writes the same
 `custom-title.json` Claude Code's own `/rename` writes, so the new name also shows up in `/resume`.
+
+**`/clear` replaces a row rather than adding one.** Clearing does not empty a session: Claude Code
+starts a new session id in the same terminal and leaves the finished transcript on disk. Hangar shows
+the conversation as one row — the newest transcript, saying how many came before it — and deleting
+that row deletes the earlier transcripts with it, telling you how many first. The pairing is read from what
+Claude Code records (the live session registry while Hangar is running, and the previous session's id
+inside the new transcript afterwards), so a clear that happened while Hangar was closed folds as well.
+A session nobody has named yet, the moment after a clear, reads **Claude Code** until it earns a name.
+
+## The project's files
+
+Beside the lists, Hangar draws the selected project's folder. Where the window has room that is a
+tree in a column of its own — in a stacked window it makes three panes, projects, sessions and files,
+each resizable — and where it does not, it is the list of files git says changed, which is the
+question a session manager is usually asked anyway. The button beside the heading switches between
+the two, so a narrow band can still be asked for the whole folder.
+
+Only what is opened is read: a directory when its folder is expanded, never recursively, and a folder
+with thousands of entries stops at five hundred and says how many it left out. Changed files are
+marked — edited, new, staged, conflicted — from the `git status` the project rows already run.
+
+Double-click opens a file with whatever the machine opens it with; right-click offers open, show in
+the file manager, rename, copy path and delete; dragging onto a folder moves it, and dragging onto
+the empty space below moves it to the project's root. Deleting goes to the recycle bin and asks
+first. Renaming and moving refuse before they write: a name must be a name, nothing may leave the
+project, and neither ever replaces a file that is already there.
+
+**Settings · Project files** turns the whole panel off, and then no directory is read at all — worth
+having for a project on a network share, where one directory can take seconds to answer.
 
 ## Pasting a screenshot
 
@@ -117,10 +155,10 @@ edge without a scrollbar:
 
 | Shape | When | What it shows |
 |---|---|---|
-| Full | wide and tall | project list, session list, detail panel, machine graphs |
-| Compact | narrow | list and graphs, no detail panel |
+| Full | wide and tall | project list, session list, detail panel, machine graphs; the project's files in a column of their own when there is room for one |
+| Compact | narrow | list and graphs, no detail panel; changed files under the sessions |
 | Band | short (top/bottom dock) | one strip: list plus graphs |
-| Stacked | narrow | project list, its sessions and the graphs, one under the other |
+| Stacked | narrow | project list, its sessions and the graphs, one under the other — three resizable panes when the files have a column |
 
 **Settings · Layout** decides: side by side, stacked, or automatic — which stacks when the window
 is narrow. The panes can be dragged to any size; double-click a divider for the default back.
@@ -137,7 +175,8 @@ Narrow it instead and the lists stack, the gauges stand upright, and each keeps 
 
 ## What it reads
 
-Everything comes from files Claude Code maintains under `~/.claude` (override with `CLAUDE_HOME`):
+Everything comes from files Claude Code maintains under `~/.claude` — Claude Code's own
+`CLAUDE_CONFIG_DIR` is followed when it is set, and `CLAUDE_HOME` overrides both:
 
 | Path | Used for |
 |---|---|
@@ -148,6 +187,10 @@ Everything comes from files Claude Code maintains under `~/.claude` (override wi
 | `~/.claude.json` | folder path for projects whose transcripts are gone |
 | `config/manager.json` | this app's own settings: dock (per monitor), status line, launch, appearance |
 | `config/project-aliases.json` | display aliases for projects |
+| `cache/hangar-usage.json` | the usage figures, written only from the usage endpoint |
+| `cache/hangar-chains.json` | which session replaced which, so a cleared conversation stays one row |
+| `cache/hangar-update.log` | what the updater did, kept across restarts |
+| `cache/hangar-clips/` | screenshots written out for pasting, most recent 50 kept |
 
 The usage gauges are read the way Claude Code's own `/usage` reads them: from the usage endpoint at
 api.anthropic.com, with the login Claude Code keeps in `.credentials.json`. Nothing to set up and no
@@ -191,10 +234,21 @@ Only the branch line works without git on `PATH`; the rest says so, with a butto
 ## Updates
 
 Hangar updates itself from its own releases. **Settings · Updates** chooses between checking on a
-timer and only when you ask, has a **Check now** button that tells you what it found, shows a
-percentage while downloading, and installs on the next restart. Builds before v2.8.0 carry no update
-metadata, so this works from that version onwards; a portable copy and a Linux package say plainly
-that they cannot replace themselves.
+timer and only when you ask, has a **Check now** button that tells you what it found, and shows a
+percentage while downloading. Builds before v2.8.0 carry no update metadata, so this works from that
+version onwards; a portable copy and a Linux package say plainly that they cannot replace themselves.
+
+**When it installs depends on where the app lives.** A copy installed for one user
+(`%LOCALAPPDATA%\Programs\Hangar`) installs the update itself on the next restart. A copy installed
+for everyone (`C:\Program Files\Hangar`) needs administrator rights to be replaced, and the restart
+install is silent — with no way to ask for them — so it waits for the button instead, where Windows
+can put its prompt on screen. The installer removes the old version before writing the new one, which
+is why an update that cannot finish must never be started unattended.
+
+Every step is written to `cache/hangar-update.log` (rolled over at 256 KB), so an update that fails on
+a machine you are not sitting at can be read afterwards rather than guessed at. The installers are not
+code-signed, so SmartScreen warns on a hand-downloaded one and an antivirus may quarantine it; the log
+tells that apart from an install that failed on its own.
 
 ## Language
 
@@ -204,8 +258,9 @@ relative times. What Claude Code itself prints is untouched.
 
 ## Settings (`S`)
 
-One screen of cards — **Appearance**, **Layout**, **Monitoring**, **Dock**, **Status line**,
-**Launch**, **Permissions**. `Tab` moves between them, `Esc` closes. Every choice, and the project and row you were last on, is kept in
+One screen of cards — **Appearance**, **Language**, **Layout**, **Monitoring**, **Dock**,
+**Claude usage**, **Project files**, **Git**, **Updates**, **Launch**, **Permissions**. `Tab` moves
+between them, `Esc` closes. Every choice, and the project and row you were last on, is kept in
 `config/manager.json`.
 
 ![Appearance, layout and monitoring](docs/screens/settings.png)
@@ -229,8 +284,9 @@ also remembers which of them was docked, so plugging a screen in or out brings b
 shrink below some minimum; the first refusal is measured and becomes the lower bound of the size
 setting, so what the screen shows is what docking will give you.
 
-**Status line** ticks which usage gauges are drawn beside the machine graphs. A window Claude Code
-has not reported is not drawn either way.
+**Claude usage** is one On/Off choice: whether the usage gauges are drawn beside the machine graphs.
+A window the endpoint does not report — a machine signed in with an API key has no five-hour or
+weekly window — is not drawn either way.
 
 **Launch** picks the terminal and shell that host an opened session: PowerShell 7, Windows
 PowerShell, Command Prompt or none on Windows; on Linux the first terminal emulator found, or a named
