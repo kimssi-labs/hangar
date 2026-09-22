@@ -22,6 +22,7 @@ function session(over: Partial<SessionWithOrigin> & { id: string }): SessionWith
     bytes: 1,
     live: false,
     pid: null,
+    status: null,
     pinned: false,
     continues: 0,
     folded: [],

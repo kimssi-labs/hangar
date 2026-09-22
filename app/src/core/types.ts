@@ -16,6 +16,8 @@ export interface SessionInfo {
   live: boolean;
   /** Process id of that session, when it is running. */
   pid: number | null;
+  /** What Claude Code says it is doing — "busy", "waiting", "idle" — while it runs; null otherwise. */
+  status: string | null;
   /** Kept at the top of its list, by the user's choice. */
   pinned: boolean;
   /** Earlier transcripts of this same conversation, split off by /clear and folded under this row. */

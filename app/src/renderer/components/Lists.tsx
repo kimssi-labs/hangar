@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef } from "react";
 
+import { sessionMark } from "@core/sessionMark";
 import type { MetricSample, ProjectInfo, SessionInfo } from "@core/types";
 
 import { Sparkline, useElementWidth } from "./Chart";
@@ -28,13 +29,43 @@ const PROJECT_STACK_WIDTH = 300;
 const SESSION_STACK_WIDTH = 300;
 const LIVE_SESSION_STACK_WIDTH = 520;
 
+/** A project's own mark: whether anything is running in it. */
 function LiveDot({ live }: { live: boolean }) {
   const t = useText();
-  const label = { running: t("list.running"), idle: t("list.idle") };
   return (
     <span
       className={`w-2 h-2 rounded-full shrink-0 ${live ? "bg-ok shadow-[0_0_6px] shadow-ok/60" : "bg-ink-500"}`}
-      title={live ? label.running : label.idle}
+      title={live ? t("list.running") : t("list.idle")}
+    />
+  );
+}
+
+/** The bell a session rings when the answer is in and the turn is the person's. */
+function Bell() {
+  return (
+    <svg viewBox="0 0 16 16" className="w-3 h-3 shrink-0 text-warn" fill="currentColor" aria-hidden="true">
+      <path d="M8 1.5a.9.9 0 0 1 .9.9v.4a4 4 0 0 1 3.1 3.9v2.2l1 1.6a.6.6 0 0 1-.5.9H3.5a.6.6 0 0 1-.5-.9l1-1.6V6.7a4 4 0 0 1 3.1-3.9v-.4a.9.9 0 0 1 .9-.9zM6.4 12.2h3.2a1.6 1.6 0 0 1-3.2 0z" />
+    </svg>
+  );
+}
+
+/**
+ * What the session is doing, before its name.
+ *
+ * A dot while it is answering — it pulses, so a glance says something is happening — and a bell once
+ * the turn is the person's, whether Claude Code finished or stopped to ask something. A session that
+ * is not running shows the quiet dot it always did: it is a transcript, waiting for nobody.
+ */
+function StatusMark({ session }: { session: SessionInfo }) {
+  const t = useText();
+  const mark = sessionMark(session.live, session.status);
+  if (mark === "turn") return <span title={t("list.turn")}><Bell /></span>;
+  return (
+    <span
+      className={`w-2 h-2 rounded-full shrink-0 ${mark === "working"
+        ? "bg-ok shadow-[0_0_6px] shadow-ok/60 animate-pulse"
+        : "bg-ink-500"}`}
+      title={mark === "working" ? t("list.running") : t("list.idle")}
     />
   );
 }
@@ -168,7 +199,7 @@ export function SessionRow({
       onContextMenu={(event) => { event.preventDefault(); onContextMenu?.(); }}
     >
       <div ref={box} className="absolute inset-x-0 h-0" aria-hidden="true" />
-      <LiveDot live={session.live} />
+      <StatusMark session={session} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           {session.pinned ? <Pin /> : null}

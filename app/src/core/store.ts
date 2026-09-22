@@ -203,18 +203,26 @@ export class Store {
     const entries: RegistryEntry[] = [];
     for (const file of files) {
       if (!file.endsWith(".json")) continue;
-      const data = readJsonFile<{ sessionId?: string; pid?: number; procStart?: string }>(join(this.paths.liveSessions, file), {});
+      const data = readJsonFile<{ sessionId?: string; pid?: number; procStart?: string; status?: string }>(
+        join(this.paths.liveSessions, file), {});
       const pid = Number(data.pid);
-      if (data.sessionId && Number.isFinite(pid)) entries.push({ pid, sessionId: data.sessionId, procStart: data.procStart });
+      if (data.sessionId && Number.isFinite(pid)) {
+        entries.push({ pid, sessionId: data.sessionId, procStart: data.procStart, status: data.status ?? null });
+      }
     }
     return entries;
   }
 
-  /** Session ids with a living process behind them, from the registry Claude Code writes. */
-  liveSessions(): Map<string, number> {
-    const live = new Map<string, number>();
+  /**
+   * Session ids with a living process behind them, and what each says it is doing.
+   *
+   * The status is Claude Code's own — "busy" while answering, "waiting" while it asks something,
+   * "idle" once the turn is the person's — and it is what a row's mark is drawn from.
+   */
+  liveSessions(): Map<string, { pid: number; status: string | null }> {
+    const live = new Map<string, { pid: number; status: string | null }>();
     for (const entry of this.registry()) {
-      if (this.isAlive(entry.pid)) live.set(entry.sessionId, entry.pid);
+      if (this.isAlive(entry.pid)) live.set(entry.sessionId, { pid: entry.pid, status: entry.status ?? null });
     }
     return live;
   }
@@ -352,7 +360,7 @@ export class Store {
 
   private readProject(
     dirName: string,
-    live: Map<string, number>,
+    live: Map<string, { pid: number; status: string | null }>,
     titles: Map<string, string>,
     known: Map<string, string>,
     aliases: Record<string, string>,
@@ -401,7 +409,8 @@ export class Store {
         modifiedAt: st.mtimeMs,
         bytes: st.size,
         live: live.has(id),
-        pid: live.get(id) ?? null,
+        pid: live.get(id)?.pid ?? null,
+        status: live.get(id)?.status ?? null,
         pinned: pins.sessions.includes(id),
         folded: [],
         continues: 0,
