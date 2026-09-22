@@ -72,11 +72,15 @@ test("a busy session shows a dot, one waiting for you shows a bell, a closed one
       return String(await row.locator("span[title]").first().getAttribute("title"));
     };
 
-    // The pointer shows Claude Code's own word for the state, and nothing longer.
-    expect(await markOf("답변 중"), "the busy session").toBe("busy");
-    expect(await markOf("확인 요청"), "the session asking something").toBe("waiting");
-    expect(await markOf("끝난 대화"), "the session that finished").toBe("idle");
-    expect(await markOf("닫힌 대화"), "the session that is not running").toBe("disable");
+    // The pointer shows Claude Code's own word for the state, then what it means in the app's language.
+    expect(await markOf("답변 중"), "the busy session").toBe("busy — working on an answer");
+    expect(await markOf("확인 요청"), "the session asking something").toBe("waiting — asking you something");
+    expect(await markOf("끝난 대화"), "the session that finished").toBe("idle — your turn");
+    expect(await markOf("닫힌 대화"), "the session that is not running").toBe("disable — not running");
+    // The project row speaks the same four words: the busiest thing happening inside it.
+    await page.keyboard.press("Escape");
+    const project = page.locator(".row").first();
+    await expect(project.locator("span[title]").first()).toHaveAttribute("title", "busy — working on an answer");
   } finally {
     await app.close();
     rmSync(home, { recursive: true, force: true, maxRetries: 3 });
