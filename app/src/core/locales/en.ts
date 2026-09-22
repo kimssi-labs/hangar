@@ -46,6 +46,7 @@ export const en = {
   "list.worktree": "worktree",
   "list.folderUnknown": "folder unknown",
   "list.memory": "memory",
+  "list.turn": "Your turn — it has finished or is asking you something",
   "list.running": "running",
   "list.idle": "idle",
 

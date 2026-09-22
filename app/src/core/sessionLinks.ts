@@ -21,6 +21,8 @@ export interface RegistryEntry {
   sessionId: string;
   /** The process's own start time. A recycled pid gets a different one, so it is not the same terminal. */
   procStart?: string;
+  /** What the session says it is doing: "busy", "waiting", "idle". */
+  status?: string | null;
 }
 
 /** What a pid was last seen running. */
