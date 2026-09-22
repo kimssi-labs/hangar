@@ -53,11 +53,11 @@ export const ko: Dictionary = {
   "list.worktree": "worktree",
   "list.folderUnknown": "폴더 경로 없음",
   "list.memory": "memory",
-  // Claude Code가 쓰는 상태 이름은 그대로 두고, 뜻만 뒤에 붙입니다.
+  // 행의 상태 표시에 마우스를 올렸을 때 나오는 말.
   "state.busy": "답변 중",
   "state.waiting": "확인 대기",
-  "state.idle": "내 차례",
-  "state.disable": "실행 중 아님",
+  "state.idle": "대기 중",
+  "state.closed": "닫힘",
   "list.running": "실행 중",
   "list.idle": "대기",
 

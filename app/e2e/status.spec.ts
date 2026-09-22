@@ -46,7 +46,17 @@ function fixture(): string {
       pid: process.pid, sessionId: id, status, cwd: workspace, procStart: `13434000000000000${n}`,
     }));
   }
-  writeFileSync(join(root, ".claude.json"), JSON.stringify({ projects: { [workspace]: {} } }));
+  // A second project with nothing running in it: the one whose mark must stay quiet.
+  const quiet = join(root, "quiet");
+  const quietDir = quiet.replace(/[^A-Za-z0-9]/g, "-");
+  mkdirSync(join(home, "projects", quietDir), { recursive: true });
+  mkdirSync(quiet, { recursive: true });
+  const old = "eeeeeeee-1111-2222-3333-444444444444";
+  writeFileSync(join(home, "projects", quietDir, `${old}.jsonl`), [
+    JSON.stringify({ type: "user", cwd: quiet, sessionId: old, message: { content: "조용한 프로젝트" }, origin: { kind: "human" } }),
+    JSON.stringify({ type: "assistant", message: { content: "…" } }),
+  ].join(String.fromCharCode(10)) + String.fromCharCode(10));
+  writeFileSync(join(root, ".claude.json"), JSON.stringify({ projects: { [workspace]: {}, [quiet]: {} } }));
   return home;
 }
 
@@ -62,7 +72,8 @@ test("a busy session shows a dot, one waiting for you shows a bell, a closed one
   await page.locator(".row").first().waitFor({ state: "visible", timeout: 30_000 });
 
   try {
-    await page.keyboard.press("Enter");                       // into the project's sessions
+    // Two projects now, and the list orders them by last use: pick the busy one by name.
+    await page.locator(".row").filter({ hasText: "workspace" }).first().dblclick();
     await expect(page.getByText("답변 중").first()).toBeVisible();
 
     const markOf = async (title: string): Promise<string> => {
@@ -72,15 +83,21 @@ test("a busy session shows a dot, one waiting for you shows a bell, a closed one
       return String(await row.locator("span[title]").first().getAttribute("title"));
     };
 
-    // The pointer shows Claude Code's own word for the state, then what it means in the app's language.
-    expect(await markOf("답변 중"), "the busy session").toBe("busy — working on an answer");
-    expect(await markOf("확인 요청"), "the session asking something").toBe("waiting — asking you something");
-    expect(await markOf("끝난 대화"), "the session that finished").toBe("idle — your turn");
-    expect(await markOf("닫힌 대화"), "the session that is not running").toBe("disable — not running");
-    // The project row speaks the same four words: the busiest thing happening inside it.
+    // One word, in the language the window is in — this run is English (--lang=en-US).
+    expect(await markOf("답변 중"), "the busy session").toBe("busy");
+    expect(await markOf("확인 요청"), "the session asking something").toBe("waiting");
+    expect(await markOf("끝난 대화"), "the session that finished").toBe("idle");
+    expect(await markOf("닫힌 대화"), "the session that is not running").toBe("closed");
+    // The project rows speak the same four words: the busiest thing happening inside each.
     await page.keyboard.press("Escape");
-    const project = page.locator(".row").first();
-    await expect(project.locator("span[title]").first()).toHaveAttribute("title", "busy — working on an answer");
+    const busyProject = page.locator(".row").filter({ hasText: "workspace" }).first();
+    await expect(busyProject.locator("span[title]").first()).toHaveAttribute("title", "busy");
+    expect(await busyProject.locator("span[title]").first().getAttribute("class")).not.toContain("bg-ink-500");
+
+    const quietProject = page.locator(".row").filter({ hasText: "quiet" }).first();
+    await expect(quietProject.locator("span[title]").first()).toHaveAttribute("title", "closed");
+    expect(await quietProject.locator("span[title]").first().getAttribute("class"), "nothing runs there: the dot stays quiet")
+      .toContain("bg-ink-500");
   } finally {
     await app.close();
     rmSync(home, { recursive: true, force: true, maxRetries: 3 });
