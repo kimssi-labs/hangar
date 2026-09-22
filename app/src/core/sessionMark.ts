@@ -21,6 +21,20 @@ export const SESSION_STATES = ["busy", "waiting", "idle"] as const;
 export const NOT_RUNNING = "disable";
 
 /**
+ * A project's state: the busiest thing happening inside it.
+ *
+ * A project is only ever as busy as its sessions, so the row says the same four words a session row
+ * does — one glance down the project list, the same vocabulary.
+ */
+export function projectState(sessions: { live: boolean; status: string | null }[]): string {
+  const live = sessions.filter((session) => session.live);
+  if (!live.length) return NOT_RUNNING;
+  if (live.some((session) => session.status === "busy")) return "busy";
+  if (live.some((session) => session.status === "waiting")) return "waiting";
+  return "idle";
+}
+
+/**
  * The word the mark shows when the pointer rests on it.
  *
  * Claude Code's own state name, left in English in every language: these are the four words the

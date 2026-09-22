@@ -46,6 +46,11 @@ export const en = {
   "list.worktree": "worktree",
   "list.folderUnknown": "folder unknown",
   "list.memory": "memory",
+  // Claude Code's own state names, kept as they are, with what each one means after them.
+  "state.busy": "working on an answer",
+  "state.waiting": "asking you something",
+  "state.idle": "your turn",
+  "state.disable": "not running",
   "list.running": "running",
   "list.idle": "idle",
 

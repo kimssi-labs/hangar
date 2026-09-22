@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef } from "react";
 
-import { sessionMark, statusLabel } from "@core/sessionMark";
+import { projectState, sessionMark, statusLabel } from "@core/sessionMark";
 import type { MetricSample, ProjectInfo, SessionInfo } from "@core/types";
 
 import { Sparkline, useElementWidth } from "./Chart";
@@ -29,13 +29,28 @@ const PROJECT_STACK_WIDTH = 300;
 const SESSION_STACK_WIDTH = 300;
 const LIVE_SESSION_STACK_WIDTH = 520;
 
-/** A project's own mark: whether anything is running in it. */
-function LiveDot({ live }: { live: boolean }) {
+/**
+ * The state, and what it means, for the pointer to rest on.
+ *
+ * The state name is Claude Code's own and stays as it is in every language; the words after it are
+ * translated, so the tooltip reads `busy — 답변 중` here and `busy — working on an answer` in English.
+ */
+function stateTitle(state: string, t: ReturnType<typeof useText>): string {
+  const key = `state.${state}`;
+  const meaning = t(key as Parameters<typeof t>[0]);
+  return meaning === key ? state : `${state} — ${meaning}`;
+}
+
+/** A project's own mark: the busiest thing happening inside it. */
+function ProjectMark({ project }: { project: ProjectInfo }) {
   const t = useText();
+  const state = projectState(project.sessions);
   return (
     <span
-      className={`w-2 h-2 rounded-full shrink-0 ${live ? "bg-ok shadow-[0_0_6px] shadow-ok/60" : "bg-ink-500"}`}
-      title={live ? t("list.running") : t("list.idle")}
+      className={`w-2 h-2 rounded-full shrink-0 ${state === "disable"
+        ? "bg-ink-500"
+        : state === "busy" ? "bg-ok shadow-[0_0_6px] shadow-ok/60 animate-pulse" : "bg-ok shadow-[0_0_6px] shadow-ok/60"}`}
+      title={stateTitle(state, t)}
     />
   );
 }
@@ -57,8 +72,9 @@ function Bell() {
  * is not running shows the quiet dot it always did: it is a transcript, waiting for nobody.
  */
 function StatusMark({ session }: { session: SessionInfo }) {
+  const t = useText();
   const mark = sessionMark(session.live, session.status);
-  const label = statusLabel(session.live, session.status);
+  const label = stateTitle(statusLabel(session.live, session.status), t);
   if (mark === "turn") return <span title={label}><Bell /></span>;
   return (
     <span
@@ -143,7 +159,7 @@ export function ProjectRow({
       <div ref={box} className="absolute inset-x-0 h-0" aria-hidden="true" />
       {/* A rule down the left, so an indented row reads as belonging to the one above it. */}
       {depth ? <span className="self-stretch w-px bg-ink-600 shrink-0" aria-hidden="true" /> : null}
-      <LiveDot live={project.liveCount > 0} />
+      <ProjectMark project={project} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           {project.pinned ? <Pin /> : null}

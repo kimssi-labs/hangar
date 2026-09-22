@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { sessionMark, statusLabel } from "../sessionMark.js";
+import { projectState, sessionMark, statusLabel } from "../sessionMark.js";
 
 describe("sessionMark", () => {
   it("is working while the session is answering", () => {
@@ -41,5 +41,20 @@ describe("statusLabel", () => {
 
   it("passes a state it has not seen before straight through", () => {
     expect(statusLabel(true, "compacting")).toBe("compacting");
+  });
+});
+
+describe("projectState", () => {
+  const session = (live: boolean, status: string | null) => ({ live, status });
+
+  it("is the busiest thing happening in the project", () => {
+    expect(projectState([session(true, "idle"), session(true, "busy")])).toBe("busy");
+    expect(projectState([session(true, "idle"), session(true, "waiting")])).toBe("waiting");
+    expect(projectState([session(true, "idle"), session(false, "busy")])).toBe("idle");
+  });
+
+  it("is disable when nothing in it is running", () => {
+    expect(projectState([session(false, "busy"), session(false, null)])).toBe("disable");
+    expect(projectState([])).toBe("disable");
   });
 });
