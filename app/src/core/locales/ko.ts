@@ -53,7 +53,6 @@ export const ko: Dictionary = {
   "list.worktree": "worktree",
   "list.folderUnknown": "폴더 경로 없음",
   "list.memory": "memory",
-  "list.turn": "내 차례 — 답변이 끝났거나 확인을 기다리는 중",
   "list.running": "실행 중",
   "list.idle": "대기",
 

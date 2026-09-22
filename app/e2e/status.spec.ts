@@ -72,10 +72,11 @@ test("a busy session shows a dot, one waiting for you shows a bell, a closed one
       return String(await row.locator("span[title]").first().getAttribute("title"));
     };
 
-    expect(await markOf("답변 중"), "the busy session").toBe("running");
-    expect(await markOf("확인 요청"), "the session asking something").toContain("Your turn");
-    expect(await markOf("끝난 대화"), "the session that finished").toContain("Your turn");
-    expect(await markOf("닫힌 대화"), "the session that is not running").toBe("idle");
+    // The pointer shows Claude Code's own word for the state, and nothing longer.
+    expect(await markOf("답변 중"), "the busy session").toBe("busy");
+    expect(await markOf("확인 요청"), "the session asking something").toBe("waiting");
+    expect(await markOf("끝난 대화"), "the session that finished").toBe("idle");
+    expect(await markOf("닫힌 대화"), "the session that is not running").toBe("disable");
   } finally {
     await app.close();
     rmSync(home, { recursive: true, force: true, maxRetries: 3 });

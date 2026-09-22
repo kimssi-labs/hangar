@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef } from "react";
 
-import { sessionMark } from "@core/sessionMark";
+import { sessionMark, statusLabel } from "@core/sessionMark";
 import type { MetricSample, ProjectInfo, SessionInfo } from "@core/types";
 
 import { Sparkline, useElementWidth } from "./Chart";
@@ -57,15 +57,15 @@ function Bell() {
  * is not running shows the quiet dot it always did: it is a transcript, waiting for nobody.
  */
 function StatusMark({ session }: { session: SessionInfo }) {
-  const t = useText();
   const mark = sessionMark(session.live, session.status);
-  if (mark === "turn") return <span title={t("list.turn")}><Bell /></span>;
+  const label = statusLabel(session.live, session.status);
+  if (mark === "turn") return <span title={label}><Bell /></span>;
   return (
     <span
       className={`w-2 h-2 rounded-full shrink-0 ${mark === "working"
         ? "bg-ok shadow-[0_0_6px] shadow-ok/60 animate-pulse"
         : "bg-ink-500"}`}
-      title={mark === "working" ? t("list.running") : t("list.idle")}
+      title={label}
     />
   );
 }
