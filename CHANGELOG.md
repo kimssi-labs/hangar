@@ -3,6 +3,17 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.18.1
+
+- **A band is only ever docked to a monitor you chose.** Reported from a machine with three screens:
+  the primary monitor's desktop icons moved to another screen. Docking is remembered globally as
+  well as per arrangement of screens, so a machine meeting an arrangement nobody had set up there
+  read it as docked, naming a monitor that was somewhere else — and the band fell back to the
+  primary one. Reserving space there shrinks its work area, and Windows re-flows every desktop icon
+  that no longer fits, which on a multi-monitor desktop puts them on the next screen along. A saved
+  monitor that is not connected, or a dock with no monitor named at all, is now refused with a note
+  rather than placed on whatever screen happens to be primary.
+
 ## v2.18.0
 
 - **A row says what its session is doing, before its name.** Claude Code writes that into its own
