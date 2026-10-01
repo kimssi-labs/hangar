@@ -1108,6 +1108,33 @@ test("a dock change made in settings sticks", async () => {
   }
 });
 
+test("a band whose monitor is not here does not take space from the primary one", async () => {
+  // Reported from a machine with three screens: the desktop icons of the primary monitor moved to
+  // another one. `enabled` is remembered globally, so an arrangement nobody has set up here reads as
+  // docked, naming a monitor that is somewhere else — and the band used to fall back to the primary,
+  // whose work area the shell then shrinks, re-flowing every icon that no longer fits.
+  const home = fixture();
+  const { app, page } = await launch(home);
+  try {
+    const displays = await monitors(page);
+    const primary = displays.find((d) => d.primary) ?? displays[0]!;
+    const before = await workAreaOf(app, primary.id);
+
+    const result = await page.evaluate(() => window.hangar.applyDock({
+      enabled: true, device: "-9999,-9999 800x600", edge: "right", percent: 20,
+    }));
+    expect(result.message ?? "", "it must say why").toContain("not connected");
+
+    await page.waitForTimeout(1200);               // long enough for a reservation to have landed
+    const after = await workAreaOf(app, primary.id);
+    expect(after, "the primary monitor kept its work area").toEqual(before);
+    expect((await page.evaluate(() => window.hangar.dockState())).docked, "nothing is docked").toBe(false);
+  } finally {
+    await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
+    await app.close();
+  }
+});
+
 test("the layout setting decides the shape, and the panes remember their sizes", async () => {
   // Pane sizes are fractions of the window, not pixels: the same setting has to mean the same
   // thing in a wide window and in a thin docked band.

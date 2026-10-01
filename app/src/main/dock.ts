@@ -275,6 +275,24 @@ export function pickDisplay(device: string | null): { display: Electron.Display;
   return { display: screen.getPrimaryDisplay(), missing: device };
 }
 
+/**
+ * Why this dock must not be applied, or null to go ahead.
+ *
+ * A band is always docked to a monitor the person picked. Two cases used to end up on the primary
+ * one instead: a saved monitor that is not plugged in now, and a config that says "docked" without
+ * naming a monitor at all — which is what a machine reads when it meets an arrangement of screens
+ * nobody has set up here, because `enabled` is remembered globally.
+ *
+ * Reserving space on the primary monitor is not a harmless guess. The shell shrinks that monitor's
+ * work area (measured here: 2560 -> 2048 px) and re-flows every desktop icon that no longer fits —
+ * on a multi-monitor desktop they land on the next screen along, which is how this was reported.
+ */
+export function refusesToDock(device: string | null, missing: string | null): string | null {
+  if (missing) return `Saved monitor ${missing} is not connected — not docking.`;
+  if (!device) return "No monitor is chosen for this arrangement of screens — not docking.";
+  return null;
+}
+
 interface AppBarData {
   cbSize: number;
   hWnd: number;
@@ -665,6 +683,12 @@ export class Dock {
   /** Place the window in its band and reserve that space; returns what actually happened. */
   async apply(config: DockConfig): Promise<DockPlacement> {
     const { display, missing } = pickDisplay(config.device);
+    // Before anything is moved or reserved: a band belongs on the monitor it was chosen for.
+    const refusal = refusesToDock(config.device, missing);
+    if (refusal) {
+      const where = this.window.getBounds();
+      return { bounds: where, applied: where, note: refusal };
+    }
     // Measured against the undocked work area, so 20 % means the same thing every time it is asked
     // for — not 20 % of whatever is left after the last band.
     const asked = bandRect(this.workArea(display), config.edge, config.percent);
@@ -708,7 +732,7 @@ export class Dock {
     // the user having dragged the thickness, and answers a request for 20 % by saving back 12 %.
     this.assertUntil = Date.now() + SETTLE_MS;
     this.lift = band.lift;
-    let note = missing ? `Saved monitor ${missing} is not connected — using ${display.label}.` : null;
+    let note: string | null = null;
     if (process.platform === "win32") note = (await this.reserveWindows(band.band, config.edge, display)) ?? note;
     else note = (await this.reserveX11(band.dip, config.edge, display.bounds)) ?? note;
 
