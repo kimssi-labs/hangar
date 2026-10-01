@@ -6,7 +6,9 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { bandOf, bandOfThickness, bandRect, bandThickness, gridStep, insetFor, keepThickness, liftFor, OPEN_FACE, resizeAllowed, snapToGrid, windowFor, withinMonitor } from "../dock.js";
+import {
+  bandOf, bandOfThickness, bandRect, bandThickness, gridStep, insetFor, keepThickness, liftFor, OPEN_FACE, refusesToDock, resizeAllowed, snapToGrid, windowFor, withinMonitor,
+} from "../dock.js";
 
 const AREA = { x: 0, y: 0, width: 2000, height: 1000 };
 
@@ -280,5 +282,23 @@ describe("liftFor", () => {
 
   it("is always none at 100 %, where every pixel is a DIP", () => {
     expect(liftFor(37, 0, 1, 1)).toBe(0);
+  });
+});
+
+describe("refusesToDock", () => {
+  it("goes ahead for a monitor that is here", () => {
+    expect(refusesToDock("0,0 2560x1440", null)).toBeNull();
+  });
+
+  it("refuses a saved monitor that is not connected, rather than using the primary one", () => {
+    // What a machine with another arrangement of screens reads: `enabled` is remembered globally,
+    // so docking is on, and the monitor it names is somewhere else entirely.
+    const note = refusesToDock("-1080,-81 1080x1920", "-1080,-81 1080x1920");
+    expect(note).toContain("not connected");
+    expect(note).toContain("not docking");
+  });
+
+  it("refuses a dock with no monitor chosen at all", () => {
+    expect(refusesToDock(null, null)).toContain("No monitor is chosen");
   });
 });
