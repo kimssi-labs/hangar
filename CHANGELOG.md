@@ -3,6 +3,25 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.19.0
+
+- **Docking keeps the desktop icons where they were.** Reported from a three-monitor desk with the
+  primary monitor in the middle: a band on its left edge pushed desktop icons onto the next screen.
+  Windows places desktop icons relative to the top-left of the work area, so a band on the left or
+  the top of a monitor shifts every icon on it by the band's width, and the ones that run off the
+  far side land on the neighbouring screen. Hangar now reads the icons before it reserves the edge
+  and puts them back afterwards: each one where it was, except those under the band, which move
+  just clear of it. Undocking puts the original arrangement back, and an icon you move while docked
+  is left where you put it. Settings → Dock → Desktop icons turns it off; with Windows' "Auto
+  arrange icons" on, Hangar leaves the desktop alone.
+- **The first dock after installing works.** The monitor list showed the primary monitor as chosen,
+  but "Dock now" sent no monitor at all and was refused; it now docks to the monitor the list shows.
+- **The caption button docks to the primary monitor while none is chosen**, and remembers it. It is
+  shown disabled when the saved monitor is not connected, saying so on hover. Starting up on an
+  arrangement of screens nobody has set up still does not dock by itself.
+- Dragging the band's grip stops at the largest band the setting allows (60 %), instead of following
+  the pointer past the edge of the monitor.
+
 ## v2.18.1
 
 - **A band is only ever docked to a monitor you chose.** Reported from a machine with three screens:
