@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import type { BrowserWindow, Rectangle } from "electron";
 import { screen } from "electron";
 
+import { DOCK_PERCENT } from "../core/constants.js";
 import type { DockConfig, DockEdge } from "../core/types.js";
 import { nativeBusy, nativeHandle, type WindowChrome, withNative, withShell } from "./chrome.js";
 
@@ -42,6 +43,18 @@ const SWP_NOACTIVATE = 0x0010;
 // area — the very area the reservation just took away, so the band could never be filled.
 const SWP_NOSENDCHANGING = 0x0400;
 
+/**
+ * Told around every change to the reservation, so the desktop's icons can be kept where they were
+ * (main/deskIcons.ts): `before` while the old reservation still stands, `after` once the new one is
+ * made — with the band, or null when the edge was given back — and `quitting` on the synchronous
+ * way out.
+ */
+export interface IconHooks {
+  before(): Promise<void>;
+  after(at: { band: Rectangle; edge: DockEdge; monitor: Rectangle } | null): void;
+  quitting(): void;
+}
+
 export interface DockPlacement {
   bounds: Rectangle;
   /** What the window actually got — smaller than asked means the platform refused. */
@@ -62,6 +75,21 @@ export function bandOfThickness(area: Rectangle, edge: DockEdge, thickness: numb
 export function bandRect(area: Rectangle, edge: DockEdge, percent: number): Rectangle {
   const span = edge === "left" || edge === "right" ? area.width : area.height;
   return bandOfThickness(area, edge, span * percent / 100);
+}
+
+/**
+ * The band a grip drag of `thickness` asks for, never thicker than the saved setting may be.
+ *
+ * The grip reports wherever the pointer went, and nothing used to stop it: dragged past the far edge
+ * of its monitor, a band reached into the next screen's DIP space. Electron converts a DIP rectangle
+ * by the display it overlaps most, so from there it was converted with the NEIGHBOUR's scale and
+ * origin — on monitors of different scale factors that is a rectangle somewhere else entirely, and
+ * the shell reserves wherever it is told. The ceiling is the one the saved percentage already has,
+ * so the band a drag leaves is also the band the next start-up gives back.
+ */
+export function dragBand(area: Rectangle, edge: DockEdge, thickness: number): Rectangle {
+  const ceiling = bandThickness(area, edge) * DOCK_PERCENT.max / 100;
+  return bandOfThickness(area, edge, Math.min(thickness, ceiling));
 }
 
 /**
@@ -293,6 +321,15 @@ export function refusesToDock(device: string | null, missing: string | null): st
   return null;
 }
 
+/**
+ * Whether the caption button can do anything: a band can always be given up, and one can be taken
+ * only on a monitor that is plugged in — a saved monitor that is not connected leaves the button
+ * disabled, which says at a glance that the dock needs looking at.
+ */
+export function dockReady(docked: boolean, device: string | null, missing: string | null): boolean {
+  return docked || refusesToDock(device, missing) === null;
+}
+
 interface AppBarData {
   cbSize: number;
   hWnd: number;
@@ -502,6 +539,8 @@ export class Dock {
   private assertUntil = 0;
   /** Told when we let go of the edge, so the setting and the screen can agree. */
   onUserUndock: (() => void) | null = null;
+  /** Keeps the desktop's icons in place around each reservation; none off Windows or when not wired. */
+  icons: IconHooks | null = null;
   /**
    * Told when the user dragged the band's inner edge: the new thickness in DIP.
    *
@@ -775,7 +814,7 @@ export class Dock {
     // it is dropped rather than placed beside a shell call in flight (see `shell` in chrome.ts).
     if (nativeBusy()) return;
     const { display } = pickDisplay(config.device);
-    const band = this.plan(bandOfThickness(this.workArea(display), config.edge, thickness), config.edge, display);
+    const band = this.plan(dragBand(this.workArea(display), config.edge, thickness), config.edge, display);
     this.dragging = true;
     this.lift = band.lift;
     this.fixSize(band.dip);
@@ -789,7 +828,7 @@ export class Dock {
     const { display } = pickDisplay(config.device);
     // Anchored to the edge, at exactly the thickness the drag ended on — not at a rounded
     // percentage of it, and not wherever the shell would rather put it.
-    const band = this.plan(bandOfThickness(this.workArea(display), config.edge, thickness), config.edge, display);
+    const band = this.plan(dragBand(this.workArea(display), config.edge, thickness), config.edge, display);
     this.assertUntil = Date.now() + SETTLE_MS;
     this.lift = band.lift;
     this.fixSize(band.dip);
@@ -824,6 +863,7 @@ export class Dock {
     // so the next launch handed over to a zombie and Hangar "would not start". Windows reclaims the
     // reservation of a window that is gone in any case (measured: a forced kill leaks nothing).
     const hwnd = this.hwnd;
+    this.icons?.quitting();
     void withShell(() => api.SHAppBarMessageAsync(ABM.remove, api.make(hwnd, ABE.top))).catch(() => undefined);
     this.registered = false;
     this.reserved = null;
@@ -847,10 +887,12 @@ export class Dock {
     if (process.platform === "win32") {
       const api = this.registered ? loadWin32() : null;
       if (api) {
+        await this.icons?.before();
         const hwnd = this.hwnd;
         this.registered = false;                    // nothing may re-enter while the shell works
         this.reserved = null;
         await withShell(() => api.SHAppBarMessageAsync(ABM.remove, api.make(hwnd, ABE.top)));
+        this.icons?.after(null);
       }
       this.restoreMinimum();
     } else {
@@ -912,6 +954,7 @@ export class Dock {
     const api = loadWin32();
     if (!api) return "Docking without reserving space — the native helper did not load.";
     const hwnd = nativeHandle(this.window);
+    await this.icons?.before();
 
     if (!this.registered) {
       await withShell(() => api.SHAppBarMessageAsync(ABM.new, api.make(hwnd, ABE[edge])));
@@ -948,6 +991,7 @@ export class Dock {
     } finally {
       this.reserving = false;
     }
+    this.icons?.after({ band: kept, edge, monitor: monitorRect(display) });
     // The pin was set for the plan; if the shell settled on a different band, it has to say so.
     if (kept.width !== physical.width || kept.height !== physical.height) this.fixSize(this.dipOf(kept, display));
     return null;

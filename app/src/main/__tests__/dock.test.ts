@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  bandOf, bandOfThickness, bandRect, bandThickness, gridStep, insetFor, keepThickness, liftFor, OPEN_FACE, refusesToDock, resizeAllowed, snapToGrid, windowFor, withinMonitor,
+  bandOf, bandOfThickness, bandRect, bandThickness, dockReady, dragBand, gridStep, insetFor, keepThickness, liftFor, OPEN_FACE, refusesToDock, resizeAllowed, snapToGrid, windowFor, withinMonitor,
 } from "../dock.js";
 
 const AREA = { x: 0, y: 0, width: 2000, height: 1000 };
@@ -300,5 +300,30 @@ describe("refusesToDock", () => {
 
   it("refuses a dock with no monitor chosen at all", () => {
     expect(refusesToDock(null, null)).toContain("No monitor is chosen");
+  });
+});
+
+describe("dragBand", () => {
+  it("follows the grip up to the saved setting's ceiling", () => {
+    expect(dragBand(AREA, "right", 500)).toEqual({ x: 1500, y: 0, width: 500, height: 1000 });
+  });
+
+  it("stops at the ceiling instead of reaching into the next monitor", () => {
+    // 60 % of 2000: dragged to 2600 the band used to start at x = -600, on the neighbouring screen.
+    expect(dragBand(AREA, "right", 2600)).toEqual({ x: 800, y: 0, width: 1200, height: 1000 });
+    expect(dragBand(AREA, "left", 2600)).toEqual({ x: 0, y: 0, width: 1200, height: 1000 });
+    expect(dragBand(AREA, "bottom", 900)).toEqual({ x: 0, y: 400, width: 2000, height: 600 });
+  });
+});
+
+describe("dockReady", () => {
+  it("is off until a connected monitor is chosen, so the caption button shows docking is not set up", () => {
+    expect(dockReady(false, null, null)).toBe(false);
+    expect(dockReady(false, "0,0 1920x1200", "0,0 1920x1200")).toBe(false);
+    expect(dockReady(false, "0,0 1920x1200", null)).toBe(true);
+  });
+
+  it("is always on while docked — the band can always be given up", () => {
+    expect(dockReady(true, null, null)).toBe(true);
   });
 });

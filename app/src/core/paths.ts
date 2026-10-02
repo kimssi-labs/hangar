@@ -35,6 +35,8 @@ export interface HomePaths {
   hangarChains: string;
   /** What the updater did, kept so a failed update on another machine can still be read. */
   hangarUpdateLog: string;
+  /** The desktop icon arrangement kept while docked — see main/deskIcons.ts. */
+  hangarDeskIcons: string;
   /** Where a pasted screenshot is written, so a terminal session can be given its path. */
   clips: string;
   /** Claude Code's own settings file; read only to take an older version's hook back out. */
@@ -59,6 +61,7 @@ export function homePaths(root = claudeHome()): HomePaths {
     hangarUsage: join(root, "cache", "hangar-usage.json"),
     hangarChains: join(root, "cache", "hangar-chains.json"),
     hangarUpdateLog: join(root, "cache", "hangar-update.log"),
+    hangarDeskIcons: join(root, "cache", "hangar-desk-icons.json"),
     clips: join(root, "cache", "hangar-clips"),
     settings: join(root, "settings.json"),
     hooks: join(root, "hooks"),

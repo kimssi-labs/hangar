@@ -18,12 +18,26 @@ export interface DisplayInfo {
 }
 
 /**
+ * The monitor the settings show as chosen — and so the one Apply docks to: the saved monitor, or the
+ * primary while none is saved.
+ *
+ * The list used to highlight the primary for a config with no monitor in it while Apply sent that
+ * config as it was, with none — which the main side refuses, so the first dock after installing
+ * failed, and worked only once another monitor had been picked and the primary picked back.
+ */
+export function chosenMonitor(device: string | null, displays: DisplayInfo[]): string | null {
+  return device ?? displays.find((display) => display.primary)?.id ?? null;
+}
+
+/**
  * Whether the window is a band right now, and on which edge. Owned here and pushed from here on
  * every change, so the caption button can never again show a state nobody told it about.
  */
 export interface DockState {
   docked: boolean;
   edge: DockEdge;
+  /** The caption button can act: docked, or a connected monitor is chosen for this arrangement. */
+  ready: boolean;
 }
 
 export const dockContract = {
