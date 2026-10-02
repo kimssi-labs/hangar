@@ -195,34 +195,46 @@ static class Program {
 `;
 
 /** The helper's file name carries its source's hash, so a change in the source is a new build. */
-export function helperName(source = FOCUS_SOURCE): string {
-  return `hangar-focus-${createHash("sha1").update(source).digest("hex").slice(0, 12)}.exe`;
+export function helperName(source = FOCUS_SOURCE, kind = "focus"): string {
+  return `hangar-${kind}-${createHash("sha1").update(source).digest("hex").slice(0, 12)}.exe`;
 }
 
-let building: Promise<string | null> | null = null;
+/** A C# helper: its source, a name for its file, and the assemblies it needs beyond mscorlib. */
+export interface HelperSpec {
+  source: string;
+  kind: string;
+  references: string;
+}
+
+const FOCUS_HELPER: HelperSpec = { source: FOCUS_SOURCE, kind: "focus", references: "UIAutomationClient, UIAutomationTypes" };
+
+/** Builds in flight, by file name, so two callers asking at once share one compiler run. */
+const building = new Map<string, Promise<string | null>>();
 
 /**
  * The compiled helper under `cacheDir`, built on first use. PowerShell's Add-Type is the C# compiler
  * every Windows has; it is only ever run for the build, not for the work.
  */
-export function helperExecutable(cacheDir: string): Promise<string | null> {
-  const exe = join(cacheDir, helperName());
+export function helperExecutable(cacheDir: string, spec: HelperSpec = FOCUS_HELPER): Promise<string | null> {
+  const name = helperName(spec.source, spec.kind);
+  const exe = join(cacheDir, name);
   if (existsSync(exe)) return Promise.resolve(exe);
-  if (building) return building;
-  building = new Promise<string | null>((resolve) => {
+  const inFlight = building.get(name);
+  if (inFlight) return inFlight;
+  const build = new Promise<string | null>((resolve) => {
     try {
       mkdirSync(cacheDir, { recursive: true });
       const source = exe.replace(/\.exe$/, ".cs");
-      writeFileSync(source, FOCUS_SOURCE);
+      writeFileSync(source, spec.source);
       const quote = (path: string): string => `'${path.replace(/'/g, "''")}'`;
-      const command = `Add-Type -Path ${quote(source)} -OutputAssembly ${quote(exe)} -OutputType ConsoleApplication -ReferencedAssemblies UIAutomationClient, UIAutomationTypes`;
+      const command = `Add-Type -Path ${quote(source)} -OutputAssembly ${quote(exe)} -OutputType ConsoleApplication -ReferencedAssemblies ${spec.references}`;
       execFile(
         "powershell.exe",
         ["-NoProfile", "-NonInteractive", "-Command", command],
         { windowsHide: true, timeout: COMPILE_TIMEOUT_MS },
         (error, _stdout, stderr) => {
           if (error || !existsSync(exe)) {
-            console.error("[hangar] the focus helper did not build:", String(stderr || error?.message || "").trim().slice(0, 300));
+            console.error(`[hangar] the ${spec.kind} helper did not build:`, String(stderr || error?.message || "").trim().slice(0, 300));
             resolve(null);
           } else {
             resolve(exe);
@@ -230,13 +242,14 @@ export function helperExecutable(cacheDir: string): Promise<string | null> {
         },
       );
     } catch (error) {
-      console.error("[hangar] the focus helper did not build:", (error as Error).message);
+      console.error(`[hangar] the ${spec.kind} helper did not build:`, (error as Error).message);
       resolve(null);
     }
   }).finally(() => {
-    building = null;
+    building.delete(name);
   });
-  return building;
+  building.set(name, build);
+  return build;
 }
 
 /** What the helper's output means; the outcome is its last non-empty line. */

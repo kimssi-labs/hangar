@@ -14,7 +14,7 @@ import type { DockConfig, DockEdge } from "@core/types";
 import { api, type SettingsPayload } from "../../renderer/api";
 import { Choice } from "../../renderer/components/SettingsCard";
 import { useText } from "../../renderer/useText";
-import type { DisplayInfo, DockState } from "./contract";
+import { chosenMonitor, type DisplayInfo, type DockState } from "./contract";
 
 export interface DockUi extends DockState {
   /** Dock to the remembered edge, or undock. Answers with the state as it then stands. */
@@ -29,7 +29,7 @@ export interface DockUi extends DockState {
 }
 
 export function useDock(): DockUi {
-  const [state, setState] = useState<DockState>({ docked: false, edge: "top" });
+  const [state, setState] = useState<DockState>({ docked: false, edge: "top", ready: false });
   useEffect(() => { void api.dockState().then(setState); }, []);
   useEffect(() => api.onDockState(setState), []);
 
@@ -74,9 +74,16 @@ function DockGlyph({ edge, releasing }: { edge: DockEdge; releasing: boolean }) 
 const BUTTON = "no-drag grid h-8 w-11 place-items-center text-bone-400 transition-colors";
 
 /** The caption button: the wall sits on the configured edge and the arrow points into or out of it. */
-export function DockButton({ docked, edge, onToggle }: { docked: boolean; edge: DockEdge; onToggle: () => void }) {
+export function DockButton({ docked, edge, ready, onToggle }: { docked: boolean; edge: DockEdge; ready: boolean; onToggle: () => void }) {
   const t = useText();
   const edgeName = t(`edge.${edge}` as "edge.top");
+  if (!ready) {
+    return (
+      <button type="button" disabled aria-label={t("tip.dockUnset")} title={t("tip.dockUnset")} className={`${BUTTON} opacity-35 cursor-default`}>
+        <DockGlyph edge={edge} releasing={false} />
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -148,6 +155,20 @@ export function DockGrip({ edge, onDrag }: {
   );
 }
 
+/** Whether docking keeps the desktop's icons where they were — under the dock settings. */
+export function KeepIconsSetting({ on, onChange }: { on: boolean; onChange(on: boolean): void }) {
+  const t = useText();
+  return (
+    <div>
+      <div className="text-[11px] text-bone-500 mb-1">{t("settings.dock.icons")}</div>
+      <div className="space-y-1">
+        <Choice label={t("settings.dock.icons.on")} note={t("settings.dock.icons.on.note")} selected={on} onSelect={() => { if (!on) onChange(true); }} />
+        <Choice label={t("settings.dock.icons.off")} note={t("settings.dock.icons.off.note")} selected={!on} onSelect={() => { if (on) onChange(false); }} />
+      </div>
+    </div>
+  );
+}
+
 /** The settings card body: which monitor, which edge, how thick, and the two buttons. */
 export function DockSettings({ dock, floor, minPercent, displays, onChange, onApply }: {
   dock: DockConfig;
@@ -180,7 +201,7 @@ export function DockSettings({ dock, floor, minPercent, displays, onChange, onAp
               label={`${display.label}  ${display.bounds.width}×${display.bounds.height}`}
               note={[display.primary ? t("settings.dock.primary") : "", display.saved ? t("settings.dock.saved") : ""]
                 .filter(Boolean).join(" · ")}
-              selected={dock.device === display.id || (!dock.device && display.primary)}
+              selected={chosenMonitor(dock.device, displays) === display.id}
               onSelect={() => setDock({ device: display.id })}
             />
           ))}

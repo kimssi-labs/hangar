@@ -22,6 +22,7 @@ import { usePasteResults } from "../features/clipboard/ui";
 import type { ProjectInfo, SessionInfo, ThemeMode } from "@core/types";
 
 import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
+import { chosenMonitor } from "../features/dock/contract";
 import { DockButton, DockGrip, useDock } from "../features/dock/ui";
 import { ProjectDetail, SessionDetail } from "./components/Lists";
 import { SETTINGS_SECTIONS, SettingsView, type SettingsSection } from "./components/Settings";
@@ -328,10 +329,10 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       notify({ ok: true, message: "Undocked." });
       return;
     }
-    const result = await dock.apply({ ...settings.dock, enabled: true });
+    const result = await dock.apply({ ...settings.dock, device: chosenMonitor(settings.dock.device, displays), enabled: true });
     if (result.settings) setSettings(result.settings);
     notify({ ok: result.ok, message: result.message ?? "Docked." });
-  }, [settings, notify]);
+  }, [settings, displays, notify]);
 
   // One keyboard handler for the window: the mapping lives in core, this only performs the action.
   useEffect(() => {
@@ -501,7 +502,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
             onMinimize={() => void api.windowCommand("minimize")}
             onMaximize={() => void api.windowCommand("maximize")}
             onClose={() => void api.windowCommand("close")}
-            slot={<DockButton docked={dock.docked} edge={dock.edge} onToggle={() => void dock.toggle()} />}
+            slot={<DockButton docked={dock.docked} edge={dock.edge} ready={dock.ready} onToggle={() => void dock.toggle()} />}
           />
         }
       />

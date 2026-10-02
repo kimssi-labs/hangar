@@ -26,6 +26,9 @@ function fixture(): string {
     JSON.stringify({ type: "assistant", message: { content: "…" } }),
   ].join("\n") + "\n");
   writeFileSync(join(root, ".claude.json"), JSON.stringify({ projects: { [workspace]: {} } }));
+  // The band is a real reservation on this desk; the desktop's icons are not the test's to move.
+  mkdirSync(join(home, "config"), { recursive: true });
+  writeFileSync(join(home, "config", "manager.json"), JSON.stringify({ ui: { keepIcons: false } }));
   return home;
 }
 

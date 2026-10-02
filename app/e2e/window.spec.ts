@@ -39,9 +39,8 @@ function fixture(ui: Record<string, unknown> = {}, dock?: Record<string, unknown
   );
   writeFileSync(join(home, "history.jsonl"), `${JSON.stringify({ display: "프롬프트", sessionId: SESSION })}\n`);
   writeFileSync(join(root, ".claude.json"), JSON.stringify({ projects: { [workspace]: {} } }));
-  if (Object.keys(ui).length || dock) {
-    writeFileSync(join(home, "config", "manager.json"), JSON.stringify({ ui, ...(dock ? { dock } : {}) }));
-  }
+  // These bands are real reservations on this desk; the desktop's icons are not the tests' to move.
+  writeFileSync(join(home, "config", "manager.json"), JSON.stringify({ ui: { keepIcons: false, ...ui }, ...(dock ? { dock } : {}) }));
   return home;
 }
 
@@ -1154,6 +1153,28 @@ test("the layout setting decides the shape, and the panes remember their sizes",
     await page.evaluate((ui) => window.hangar.saveSettings({ ui }), horizontal);
     await expect.poll(() => page.evaluate(() => document.querySelector("nav") !== null)).toBe(true);
   } finally {
+    await app.close();
+  }
+});
+
+/**
+ * With no monitor chosen the caption button docks to the primary one, and saves that choice; a
+ * saved monitor that is not plugged in leaves the button disabled, saying why.
+ */
+test("the dock button defaults to the primary monitor, and is disabled when its monitor is gone", async () => {
+  const { app, page } = await launch(fixture({}, { device: "9999,9999 800x600", edge: "right", percent: 15 }));
+  try {
+    await expect(page.getByRole("button", { name: /docking monitor is not connected/ })).toBeDisabled();
+    const settings = await settingsOf(page);
+    await page.evaluate((dock) => window.hangar.saveSettings({ dock }), { ...settings.dock, device: null });
+    const button = page.getByRole("button", { name: "Dock to the edge" });
+    await expect(button).toBeEnabled();
+    await button.click();
+    const primary = (await page.evaluate(() => window.hangar.displays())).find((d) => d.primary)!;
+    await expect.poll(async () => (await settingsOf(page)).dock.device, { timeout: 8000 }).toBe(primary.id);
+    await expect.poll(async () => (await settingsOf(page)).dock.enabled, { timeout: 8000 }).toBe(true);
+  } finally {
+    await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
     await app.close();
   }
 });

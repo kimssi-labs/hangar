@@ -12,7 +12,7 @@ import { LANGUAGES, resolveLanguage } from "@core/i18n";
 import type { LayoutMode, ThemeMode } from "@core/types";
 
 import { PasteSettings } from "../../features/clipboard/ui";
-import { DockSettings } from "../../features/dock/ui";
+import { DockSettings, KeepIconsSetting } from "../../features/dock/ui";
 import { FilesSettings } from "../../features/files/ui";
 import { GitSettings } from "../../features/git/ui";
 import { MonitorSettings } from "../../features/metrics/ui";
@@ -145,6 +145,7 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
           onChange={section("dock")}
           onApply={onApplyDock}
         />
+        <KeepIconsSetting on={draft.ui.keepIcons} onChange={(keepIcons) => section("ui")({ ...draft.ui, keepIcons })} />
       </Card>
 
       <Card title={t("settings.usage")} section="usage" focused={focused} onFocus={onFocus} hint={t("settings.usage.hint")} body="space-y-2">

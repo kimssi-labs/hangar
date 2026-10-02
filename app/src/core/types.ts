@@ -150,6 +150,8 @@ export interface UiConfig {
   stackTop: number;
   /** Whether CPU and memory are sampled at all. Off costs nothing — the timer stops. */
   monitor: boolean;
+  /** Whether docking puts the desktop's icons back where they were (main/deskIcons.ts). */
+  keepIcons: boolean;
   /**
    * Whether the project's folder is shown beside the lists.
    *

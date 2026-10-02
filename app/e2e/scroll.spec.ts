@@ -50,6 +50,7 @@ function fixture(): string {
     // A double-click must open nothing on the machine running the suite.
     launch: { shell: "custom", customShell: "C:\\Windows\\System32\\whoami.exe" },
     dock: { enabled: false },
+    ui: { keepIcons: false },                       // its band is real; the desktop's icons are not the test's
   }));
   writeFileSync(join(root, ".claude.json"), JSON.stringify({ projects: { [workspace]: {} } }));
   return home;
