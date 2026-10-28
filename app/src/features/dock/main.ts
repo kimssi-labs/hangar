@@ -20,7 +20,7 @@ import { DOCK_PERCENT } from "../../core/constants.js";
 import { windowTakesKeyboard } from "../../core/keyboardHold.js";
 import type { DockConfig } from "../../core/types.js";
 import type { WindowChrome } from "../../main/chrome.js";
-import { bandRect, bandThickness, Dock, displayKey, dockReady, pickDisplay, setupKey } from "../../main/dock.js";
+import { bandRect, bandThickness, Dock, displayKey, dockReady, keepTaskbarButton, pickDisplay, setupKey } from "../../main/dock.js";
 import { IconKeeper } from "../../main/deskIcons.js";
 import type { ActionResult, SettingsPayload } from "../../main/ipc.js";
 import { dockContract, type DisplayInfo, type DockState } from "./contract.js";
@@ -63,15 +63,6 @@ export interface DockFeature {
    * the restore AFTER the maximise has a window shape to come back to.
    */
   undockForMaximize(): Promise<void>;
-  /**
-   * Minimise the window. A band takes no keyboard, and a window that takes none has no taskbar
-   * button — Electron drops it with `setFocusable(false)` — and Windows draws a minimised window
-   * without one as a small title-bar stub at the bottom-left of the screen (measured: 160 × 28 at
-   * the work area's corner, left there until restored). So the band gets its keyboard, and with it
-   * its button, back FIRST: given afterwards the stub stays where it is (measured). Restoring puts
-   * the band back and takes the keyboard away again.
-   */
-  minimize(): void;
   /** Remember this band for the current arrangement of monitors, without applying it. */
   save(config: DockConfig): void;
   slice(): DockSlice;
@@ -90,6 +81,8 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
   /** Set while the page has a field open — see core/keyboardHold.ts. */
   let needsTyping = false;
   let resizeTimer: NodeJS.Timeout | null = null;
+  /** Minimised while docked: the edge is given back, and the band comes back with the window. */
+  let parked = false;
   let clearingStruts = false;
 
   const current = (): DockConfig => ctx.config.dock(null, setupKey());
@@ -117,6 +110,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
     const takes = windowTakesKeyboard(dock?.isDocked === true, needsTyping);
     if (window.isFocusable() === takes) return;
     window.setFocusable(takes);
+    if (!takes) keepTaskbarButton(window);           // Electron took the button away with the focus
     if (takes && needsTyping) window.focus();        // the field the page just opened is waiting for keys
   }
 
@@ -158,7 +152,10 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
     if (!ctx.window() || !dock) return;
     const wanted = current();
     await dock.release();
-    if (wanted.enabled) {
+    // Minimised, the window is not on any monitor: reserving now took an edge for a window nobody
+    // could see (measured: 614 px off the top of a monitor, the band a stub). The restore applies it.
+    if (ctx.window()?.isMinimized()) parked = wanted.enabled;
+    else if (wanted.enabled) {
       const placement = await dock.apply(wanted);
       if (placement.note) console.log(`[hangar] ${placement.note}`);
     }
@@ -241,7 +238,6 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
       // Minimised, a band gives its edge back — the space is the point of minimising. Not an undock:
       // the setting stays, and the band comes back with the window. Both on the next turn of the
       // loop, as every native call that starts from a window event must (see chrome.ts).
-      let parked = false;
       window.on("minimize", () => {
         if (!dock?.isDocked) return;
         parked = true;
@@ -320,12 +316,6 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
 
     isDocked: () => dock?.isDocked === true,
     undockForMaximize: async () => { if (dock?.isDocked) await undock(); },
-    minimize() {
-      const window = ctx.window();
-      if (!window || window.isDestroyed()) return;
-      if (!window.isFocusable()) window.setFocusable(true);
-      window.minimize();
-    },
     // With the arrangement key: without it the per-arrangement entry keeps the old edge and size
     // and wins on the next read, so changing the dock in Settings looked like it did nothing.
     save: (wanted) => {

@@ -361,7 +361,7 @@ function registerIpc(): void {
 
   ipcMain.handle(CHANNEL.windowCommand, async (_event, command: WindowCommand) => {
     if (!window || window.isDestroyed()) return windowState();
-    if (command === "minimize") dockFeature.minimize();
+    if (command === "minimize") window.minimize();
     else if (command === "close") window.close();
     else {
       // Maximise means fill the screen, and never the band: a docked window gives the edge back
