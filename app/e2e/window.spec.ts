@@ -1220,9 +1220,11 @@ async function iconicRect(app: ElectronApplication): Promise<{ iconic: boolean; 
 }
 
 /**
- * A band takes no keyboard, so it has no taskbar button, and Windows draws a minimised window without
- * one as a small stub at the bottom-left of the screen (reported: a little black square left behind).
- * Minimised from its own button, it goes where every minimised window goes, off the screen.
+ * A band takes no keyboard, and Electron drops the taskbar button with it; Windows then draws a
+ * minimised window as a small stub in a corner of the screen (reported: a little black bar left
+ * behind, and nothing on the taskbar to say Hangar runs). Minimised by any route — here the window
+ * manager's own, not the caption button — it goes off the screen, and stays a band that takes no
+ * keyboard throughout.
  */
 test("minimising a docked band leaves nothing on the screen", async () => {
   const { app, page } = await launch(fixture({ theme: "dark" }, { enabled: true, edge: "right", percent: 15 }));
@@ -1231,10 +1233,20 @@ test("minimising a docked band leaves nothing on the screen", async () => {
     const primary = (await monitors(page)).find((d) => d.primary)!;
     await page.evaluate((device) => window.hangar.applyDock({ enabled: true, device, edge: "right", percent: 15 }), primary.id);
     await page.waitForTimeout(1700);                          // past the settle window
-    await page.getByRole("button", { name: "Minimise" }).click();
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.minimize());
     await expect.poll(async () => (await iconicRect(app))?.iconic, { timeout: 5000 }).toBe(true);
     const parked = await iconicRect(app);
     expect(parked?.x, "a minimised window is parked off the screen, not drawn as a stub").toBe(-32000);
+    expect(await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.isFocusable()),
+    "and it never took the keyboard to get there").toBe(false);
+
+    // Monitors coming and going while it is minimised: nothing is reserved for a window nobody sees.
+    const before = await workAreaOf(app, primary.id);
+    await app.evaluate(({ screen }) => { screen.emit("display-added"); });
+    await page.waitForTimeout(2500);
+    expect(await workAreaOf(app, primary.id), "no edge is taken while minimised").toEqual(before);
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.restore());
     await expect.poll(async () => app.evaluate(({ BrowserWindow }) =>
