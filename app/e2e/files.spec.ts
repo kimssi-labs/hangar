@@ -251,7 +251,8 @@ test("deleting takes the file off disk, and never anything outside the project",
   try {
     await expect(page.getByTestId("files-column")).toBeVisible();
 
-    expect(await callFiles(page, "trashFile", { cwd: workspace, dir: "99.log" })).toMatchObject({ ok: true });
+    const trashed = await callFiles(page, "trashFile", { cwd: workspace, dir: "99.log" });
+    expect(trashed, `the platform's answer: ${JSON.stringify(trashed)}`).toMatchObject({ ok: true });
     expect(existsSync(join(workspace, "99.log")), "it went to the recycle bin").toBe(false);
 
     // The guard, not the filesystem's: nothing above the project can be named at all.
