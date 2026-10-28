@@ -40,6 +40,15 @@ jobs:
       - name: End-to-end (Windows)
         if: runner.os == 'Windows'
         run: npx playwright test
+      - name: Trash probe (temporary)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          findmnt -T /tmp || true; findmnt -T "$RUNNER_TEMP" || true; findmnt -T "$HOME" || true
+          command -v gio kioclient5 kioclient trash-put || true
+          d=$(mktemp -d); echo x > "$d/a"; gio trash "$d/a" && echo "tmp: ok" || echo "tmp: FAIL $?"
+          mkdir -p "$RUNNER_TEMP/p"; echo x > "$RUNNER_TEMP/p/a"; gio trash "$RUNNER_TEMP/p/a" && echo "runner.temp: ok" || echo "runner.temp: FAIL $?"
+          ls -la ~/.local/share/Trash 2>&1 | head -3
       - name: End-to-end (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum npx playwright test
