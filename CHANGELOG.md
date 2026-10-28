@@ -3,6 +3,17 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.19.2
+
+- **A docked Hangar shows on the taskbar.** A band takes no keyboard, and the taskbar button used to
+  go with it, so a docked Hangar looked as if it were not running. The button now stays, and the
+  band still leaves the keyboard with the terminal.
+- **Minimised by any route, a band leaves nothing behind.** v2.19.1 fixed the caption button only;
+  Win+M, the taskbar or a change of monitors could still leave a small dark bar in a corner of a
+  screen. A minimised band now always goes where every minimised window goes.
+- Monitors coming and going while Hangar is minimised no longer reserve an edge for the hidden
+  window; the band docks again when the window is restored.
+
 ## v2.19.1
 
 - **Minimising a docked band leaves nothing behind.** A band takes no keyboard, so it has no taskbar
