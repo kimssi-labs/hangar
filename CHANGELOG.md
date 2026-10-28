@@ -3,6 +3,14 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.19.1
+
+- **Minimising a docked band leaves nothing behind.** A band takes no keyboard, so it has no taskbar
+  button, and Windows draws a minimised window without one as a small title-bar stub at the
+  bottom-left of the screen — the little dark square that stayed there until the window came back.
+  The band now gets its taskbar button back before it is minimised, so it goes where every
+  minimised window goes, and it is a band again — keyboard left with the terminal — once restored.
+
 ## v2.19.0
 
 - **Docking keeps the desktop icons where they were.** Reported from a three-monitor desk with the
