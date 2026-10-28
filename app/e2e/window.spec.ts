@@ -880,7 +880,16 @@ test("every monitor, every edge: a band's edges are the page's colour", async ()
  */
 test("a band restored at start-up wears the page's colour, and keeps it through hide, show and focus changes", async () => {
   test.setTimeout(2 * 60_000);
-  const { app, page } = await launch(fixture({ theme: "dark" }, { enabled: true, edge: "right", percent: 15 }));
+  // The band has to be restored at start-up, and since v2.18.1 only a band whose monitor was chosen
+  // is: a first launch learns the primary monitor's key and saves the dock with it.
+  const home = fixture({ theme: "dark" });
+  const first = await launch(home);
+  const key = (await monitors(first.page)).find((d) => d.primary)!.id;
+  await first.app.close();
+  writeFileSync(join(home, "config", "manager.json"), JSON.stringify({
+    ui: { theme: "dark", keepIcons: false }, dock: { enabled: true, device: key, edge: "right", percent: 15 },
+  }));
+  const { app, page } = await launch(home);
   try {
     const primary = (await monitors(page)).find((d) => d.primary);
     expect(primary, "a primary display").toBeTruthy();
@@ -952,6 +961,8 @@ test("a docked band survives being minimised and restored, giving its edge back 
   try {
     const primary = (await monitors(page)).find((d) => d.primary);
     expect(primary, "a primary display").toBeTruthy();
+    // Named: a dock with no monitor chosen is refused since v2.18.1, and this test then skipped itself.
+    await page.evaluate((device) => window.hangar.applyDock({ enabled: true, device, edge: "right", percent: 15 }), primary!.id);
     const reserved = await settled(async () => (await workAreaOf(app, primary!.id)).width < primary!.bounds.width);
     test.skip(!reserved, "this desktop cannot reserve space");
     await page.waitForTimeout(1700);                          // past the settle window
@@ -989,6 +1000,9 @@ test("closing the window ends the process", async () => {
   const exited = new Promise<number | null>((resolve) => app.process().once("exit", (code) => resolve(code)));
   let code: number | null | "still running" = "still running";
   try {
+    // Named: a dock with no monitor chosen is refused since v2.18.1, and this closed an undocked window.
+    const primary = (await monitors(page)).find((d) => d.primary)!;
+    await page.evaluate((device) => window.hangar.applyDock({ enabled: true, device, edge: "right", percent: 15 }), primary.id);
     await page.waitForTimeout(2500);                          // docked, and past the settle window
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.close());
@@ -1173,6 +1187,59 @@ test("the dock button defaults to the primary monitor, and is disabled when its 
     const primary = (await page.evaluate(() => window.hangar.displays())).find((d) => d.primary)!;
     await expect.poll(async () => (await settingsOf(page)).dock.device, { timeout: 8000 }).toBe(primary.id);
     await expect.poll(async () => (await settingsOf(page)).dock.enabled, { timeout: 8000 }).toBe(true);
+  } finally {
+    await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
+    await app.close();
+  }
+});
+
+/** The window's own rectangle and whether it is minimised, straight from Windows. */
+async function iconicRect(app: ElectronApplication): Promise<{ iconic: boolean; x: number; y: number } | null> {
+  const koffiPath = join(process.cwd(), "node_modules", "koffi");
+  return app.evaluate(({ BrowserWindow }, koffiFrom) => {
+    const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"));
+    const req = (typeof require === "function" ? require
+      : (process as unknown as { mainModule?: { require: NodeRequire } }).mainModule?.require) as NodeRequire | undefined;
+    if (!win || !req || process.platform !== "win32") return null;
+    const cache = globalThis as unknown as { __iconic?: (hwnd: number) => { iconic: boolean; x: number; y: number } };
+    if (!cache.__iconic) {
+      const koffi = req(koffiFrom) as typeof import("koffi");
+      const RECT = koffi.struct("RECT_e2e_iconic", { left: "long", top: "long", right: "long", bottom: "long" });
+      const user32 = koffi.load("user32.dll");
+      const GetWindowRect = user32.func("__stdcall", "GetWindowRect", "bool", ["intptr", koffi.out(koffi.pointer(RECT))]);
+      const IsIconic = user32.func("__stdcall", "IsIconic", "bool", ["intptr"]);
+      cache.__iconic = (hwnd) => {
+        const rc = { left: 0, top: 0, right: 0, bottom: 0 };
+        GetWindowRect(hwnd, rc);
+        return { iconic: Boolean(IsIconic(hwnd)), x: rc.left, y: rc.top };
+      };
+    }
+    const handle = win.getNativeWindowHandle();
+    return cache.__iconic(Number(handle.length >= 8 ? handle.readBigUInt64LE(0) : handle.readUInt32LE(0)));
+  }, koffiPath);
+}
+
+/**
+ * A band takes no keyboard, so it has no taskbar button, and Windows draws a minimised window without
+ * one as a small stub at the bottom-left of the screen (reported: a little black square left behind).
+ * Minimised from its own button, it goes where every minimised window goes, off the screen.
+ */
+test("minimising a docked band leaves nothing on the screen", async () => {
+  const { app, page } = await launch(fixture({ theme: "dark" }, { enabled: true, edge: "right", percent: 15 }));
+  try {
+    test.skip(process.platform !== "win32", "the stub is Windows' own");
+    const primary = (await monitors(page)).find((d) => d.primary)!;
+    await page.evaluate((device) => window.hangar.applyDock({ enabled: true, device, edge: "right", percent: 15 }), primary.id);
+    await page.waitForTimeout(1700);                          // past the settle window
+    await page.getByRole("button", { name: "Minimise" }).click();
+    await expect.poll(async () => (await iconicRect(app))?.iconic, { timeout: 5000 }).toBe(true);
+    const parked = await iconicRect(app);
+    expect(parked?.x, "a minimised window is parked off the screen, not drawn as a stub").toBe(-32000);
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.restore());
+    await expect.poll(async () => app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.isFocusable()), { timeout: 8000 })
+      .toBe(false);                                           // a band again, and the keyboard back with the terminal
   } finally {
     await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
     await app.close();
