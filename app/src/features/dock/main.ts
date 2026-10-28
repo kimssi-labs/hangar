@@ -63,6 +63,15 @@ export interface DockFeature {
    * the restore AFTER the maximise has a window shape to come back to.
    */
   undockForMaximize(): Promise<void>;
+  /**
+   * Minimise the window. A band takes no keyboard, and a window that takes none has no taskbar
+   * button — Electron drops it with `setFocusable(false)` — and Windows draws a minimised window
+   * without one as a small title-bar stub at the bottom-left of the screen (measured: 160 × 28 at
+   * the work area's corner, left there until restored). So the band gets its keyboard, and with it
+   * its button, back FIRST: given afterwards the stub stays where it is (measured). Restoring puts
+   * the band back and takes the keyboard away again.
+   */
+  minimize(): void;
   /** Remember this band for the current arrangement of monitors, without applying it. */
   save(config: DockConfig): void;
   slice(): DockSlice;
@@ -242,7 +251,12 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
         if (!parked || !dock) return;
         parked = false;
         setImmediate(() => {
-          void dock?.apply(current()).then(emitState).catch((error: unknown) => console.error("[hangar] re-dock after restore:", error));
+          void dock?.apply(current())
+            .then(() => {
+              emitState();
+              applyKeyboardHold();                 // a band again: the keyboard goes back to the terminal
+            })
+            .catch((error: unknown) => console.error("[hangar] re-dock after restore:", error));
         });
       });
       // Plugging a monitor in or out is a different arrangement, with its own remembered dock.
@@ -306,6 +320,12 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
 
     isDocked: () => dock?.isDocked === true,
     undockForMaximize: async () => { if (dock?.isDocked) await undock(); },
+    minimize() {
+      const window = ctx.window();
+      if (!window || window.isDestroyed()) return;
+      if (!window.isFocusable()) window.setFocusable(true);
+      window.minimize();
+    },
     // With the arrangement key: without it the per-arrangement entry keeps the old edge and size
     // and wins on the next read, so changing the dock in Settings looked like it did nothing.
     save: (wanted) => {
