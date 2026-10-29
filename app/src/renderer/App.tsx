@@ -11,7 +11,7 @@ import type { Language } from "@core/i18n";
 import { gitMenuItems, isGitAction, runGitAction, useDirtyPatch, useGit } from "../features/git/ui";
 import {
   deleteProject, deleteSession, filterProjects, filterSessions, indexOf, isProjectAction, isSessionAction, openSession,
-  ProjectPane, projectMenuItems, rename, runProjectAction, runSessionAction, SessionList, sessionMenuItems, SessionPreview,
+  ProjectPane, ProjectSearch, projectMenuItems, rename, runProjectAction, runSessionAction, SessionList, sessionMenuItems, SessionPreview,
   useProjects,
 } from "../features/projects/ui";
 import { useSettings } from "../features/settings/ui";
@@ -19,7 +19,8 @@ import { useUpdates } from "../features/updates/ui";
 import { UsageGauges, useUsage } from "../features/usage/ui";
 import { MachineGauges, useMetrics } from "../features/metrics/ui";
 import { usePasteResults } from "../features/clipboard/ui";
-import type { ProjectInfo, SessionInfo, ThemeMode } from "@core/types";
+import type { ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
+import { SIDE_PANE_TABS } from "@core/constants";
 
 import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
 import { chosenMonitor } from "../features/dock/contract";
@@ -32,6 +33,10 @@ import { Splitter } from "./components/Splitter";
 import { Truncated } from "./components/Truncated";
 import { WindowControls } from "./components/WindowControls";
 import { FilesPane, useFiles } from "../features/files/ui";
+import { SkillsPane, useSkills } from "../features/skills/ui";
+import { ArtifactsPane, useArtifacts } from "../features/artifacts/ui";
+import { SidePane, usePaneOpen } from "./components/SidePane";
+import type { ArtifactScope } from "@core/artifactOrigins";
 import { hasFileColumn, STACK_MIN, stackedTopHeight, useLayoutMode } from "./useLayoutMode";
 import { useTheme } from "./useTheme";
 import { TextProvider, useText } from "./useText";
@@ -62,6 +67,11 @@ export function App() {
   );
 }
 
+/** The stacked side pane's height before anyone drags it — what its fixed cap used to be. */
+const STACK_PANE_DEFAULT = 192;
+/** Short enough to keep the sessions, tall enough for the tabs and two rows. */
+const STACK_PANE_MIN = 80;
+
 function Window({ onLanguage }: { onLanguage: (next: { language: Language; locale: string }) => void }) {
   const t = useText();
   // The rows are the projects feature's; what is selected among them is this file's.
@@ -89,15 +99,21 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const { sessionHistory } = metrics;
   // Docked counts as maximised: the band is the window at its full extent, so the middle caption
   // button offers to restore, and restoring is what gives the edge back.
-  const [windowState, setWindowState] = useState({ maximized: false });
+  const [windowState, setWindowState] = useState({ maximized: false, onTop: false });
   // Whether the window is a band is dock's state, pushed on every change; nothing here guesses it.
   const dock = useDock();
   const [theme, setTheme] = useState<ThemeMode>("system");
+  /** The side pane's tab picked in this run; until then, the one Settings remembers. */
+  const [paneTab, setPaneTab] = useState<SidePaneTab | null>(null);
+  /** The Artifacts tab's scope picked in this run; until then, the one Settings remembers. */
+  const [artifactScope, setArtifactScope] = useState<ArtifactScope | null>(null);
   // Fractions of the window, not pixels: 0 = the size the layout would have chosen, anything else
   // is where the user left the divider — and it means the same thing when the window changes shape.
   const [navFraction, setNavFraction] = useState(0);
   const [asideFraction, setAsideFraction] = useState(0);
   const [stackFraction, setStackFraction] = useState(0);
+  /** The side pane's share of the stack when it sits under the sessions; 0 is its default height. */
+  const [paneFraction, setPaneFraction] = useState(0);
   /** Measured height of the stacked pair, so the divider can be kept inside it. */
   const [stackHeight, setStackHeight] = useState(0);
   const stackRef = useRef<HTMLDivElement | null>(null);
@@ -124,6 +140,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       setNavFraction(saved.ui.navWidth);
       setAsideFraction(saved.ui.asideWidth);
       setStackFraction(saved.ui.stackTop);
+      setPaneFraction(saved.ui.stackPane);
       setInfo(appInfo);
       onLanguage({ language: saved.ui.language, locale: appInfo.locale });
     })();
@@ -410,7 +427,14 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   // The project's folder, for whichever shape has room to draw it. Nothing is read while the
   // setting is off, and nothing while no project is selected.
   const showFiles = settings?.ui.files ?? true;
+  const paneTabs = SIDE_PANE_TABS.filter((tab) => settings?.ui[tab] ?? true);
+  const showPane = paneTabs.length > 0;
+  const wantedTab = paneTab ?? settings?.ui.sidePane ?? "files";
+  const activeTab: SidePaneTab = paneTabs.includes(wantedTab) ? wantedTab : paneTabs[0] ?? "files";
   const filesCwd = (screen === "sessions" ? openProjectInfo?.cwd : project?.cwd) ?? null;
+  const skills = useSkills(filesCwd, showPane && activeTab === "skills");
+  const artifacts = useArtifacts(showPane && activeTab === "artifacts");
+  const paneOpen = usePaneOpen(settings?.ui.paneOpen);
   const files = useFiles(showFiles ? filesCwd : null, showFiles);
   // The list refresh runs on a timer that must not restart whenever this callback is rebuilt, so
   // the tick reaches the panel through a ref rather than through the dependency list.
@@ -423,17 +447,50 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const navWidth = navFraction ? Math.round(navFraction * windowWidth) : 0;
   const asideWidth = asideFraction ? Math.round(asideFraction * windowWidth) : 0;
   const topHeight = stackedTopHeight(Math.round(stackFraction * stackHeight), stackHeight);
+  // The side pane under the stacked sessions: dragged to a height, never so tall the sessions vanish.
+  // An undragged project list is flexible and gives way, down to the same floor the sessions keep.
+  const paneMax = Math.max(STACK_PANE_MIN, stackHeight - (topHeight || STACK_MIN) - STACK_MIN);
+  const paneHeight = Math.min(paneMax, paneFraction ? Math.round(paneFraction * stackHeight) : STACK_PANE_DEFAULT);
   const band = mode === "band";
   const column = mode === "column";
   const showDetail = mode === "full";
   // Stacked is a choice about the lists, not about the window: a stacked window can be wide, and
   // when it is, the room to its right is a file column rather than nothing (useLayoutMode).
   useLayoutEffect(() => {
-    setFileColumn((had) => showFiles && column && hasFileColumn(windowWidth, had));
-  }, [showFiles, column, windowWidth]);
+    setFileColumn((had) => showPane && column && hasFileColumn(windowWidth, had));
+  }, [showPane, column, windowWidth]);
   // Wide enough to draw a tree without it being mostly indentation; the panel's own button can
   // still ask for the other one.
   const filesPane = <FilesPane files={files} roomy={fileColumn || showDetail} ui={rowUi} />;
+  const pickTab = useCallback((tab: SidePaneTab) => {
+    setPaneTab(tab);
+    void api.saveUi({ sidePane: tab });
+  }, []);
+  const pickScope = useCallback((scope: ArtifactScope) => {
+    setArtifactScope(scope);
+    void api.saveUi({ artifactScope: scope });
+  }, []);
+  // The project and session the Artifacts tab scopes to: the ones the window is showing.
+  const placeProject = screen === "sessions" ? openProjectInfo : project;
+  const placeSessions = useMemo(() => (screen === "sessions" && session ? [session.id, ...session.folded] : []),
+    [screen, session]);
+  const artifactPlace = useMemo(() => ({
+    dir: placeProject?.dir ?? null,
+    sessions: placeSessions,
+    projectName: (dir: string) => projects.find((p) => p.dir === dir)?.name ?? null,
+    sessionTitle: (id: string) => placeProject?.sessions.find((s) => s.id === id || s.folded.includes(id))?.title ?? null,
+  }), [placeProject, placeSessions, projects]);
+  const sidePane = (
+    <SidePane tabs={paneTabs} active={activeTab} compact={mode === "band"} onPick={pickTab}>
+      {activeTab === "skills" ? <SkillsPane groups={skills} open={paneOpen} notify={notify} />
+        : activeTab === "artifacts" ? (
+          <ArtifactsPane artifacts={artifacts} place={artifactPlace} scope={artifactScope ?? settings?.ui.artifactScope ?? "all"}
+            onScope={pickScope} open={paneOpen} notify={notify} />
+        )
+          : filesCwd ? filesPane
+            : <div className="flex-1 px-2 py-1 text-[11px] text-bone-500">{t("pane.noProject")}</div>}
+    </SidePane>
+  );
   // Both thin shapes lose the same things: the labels on buttons, and the space for two panes.
   const tight = band || column;
 
@@ -451,10 +508,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const projectPane = (
     <ProjectPane
       placed={placed}
-      query={query}
-      onQuery={setQuery}
-      searchRef={searchRef}
-      onAdd={() => void addProject()}
       editing={editing}
       editRef={editRef}
       onRename={(value, explicit) => void commitRename(value, explicit)}
@@ -502,6 +555,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
             onMinimize={() => void api.windowCommand("minimize")}
             onMaximize={() => void api.windowCommand("maximize")}
             onClose={() => void api.windowCommand("close")}
+            onTop={windowState.onTop}
+            onPin={() => void api.windowCommand("pin")}
             slot={<DockButton docked={dock.docked} edge={dock.edge} ready={dock.ready} onToggle={() => void dock.toggle()} />}
           />
         }
@@ -554,12 +609,13 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 <span className="chip">{screen === "sessions"
                   ? t("app.sessions.count", { count: sessions.length })
                   : t("app.projects.count", { count: filtered.length })}</span>
-                <div className="flex-1" />
+                {/* No spacer: in a thin window every pixel left over goes to the search box. */}
+                <ProjectSearch query={query} onQuery={setQuery} searchRef={searchRef} onAdd={() => void addProject()} />
                 {/* The key belongs in the tooltip: on the face of a button it is width spent on
                     something only worth learning once. */}
                 <button
                   type="button"
-                  className="btn"
+                  className="btn ml-auto shrink-0"
                   title={t("app.new.title")}
                   onClick={() => void startNew()}
                   disabled={screen === "sessions" ? !openProject : !project}
@@ -594,10 +650,20 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                       {sessionRows}
                     </div>
                     {/* Too narrow for a column of its own: what changed, under the sessions. */}
-                    {showFiles && !fileColumn && filesCwd ? (
-                      <div data-testid="files-section" className="shrink-0 max-h-48 flex flex-col border-t border-ink-600">
-                        {filesPane}
-                      </div>
+                    {showPane && !fileColumn ? (
+                      <>
+                        <Splitter
+                          width={paneHeight}
+                          side="bottom"
+                          min={STACK_PANE_MIN}
+                          max={paneMax}
+                          onDrag={(height) => setPaneFraction(height && stackHeight ? height / stackHeight : 0)}
+                          onCommit={(height) => void api.saveUi({ stackPane: height && stackHeight ? height / stackHeight : 0 })}
+                        />
+                        <div data-testid="files-section" className="shrink-0 flex flex-col border-t border-ink-600" style={{ height: paneHeight }}>
+                          {sidePane}
+                        </div>
+                      </>
                     ) : null}
                   </div>
                 ) : (
@@ -606,7 +672,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 </div>
                 )}
 
-                {column && fileColumn && filesCwd ? (
+                {column && fileColumn ? (
                   <>
                     <Splitter
                       width={asideWidth || 320}
@@ -621,7 +687,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                       className={`${asideWidth ? "" : "w-80"} shrink-0 border-l border-ink-600 flex flex-col`}
                       style={asideWidth ? { width: asideWidth } : undefined}
                     >
-                      {filesPane}
+                      {sidePane}
                     </aside>
                   </>
                 ) : null}
@@ -649,9 +715,9 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                       <ProjectDetail project={project} worktrees={worktrees} />
                     ) : null}
                   </div>
-                  {showFiles && filesCwd ? (
+                  {showPane ? (
                     <div data-testid="files-section" className="flex-1 min-h-0 flex flex-col border-t border-ink-600">
-                      {filesPane}
+                      {sidePane}
                     </div>
                   ) : <div className="flex-1" />}
 

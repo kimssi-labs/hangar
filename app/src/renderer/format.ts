@@ -77,6 +77,23 @@ export function sinceParts(ms: number, now = Date.now()): {
   return days < 30 ? { key: "since.days", vars: { count: days } } : { key: "since.absolute", vars: {} };
 }
 
+/**
+ * "2 months ago" all the way down — for a list where a date would be too long to fit beside a title.
+ * Like `sinceParts`, but past a month it keeps counting instead of giving up to a date.
+ */
+export function agoParts(ms: number, now = Date.now()): {
+  key: "since.now" | "since.minutes" | "since.hours" | "since.days" | "since.months" | "since.years";
+  vars: { count?: number };
+} {
+  const days = Math.round(Math.max(0, now - ms) / 86_400_000);
+  if (days < 30) {
+    const parts = sinceParts(ms, now);
+    return parts.key === "since.absolute" ? { key: "since.days", vars: { count: days } } : parts as ReturnType<typeof agoParts>;
+  }
+  if (days < 365) return { key: "since.months", vars: { count: Math.max(1, Math.round(days / 30)) } };
+  return { key: "since.years", vars: { count: Math.max(1, Math.round(days / 365)) } };
+}
+
 /** English, for the callers that have no translator to hand — tests, and anything outside the tree. */
 const EN_SINCE = {
   "since.now": () => "just now",

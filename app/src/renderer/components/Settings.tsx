@@ -154,6 +154,10 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
 
       <Card title={t("settings.files")} section="files" focused={focused} onFocus={onFocus} hint={t("settings.files.hint")}>
         <FilesSettings on={draft.ui.files} onChange={(files) => section("ui")({ ...draft.ui, files })} />
+        <PaneToggle label={t("settings.pane.skills")} note={t("settings.pane.skills.note")} on={draft.ui.skills}
+          onChange={(skills) => section("ui")({ ...draft.ui, skills })} />
+        <PaneToggle label={t("settings.pane.artifacts")} note={t("settings.pane.artifacts.note")} on={draft.ui.artifacts}
+          onChange={(artifacts) => section("ui")({ ...draft.ui, artifacts })} />
       </Card>
 
       <Card title={t("settings.git")} section="git" focused={focused} onFocus={onFocus} hint={t("settings.git.hint")}>
@@ -177,5 +181,18 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
         <PermissionSettings launch={draft.launch} onChange={section("launch")} />
       </Card>
     </div>
+  );
+}
+
+/** One of the side pane's tabs, on or off — a line with a switch rather than two whole choices. */
+function PaneToggle({ label, note, on, onChange }: { label: string; note: string; on: boolean; onChange(on: boolean): void }) {
+  return (
+    <label className="flex items-start gap-2 pt-2 cursor-pointer">
+      <input type="checkbox" checked={on} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 accent-current" aria-label={label} />
+      <span className="min-w-0">
+        <span className="block text-[12px] text-bone-100">{label}</span>
+        <span className="block text-[11px] text-bone-500">{note}</span>
+      </span>
+    </label>
   );
 }

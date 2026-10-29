@@ -356,3 +356,109 @@ test("a choice in any settings section is still there after a restart", async ()
   expect(saved.updates?.automatic).toBe(false);
   expect(saved.ui?.layout).toBe("vertical");
 });
+
+/** Drag a divider by (dx, dy) in small steps, the way a hand does. */
+async function drag(page: Page, index: number, dx: number, dy: number): Promise<void> {
+  const box = (await page.getByRole("separator", { name: "Resize" }).nth(index).boundingBox())!;
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 10; step += 1) await page.mouse.move(x + (dx * step) / 10, y + (dy * step) / 10);
+  await page.mouse.up();
+}
+
+/** Where every divider is: what the pane sizes come to, read off the screen. */
+async function dividers(page: Page): Promise<number[]> {
+  const boxes = await page.getByRole("separator", { name: "Resize" }).evaluateAll((all) =>
+    all.map((el) => { const r = el.getBoundingClientRect(); return Math.round(r.width > r.height ? r.y : r.x); }));
+  return boxes;
+}
+
+/**
+ * Every size the dividers set comes back after a restart, in both shapes: side by side (the project
+ * list's width, the side column's width) and stacked (the project list's height, the side pane's).
+ */
+for (const shape of [
+  { layout: "horizontal", width: 1400, height: 900, moves: [[80, 0], [-80, 0]] },
+  { layout: "vertical", width: 430, height: 900, moves: [[0, 60], [0, -100]] },
+] as const) {
+  test(`${shape.layout}: every divider dragged is where it was after a restart`, async () => {
+    const home = fixture();
+    mkdirSync(join(home, "config"), { recursive: true });
+    writeFileSync(join(home, "config", "manager.json"), JSON.stringify({ ui: { layout: shape.layout } }));
+    let dragged: number[] = [];
+    const first = await launch(home);
+    try {
+      await resize(first.app, first.page, shape.width, shape.height);
+      const before = await dividers(first.page);
+      expect(before.length, "both dividers are there to drag").toBeGreaterThanOrEqual(2);
+      for (const [index, [dx, dy]] of shape.moves.entries()) await drag(first.page, index, dx, dy);
+      await first.page.waitForTimeout(500);
+      dragged = await dividers(first.page);
+      expect(dragged, "the drags moved the dividers").not.toEqual(before);
+    } finally {
+      await first.app.close();
+    }
+    const { app, page } = await launch(home);
+    try {
+      await resize(app, page, shape.width, shape.height);
+      await expect.poll(async () => (await dividers(page)).every((at, i) => Math.abs(at - dragged[i]!) <= 2), { timeout: 8000 })
+        .toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+/**
+ * Stacked and too narrow for a file column, the side pane sits under the sessions — and used to be
+ * stuck at its cap, with no divider to drag (reported). It has one now, and keeps the height.
+ */
+test("stacked: the side pane under the sessions can be dragged taller, and stays that tall", async () => {
+  const home = fixture();
+  mkdirSync(join(home, "config"), { recursive: true });
+  writeFileSync(join(home, "config", "manager.json"), JSON.stringify({ ui: { layout: "vertical" } }));
+  const { app, page } = await launch(home);
+  try {
+    await resize(app, page, 430, 900);
+    const pane = page.getByTestId("files-section");
+    await expect(pane).toBeVisible();
+    const before = (await pane.boundingBox())!.height;
+    const grip = page.getByRole("separator").last();
+    const box = (await grip.boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    for (let step = 1; step <= 10; step += 1) await page.mouse.move(x, y - 12 * step);
+    await page.mouse.up();
+    await expect.poll(async () => (await pane.boundingBox())!.height).toBeGreaterThan(before + 80);
+    await expect.poll(async () => (await page.evaluate(() => window.hangar.loadSettings())).ui.stackPane).toBeGreaterThan(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("the pin keeps the window above the others, and is remembered", async () => {
+  const home = fixture();
+  const onTop = (app: ElectronApplication) => app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.isAlwaysOnTop());
+  const first = await launch(home);
+  try {
+    expect(await onTop(first.app), "off until asked").toBe(false);
+    await first.page.getByRole("button", { name: "Keep on top of other windows" }).click();
+    await expect.poll(() => onTop(first.app)).toBe(true);
+    await expect(first.page.getByRole("button", { name: "Stop keeping on top" })).toHaveAttribute("aria-pressed", "true");
+  } finally {
+    await first.app.close();
+  }
+  const { app, page } = await launch(home);
+  try {
+    await expect.poll(() => onTop(app), { message: "still on top after a restart" }).toBe(true);
+    await page.getByRole("button", { name: "Stop keeping on top" }).click();
+    await expect.poll(() => onTop(app)).toBe(false);
+  } finally {
+    await app.close();
+  }
+});

@@ -4,6 +4,7 @@
  * This imports contract files only, so it is safe in every process. It changes when a feature is
  * added or removed, and never when one is edited: that is the point of it.
  */
+import { artifactsContract } from "../features/artifacts/contract.js";
 import { clipboardContract } from "../features/clipboard/contract.js";
 import { dockContract } from "../features/dock/contract.js";
 import { filesContract } from "../features/files/contract.js";
@@ -11,6 +12,7 @@ import { gitContract } from "../features/git/contract.js";
 import { metricsContract } from "../features/metrics/contract.js";
 import { projectsContract } from "../features/projects/contract.js";
 import { settingsContract } from "../features/settings/contract.js";
+import { skillsContract } from "../features/skills/contract.js";
 import { updatesContract } from "../features/updates/contract.js";
 import { usageContract } from "../features/usage/contract.js";
 
@@ -20,6 +22,8 @@ export const CONTRACTS = {
   ...updatesContract,
   ...gitContract,
   ...filesContract,
+  ...skillsContract,
+  ...artifactsContract,
   ...usageContract,
   ...metricsContract,
   ...clipboardContract,

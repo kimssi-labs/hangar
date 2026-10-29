@@ -262,15 +262,46 @@ export function RenameInput({ defaultValue, inputRef, onCommit, onCancel }: {
   );
 }
 
-/** The search box, the add button and the project rows — the pane the window is navigated from. */
-export function ProjectPane({
-  placed, query, onQuery, searchRef, onAdd, editing, editRef, onRename, onCancelEdit, isSelected, onSelect, onOpen, onContextMenu, tight,
-}: {
-  placed: Placed<ProjectInfo>[];
+/**
+ * The project search box and the add button — in the window's top bar, beside the project count,
+ * so the list below spends its height on rows.
+ */
+export function ProjectSearch({ query, onQuery, searchRef, onAdd }: {
   query: string;
   onQuery(query: string): void;
   searchRef: EditRef;
   onAdd(): void;
+}) {
+  const t = useText();
+  return (
+    <div className="flex flex-1 min-w-0 max-w-md gap-1">
+      <input
+        ref={searchRef}
+        value={query}
+        onChange={(event) => onQuery(event.target.value)}
+        onKeyDown={(event) => { if (event.key === "Escape") { onQuery(""); searchRef.current?.blur(); } }}
+        placeholder={t("app.search")}
+        className="flex-1 min-w-0 bg-ink-800 border border-ink-600 rounded-lg px-3 py-1 text-sm placeholder:text-bone-500 focus:border-accent/60"
+      />
+      {/* A folder that has never had a session has no other way into this list. */}
+      <button
+        type="button"
+        className="btn px-2.5 shrink-0"
+        title={t("app.addProject.title")}
+        aria-label={t("app.addProject")}
+        onClick={onAdd}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+/** The project rows — the pane the window is navigated from. */
+export function ProjectPane({
+  placed, editing, editRef, onRename, onCancelEdit, isSelected, onSelect, onOpen, onContextMenu, tight,
+}: {
+  placed: Placed<ProjectInfo>[];
   /** The dir of the row being renamed, if any. */
   editing: string | null;
   editRef: EditRef;
@@ -287,27 +318,7 @@ export function ProjectPane({
   const t = useText();
   return (
     <>
-      <div className={`flex gap-1 ${tight ? "p-1" : "p-2"}`}>
-        <input
-          ref={searchRef}
-          value={query}
-          onChange={(event) => onQuery(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Escape") { onQuery(""); searchRef.current?.blur(); } }}
-          placeholder={t("app.search")}
-          className="flex-1 min-w-0 bg-ink-800 border border-ink-600 rounded-lg px-3 py-1.5 text-sm placeholder:text-bone-500 focus:border-accent/60"
-        />
-        {/* A folder that has never had a session has no other way into this list. */}
-        <button
-          type="button"
-          className="btn px-2.5 shrink-0"
-          title={t("app.addProject.title")}
-          aria-label={t("app.addProject")}
-          onClick={onAdd}
-        >
-          +
-        </button>
-      </div>
-      <div className={`flex-1 overflow-auto space-y-0.5 ${tight ? "px-1 pb-1" : "px-2 pb-2"}`}>
+      <div className={`flex-1 overflow-auto space-y-0.5 ${tight ? "p-1" : "p-2"}`}>
         {placed.map(({ item, depth }, index) => (
           editing === item.dir ? (
             <RenameInput key={item.dir} inputRef={editRef} defaultValue={item.alias ?? item.name} onCommit={onRename} onCancel={onCancelEdit} />
