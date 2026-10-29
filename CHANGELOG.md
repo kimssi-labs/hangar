@@ -3,6 +3,26 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.20.0
+
+- **The file panel is now a side pane with three tabs: Files, Skills and Artifacts.**
+  - **Skills** lists what the selected project can use, in two sections: the project's own
+    (`.claude/skills`) and the global ones — your skills folder and every plugin that is switched on.
+    Search them; double-click copies `/name`, and a SKILL.md opens from its row.
+  - **Artifacts** lists your Artifacts on claude.ai, newest first, with how long ago each changed.
+    It is fetched the first time the tab is shown and again from its refresh button, and the last
+    list is kept for the next start. A switch narrows it to **this project** or **this session** —
+    worked out from the sessions that published each one — and "all" groups them by project.
+    claude.ai offers no public list for this; Hangar asks it the way Claude Code itself does, so a
+    change on that side shows as a note above the last list rather than as an error.
+  - Every group starts closed, one button opens or closes them all, and the groups you open stay
+    open across restarts. Settings → Side pane switches each tab on or off.
+- **A pin beside the dock button keeps Hangar above every other window**, and is remembered.
+- **The project search box and the + button moved into the top bar**, beside the project count, so
+  the list below has one more row.
+- **Stacked, the side pane under the sessions can be resized** by its divider, and keeps its height;
+  every divider's position now comes back after a restart, checked for both layouts.
+
 ## v2.19.2
 
 - **A docked Hangar shows on the taskbar.** A band takes no keyboard, and the taskbar button used to
