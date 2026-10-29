@@ -7,18 +7,19 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, STACK_BELOW, THEME_MODES } from "./constants.js";
+import { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, SIDE_PANE_TABS, STACK_BELOW, THEME_MODES } from "./constants.js";
 import { AUTO_DEFAULTS, AUTO_MODES, type AutoConfig } from "./gitAuto.js";
 import { MERGE_STRATEGIES, SYNC_DEFAULTS } from "./gitSync.js";
 import { LANGUAGES, type Language } from "./i18n.js";
 import { homePaths } from "./paths.js";
-import type { DockConfig, DockEdge, GitConfig, LaunchConfig, LayoutMode, PermissionMode, ShellChoice, StatusConfig, ThemeMode, UiConfig, UpdateConfig } from "./types.js";
+import type { DockConfig, DockEdge, GitConfig, LaunchConfig, LayoutMode, PermissionMode, ShellChoice, SidePaneTab, StatusConfig, ThemeMode, UiConfig, UpdateConfig } from "./types.js";
+import { ARTIFACT_SCOPES, type ArtifactScope } from "./artifactOrigins.js";
 
 export const SECTION = { dock: "dock", status: "status", launch: "launch", ui: "ui", projects: "projects", pins: "pins", updates: "updates", git: "git" } as const;
 export const DOCK_MONITORS_KEY = "monitors";
 export const DOCK_SETUPS_KEY = "setups";
 export const DOCK_FLOOR_KEY = "floor";
-export { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, STACK_BELOW, THEME_MODES } from "./constants.js";
+export { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, SIDE_PANE_TABS, STACK_BELOW, THEME_MODES } from "./constants.js";
 
 type Json = Record<string, unknown>;
 
@@ -59,6 +60,9 @@ function windowBounds(value: unknown): UiConfig["window"] {
   // A zero-sized window is not a position anyone wants restored.
   return width > 0 && height > 0 ? { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) } : null;
 }
+
+/** More open groups than anyone keeps open is a list that only ever grew. */
+const PANE_OPEN_MAX = 500;
 
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, value));
@@ -230,6 +234,14 @@ export class ConfigStore {
       monitor: raw["monitor"] !== false,          // on unless it was explicitly turned off
       files: raw["files"] !== false,              // same: shown unless it was turned off
       keepIcons: raw["keepIcons"] !== false,      // same: kept unless it was turned off
+      skills: raw["skills"] !== false,
+      alwaysOnTop: raw["alwaysOnTop"] === true,             // off unless it was switched on
+      artifacts: raw["artifacts"] !== false,
+      sidePane: SIDE_PANE_TABS.includes(raw["sidePane"] as SidePaneTab) ? (raw["sidePane"] as SidePaneTab) : "files",
+      paneOpen: Array.isArray(raw["paneOpen"])
+        ? (raw["paneOpen"] as unknown[]).filter((key): key is string => typeof key === "string").slice(0, PANE_OPEN_MAX)
+        : [],
+      artifactScope: ARTIFACT_SCOPES.includes(raw["artifactScope"] as ArtifactScope) ? (raw["artifactScope"] as ArtifactScope) : "all",
       layout: LAYOUT_MODES.includes(raw["layout"] as LayoutMode) ? (raw["layout"] as LayoutMode) : "auto",
       stackBelow: Number.isFinite(Number(raw["stackBelow"])) && Number(raw["stackBelow"]) > 0
         ? clamp(Math.round(Number(raw["stackBelow"])), STACK_BELOW.min, STACK_BELOW.max)
@@ -238,6 +250,7 @@ export class ConfigStore {
       navWidth: fraction(raw["navWidth"]),
       asideWidth: fraction(raw["asideWidth"]),
       stackTop: fraction(raw["stackTop"]),
+      stackPane: fraction(raw["stackPane"]),
     };
   }
 

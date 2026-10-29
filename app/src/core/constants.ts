@@ -4,7 +4,7 @@
  * Kept free of any `node:` import on purpose: the renderer bundles whatever it imports, and pulling
  * `fs` into the page is how a browser build breaks (and how a preload boundary gets blurred).
  */
-import type { DockEdge, LayoutMode, PermissionMode, ShellChoice, ThemeMode } from "./types.js";
+import type { DockEdge, LayoutMode, SidePaneTab, PermissionMode, ShellChoice, ThemeMode } from "./types.js";
 
 export const DOCK_EDGES: DockEdge[] = ["left", "top", "right", "bottom"];
 export const DOCK_PERCENT = { min: 5, max: 60, default: 20 } as const;
@@ -24,6 +24,8 @@ export const EDGE_AXIS: Record<DockEdge, "width" | "height"> = {
 
 export const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 export const LAYOUT_MODES: LayoutMode[] = ["auto", "horizontal", "vertical"];
+/** The side pane's tabs, in the order they are drawn. */
+export const SIDE_PANE_TABS: SidePaneTab[] = ["files", "skills", "artifacts"];
 /** Ctrl+Alt+V: near the paste it assists, and not a shortcut a terminal or editor already wants. */
 export const DEFAULT_PASTE_HOTKEY = "CommandOrControl+Alt+V";
 /** The stacking width is a real window width, so the useful range is a real window's range. */

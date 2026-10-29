@@ -436,7 +436,6 @@ export function FilesPane({ files, roomy, ui }: {
   return (
     <>
       <div className="flex items-baseline gap-2 px-2 py-1 border-b border-ink-600">
-        <span className="text-[11px] text-bone-400">{t("files.title")}</span>
         {files.changed.items.length ? (
           <span className="text-[11px] text-warn">{t("files.changedCount", { count: files.changed.items.length })}</span>
         ) : null}

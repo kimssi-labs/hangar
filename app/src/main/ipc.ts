@@ -57,10 +57,12 @@ import type { UsageState } from "../features/usage/contract.js";
  */
 export interface WindowState {
   maximized: boolean;
+  /** Kept above every other window — the pin beside the dock button. */
+  onTop: boolean;
 }
 
 /** The window's own commands. Docking is the dock feature's, through its own channel. */
-export type WindowCommand = "minimize" | "maximize" | "close";
+export type WindowCommand = "minimize" | "maximize" | "close" | "pin";
 
 export interface AppInfo {
   /** The machine's own locale, so "system" can resolve to something. */

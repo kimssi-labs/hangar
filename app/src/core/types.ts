@@ -129,6 +129,8 @@ export type ThemeMode = "system" | "light" | "dark";
 /** How the panes are arranged: beside each other, stacked, or stacked once the window is narrow. */
 export type LayoutMode = "auto" | "horizontal" | "vertical";
 
+export type SidePaneTab = "files" | "skills" | "artifacts";
+
 export interface UiConfig {
   /** What the window is written in; "system" follows the machine. */
   language: import("./i18n.js").Language;
@@ -148,6 +150,8 @@ export interface UiConfig {
   asideWidth: number;
   /** Height of the project list when the layout is stacked, as a fraction of the pair. */
   stackTop: number;
+  /** Height of the side pane under the sessions when stacked, as a fraction of the stack; 0 = default. */
+  stackPane: number;
   /** Whether CPU and memory are sampled at all. Off costs nothing — the timer stops. */
   monitor: boolean;
   /** Whether docking puts the desktop's icons back where they were (main/deskIcons.ts). */
@@ -159,6 +163,18 @@ export interface UiConfig {
    * project on a network share, where reading one directory can take seconds.
    */
   files: boolean;
+  /** Whether the side pane offers the skills this project can use. */
+  skills: boolean;
+  /** Whether the side pane offers the account's Artifacts; off, nothing is asked of claude.ai. */
+  artifacts: boolean;
+  /** Kept above every other window, the pin in the title bar — remembered across runs. */
+  alwaysOnTop: boolean;
+  /** The side pane's tab last shown. */
+  sidePane: SidePaneTab;
+  /** The side pane's groups left open — skills and Artifacts alike; everything else starts closed. */
+  paneOpen: string[];
+  /** Which Artifacts the tab lists: all of them, the project's, or the session's. */
+  artifactScope: import("./artifactOrigins.js").ArtifactScope;
   project: string | null;
   cursor: number;
   /** "system" follows the OS setting and changes with it while the app is open. */

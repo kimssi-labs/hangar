@@ -17,6 +17,7 @@ import { ConfigStore } from "../core/config.js";
 import { CLAUDE_HOME_ENV, claudeHome } from "../core/paths.js";
 import { Store } from "../core/store.js";
 import { followTheme, resolveTheme, surfaceFor, WindowChrome, withoutFrame } from "./chrome.js";
+import { register as registerArtifacts } from "../features/artifacts/main.js";
 import { register as registerClipboard } from "../features/clipboard/main.js";
 import { register as registerDock } from "../features/dock/main.js";
 import { register as registerFiles } from "../features/files/main.js";
@@ -24,6 +25,7 @@ import { register as registerGit } from "../features/git/main.js";
 import { register as registerMetrics } from "../features/metrics/main.js";
 import { register as registerProjects } from "../features/projects/main.js";
 import { register as registerSettings } from "../features/settings/main.js";
+import { register as registerSkills } from "../features/skills/main.js";
 import { register as registerUpdates } from "../features/updates/main.js";
 import { register as registerUsage } from "../features/usage/main.js";
 import { claudeExecutable, which } from "./executables.js";
@@ -121,6 +123,7 @@ function closeSplash(): void {
 function windowState(): WindowState {
   return {
     maximized: window ? !window.isDestroyed() && window.isMaximized() : false,
+    onTop: window ? !window.isDestroyed() && window.isAlwaysOnTop() : false,
   };
 }
 
@@ -172,6 +175,8 @@ const updatesFeature = registerUpdates(context, wiring);
 // Git depends on the project rows, and says so: these are handed over rather than reached for.
 const gitFeature = registerGit(context, wiring, { findProject: projectsFeature.find, rescan: projectsFeature.scan, which });
 registerFiles(wiring);
+registerSkills(wiring);
+registerArtifacts(wiring);
 // Last, because it composes the others' slices. What a saved section sets in motion is decided here,
 // where every feature is in view — settings itself knows the config store and nothing else.
 const settingsFeature = registerSettings(context, wiring, {
@@ -278,6 +283,8 @@ async function createWindow(): Promise<void> {
   // options came back three pixels wider: the constructor and `setBounds` do not agree about the
   // invisible resize border, and a window that grows a little on every run is a bug people notice.
   if (onScreen && savedBounds) window.setBounds(savedBounds);
+  // The pin is remembered: a window kept on top yesterday is kept on top today.
+  if (config.ui().alwaysOnTop) window.setAlwaysOnTop(true);
 
   chrome = new WindowChrome(window);
   chrome.theme(config.ui().theme);
@@ -363,6 +370,11 @@ function registerIpc(): void {
     if (!window || window.isDestroyed()) return windowState();
     if (command === "minimize") window.minimize();
     else if (command === "close") window.close();
+    else if (command === "pin") {
+      const onTop = !window.isAlwaysOnTop();
+      window.setAlwaysOnTop(onTop);
+      config.saveUi({ ...config.ui(), alwaysOnTop: onTop });
+    }
     else {
       // Maximise means fill the screen, and never the band: a docked window gives the edge back
       // first. Main asks dock for that here, as the place the two are composed.

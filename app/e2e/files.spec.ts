@@ -160,7 +160,16 @@ test("turning the folder off in settings stops it being drawn at all", async () 
   try {
     await expect(page.getByTestId("files-column")).toBeVisible();
     await page.keyboard.press("s");
-    await page.getByText("Hide", { exact: true }).click();
+    await page.getByText("Files tab: hide", { exact: true }).click();
+    await page.keyboard.press("Escape");
+    // The pane stays for the other tabs; the folder's tab is gone, and with it the tree.
+    await expect(page.getByTestId("pane-tab-files")).toHaveCount(0);
+    await expect(page.getByText("src", { exact: true })).toHaveCount(0);
+
+    // With every tab off there is no pane at all.
+    await page.keyboard.press("s");
+    await page.getByLabel("Skills tab").uncheck();
+    await page.getByLabel("Artifacts tab").uncheck();
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("files-column")).toHaveCount(0);
     await expect(page.getByTestId("files-section")).toHaveCount(0);
