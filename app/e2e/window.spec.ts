@@ -482,9 +482,19 @@ test("a second launch hands over to the running Hangar and leaves", async () => 
 test("remembers where the window was left", async () => {
   const home = fixture();
   const first = await launch(home);
+  // A rectangle that fits the screen the suite runs on — the CI runner's is 1024 wide, and a window
+  // past the edge is now moved back on (core/windowPlacement.ts), which is not what this tests.
+  let rect = { x: 220, y: 160, width: 940, height: 620 };
   try {
-    await first.app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows()[0]?.setBounds({ x: 220, y: 160, width: 940, height: 620 }));
+    rect = await first.app.evaluate(({ BrowserWindow, screen }) => {
+      const area = screen.getPrimaryDisplay().workArea;
+      const wanted = {
+        x: area.x + 120, y: area.y + 80,
+        width: Math.min(940, area.width - 240), height: Math.min(620, area.height - 160),
+      };
+      BrowserWindow.getAllWindows()[0]?.setBounds(wanted);
+      return wanted;
+    });
     await first.page.waitForTimeout(400);
   } finally {
     await first.app.close();
@@ -495,7 +505,7 @@ test("remembers where the window was left", async () => {
     } catch {
       return null;
     }
-  }).toBe(940);
+  }).toBe(rect.width);
 
   const second = await launch(home);
   try {
@@ -503,10 +513,10 @@ test("remembers where the window was left", async () => {
     // reports the frame DWM paints, two DIP wider at 125 % — the very difference that made a saved
     // size grow on every launch until the app took the frame off before remembering it.
     const restored = await second.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getContentBounds());
-    samePixels(restored.x, 220, "x");
-    samePixels(restored.y, 160, "y");
-    samePixels(restored.width, 940, "width");
-    samePixels(restored.height, 620, "height");
+    samePixels(restored.x, rect.x, "x");
+    samePixels(restored.y, rect.y, "y");
+    samePixels(restored.width, rect.width, "width");
+    samePixels(restored.height, rect.height, "height");
   } finally {
     await second.app.close();
   }
