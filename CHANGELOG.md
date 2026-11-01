@@ -3,6 +3,13 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.20.1
+
+- **The top bar lines up with the panes below it.** The project search, the + button and New now
+  span the project and session lists and end at the side panel's divider — drag the divider and
+  the search box follows. Settings alone sits at the far right, over the side panel. In a window
+  too narrow for the side panel, the search box takes whatever width is left.
+
 ## v2.20.0
 
 - **The file panel is now a side pane with three tabs: Files, Skills and Artifacts.**
