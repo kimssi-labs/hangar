@@ -67,6 +67,8 @@ export function App() {
   );
 }
 
+/** The divider between the lists and the right-hand panel (`w-1`), which the top bar's split allows for. */
+const HEADER_DIVIDER_PX = 4;
 /** The stacked side pane's height before anyone drags it — what its fixed cap used to be. */
 const STACK_PANE_DEFAULT = 192;
 /** Short enough to keep the sessions, tall enough for the tabs and two rows. */
@@ -177,6 +179,21 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     return () => observer.disconnect();
   }, [mode]);
   useEffect(() => { void api.windowState().then(setWindowState); }, []);
+
+  // How wide the right-hand panel is, whichever shape drew it, so the top bar can split where the
+  // panes below split: the project search spans the lists, the buttons sit over the panel.
+  const [asidePx, setAsidePx] = useState(0);
+  const asideObserver = useRef<ResizeObserver | null>(null);
+  const asideRef = useCallback((element: HTMLElement | null) => {
+    asideObserver.current?.disconnect();
+    asideObserver.current = null;
+    if (!element) { setAsidePx(0); return; }
+    setAsidePx(element.getBoundingClientRect().width);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setAsidePx(element.getBoundingClientRect().width));
+    observer.observe(element);
+    asideObserver.current = observer;
+  }, []);
 
   // The list as it is drawn — one array for both the drawing and the keyboard, or the arrow keys
   // would walk a different list from the one on screen.
@@ -598,7 +615,9 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
             />
           ) : (
             <>
-              <div className={`flex items-center gap-2 border-b border-ink-600 ${tight ? "px-2 py-1" : "px-4 py-2"}`}>
+              <div className={`flex items-center border-b border-ink-600 ${tight ? "pl-2 py-1" : "pl-4 py-2"}`}>
+                {/* Left: as wide as the lists below it, so the search box grows and shrinks with them. */}
+                <div className={`flex flex-1 min-w-0 items-center gap-2 ${tight ? "pr-1" : "pr-2"}`}>
                 <Truncated
                   as="span"
                   title={screen === "sessions" && openProjectInfo ? openProjectInfo.cwd ?? undefined : undefined}
@@ -609,22 +628,28 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 <span className="chip">{screen === "sessions"
                   ? t("app.sessions.count", { count: sessions.length })
                   : t("app.projects.count", { count: filtered.length })}</span>
-                {/* No spacer: in a thin window every pixel left over goes to the search box. */}
                 <ProjectSearch query={query} onQuery={setQuery} searchRef={searchRef} onAdd={() => void addProject()} />
                 {/* The key belongs in the tooltip: on the face of a button it is width spent on
                     something only worth learning once. */}
                 <button
                   type="button"
-                  className="btn ml-auto shrink-0"
+                  className="btn shrink-0"
                   title={t("app.new.title")}
                   onClick={() => void startNew()}
                   disabled={screen === "sessions" ? !openProject : !project}
                 >
                   {t("app.new")}
                 </button>
+                </div>
+                {/* Right: over the panel, its width plus the divider's, settings at its far end. */}
+                <div
+                  className={`flex shrink-0 items-center justify-end gap-2 ${tight ? "pr-2" : "pr-4"}`}
+                  style={asidePx ? { width: asidePx + HEADER_DIVIDER_PX } : undefined}
+                >
                 <button type="button" className="btn" title={t("app.settings.title")} onClick={() => void openSettings()} aria-label={t("app.settings")}>
                   {tight ? "\u2699" : t("app.settings")}
                 </button>
+                </div>
               </div>
 
               <div className="flex-1 min-h-0 flex">
@@ -683,6 +708,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                       onCommit={(width) => void api.saveUi({ asideWidth: windowWidth ? width / windowWidth : 0 })}
                     />
                     <aside
+                      ref={asideRef}
                       data-testid="files-column"
                       className={`${asideWidth ? "" : "w-80"} shrink-0 border-l border-ink-600 flex flex-col`}
                       style={asideWidth ? { width: asideWidth } : undefined}
@@ -703,6 +729,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 )}
                 {column ? null : showDetail ? (
                 <aside
+                  ref={asideRef}
                   className={`${asideWidth ? "" : "w-80"} shrink-0 border-l border-ink-600 flex flex-col`}
                   style={asideWidth ? { width: asideWidth } : undefined}
                 >
@@ -741,6 +768,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                   // 320 px strip and the last two were only reachable by scrolling, which for a
                   // gauge is the same as not being drawn. Short means lay them across.
                   <aside
+                    ref={asideRef}
                     className={`${asideWidth ? "" : band ? "w-80" : "w-52"} shrink-0 border-l border-ink-600 p-1 ${
                       band ? "flex flex-col gap-1 min-h-0" : "space-y-1 overflow-y-auto no-bar"}`}
                     style={asideWidth ? { width: asideWidth } : undefined}

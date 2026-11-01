@@ -274,7 +274,7 @@ export function ProjectSearch({ query, onQuery, searchRef, onAdd }: {
 }) {
   const t = useText();
   return (
-    <div className="flex flex-1 min-w-0 max-w-md gap-1">
+    <div className="flex flex-1 min-w-0 gap-1">
       <input
         ref={searchRef}
         value={query}

@@ -462,3 +462,23 @@ test("the pin keeps the window above the others, and is remembered", async () =>
     await app.close();
   }
 });
+
+/** The top bar splits where the panes below do: the search, + and New end where the lists end. */
+const NEW_LABEL = "New";
+test("the project search spans the lists, and follows the side panel's divider", async () => {
+  const home = fixture();
+  mkdirSync(join(home, "config"), { recursive: true });
+  writeFileSync(join(home, "config", "manager.json"), JSON.stringify({ ui: { layout: "horizontal" } }));
+  const { app, page } = await launch(home);
+  try {
+    await resize(app, page, 1400, 900);
+    const plus = page.getByRole("button", { name: NEW_LABEL, exact: true });
+    const panelLeft = async (): Promise<number> => page.locator("aside").first().evaluate((el) => el.getBoundingClientRect().left);
+    const plusRight = async (): Promise<number> => (await plus.boundingBox())!.x + (await plus.boundingBox())!.width;
+    await expect.poll(async () => Math.abs((await panelLeft()) - (await plusRight())), { timeout: 5000 }).toBeLessThanOrEqual(16);
+    await drag(page, 1, -120, 0);                              // widen the side panel
+    await expect.poll(async () => Math.abs((await panelLeft()) - (await plusRight())), { timeout: 5000 }).toBeLessThanOrEqual(16);
+  } finally {
+    await app.close();
+  }
+});
