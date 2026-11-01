@@ -319,5 +319,9 @@ Windows 10/11 or Linux (X11 for docking), and `claude` on `PATH`.
 Every version's changes are listed in [CHANGELOG.md](CHANGELOG.md); CI publishes that section as the
 release notes and refuses to release a tag that has no section.
 
+A release is one pull request carrying the change, the version in `app/package.json` and its
+CHANGELOG section. CI tests it once, on both platforms; once merged, a `v<version>` tag on that
+commit builds the installers and publishes them — the tag checks its notes and does not test again.
+
 Versions up to **v1.15.0** were *Claude Projects*, a Windows terminal application written in
 Python; it is still downloadable from its release, and its source is in this repository's history.

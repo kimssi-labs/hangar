@@ -3,6 +3,17 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.20.2
+
+- **The window opens inside the screen.** A size and place remembered on a large monitor were
+  reused as they were whenever they touched any screen, so on a smaller one the window opened past
+  its edge, with its buttons out of reach. It is now fitted into the screen it overlaps most —
+  moved, and shrunk only if it has to be — and so is the window Undock gives back.
+- **A project's sessions are all in the list.** The "show all N sessions" button at its end is gone;
+  scroll down and the rest are there.
+- Releases are quicker to make: the tests run once, on the pull request, instead of again on every
+  push to main and on the tag; a tag only checks its notes and builds.
+
 ## v2.20.1
 
 - **The top bar lines up with the panes below it.** The project search, the + button and New now
