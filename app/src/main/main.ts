@@ -28,6 +28,7 @@ import { register as registerSettings } from "../features/settings/main.js";
 import { register as registerSkills } from "../features/skills/main.js";
 import { register as registerUpdates } from "../features/updates/main.js";
 import { register as registerUsage } from "../features/usage/main.js";
+import { openingRect } from "../core/windowPlacement.js";
 import { claudeExecutable, which } from "./executables.js";
 import { CHANNEL, MENU_SEPARATOR, PAGES, type ActionResult, type AppInfo, type MenuItemSpec, type PageName, type WindowCommand, type WindowState } from "./ipc.js";
 
@@ -210,22 +211,6 @@ let shown = false;
 /** The step named before the loading page had parsed, so it is not lost. */
 let pendingStep = "Starting…";
 
-/** Do two rectangles share any pixel? Enough to decide a saved position is still reachable. */
-function rectsOverlap(a: Electron.Rectangle, b: Electron.Rectangle): boolean {
-  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-}
-
-/** `rect` moved and, if need be, shrunk until the whole of it is inside `area`. */
-function clampInto(rect: Electron.Rectangle, area: Electron.Rectangle): Electron.Rectangle {
-  const width = Math.min(rect.width, area.width);
-  const height = Math.min(rect.height, area.height);
-  return {
-    width, height,
-    x: Math.min(Math.max(rect.x, area.x), area.x + area.width - width),
-    y: Math.min(Math.max(rect.y, area.y), area.y + area.height - height),
-  };
-}
-
 /**
  * Give an undocked window a window's shape and place, wholly on screen.
  *
@@ -236,27 +221,16 @@ function clampInto(rect: Electron.Rectangle, area: Electron.Rectangle): Electron
  */
 function placeFloating(): void {
   if (!window || window.isDestroyed()) return;
-  const display = screen.getDisplayMatching(window.getBounds());
-  const area = display.workArea;
-  const saved = config.ui().window;
-  const rect = saved && screen.getAllDisplays().some((d) => rectsOverlap(d.workArea, saved))
-    ? saved
-    : {
-      width: WINDOW.width,
-      height: WINDOW.height,
-      x: area.x + Math.round((area.width - WINDOW.width) / 2),
-      y: area.y + Math.round((area.height - WINDOW.height) / 2),
-    };
-  window.setBounds(clampInto(rect, screen.getDisplayMatching(rect).workArea));
+  // The default lands on the display the band was on, not on the primary one.
+  const here = screen.getDisplayMatching(window.getBounds()).workArea;
+  window.setBounds(openingRect(config.ui().window, screen.getAllDisplays().map((d) => d.workArea), here, WINDOW));
 }
 
 async function createWindow(): Promise<void> {
-  // Reopen where it was left, but only if that rectangle is still on a connected display — a saved
-  // position from a monitor that is now unplugged would open the window off-screen.
-  const savedBounds = config.ui().window;
-  const onScreen = savedBounds
-    ? screen.getAllDisplays().some((display) => rectsOverlap(display.workArea, savedBounds))
-    : false;
+  // Reopen where it was left, fitted to a screen that is here now (core/windowPlacement.ts): a
+  // rectangle saved on a big monitor opened past the edge of a smaller one, buttons out of reach.
+  const opening = openingRect(config.ui().window, screen.getAllDisplays().map((d) => d.workArea),
+    screen.getPrimaryDisplay().workArea, WINDOW);
 
   window = new BrowserWindow({
     ...WINDOW,
@@ -282,7 +256,7 @@ async function createWindow(): Promise<void> {
   // Restored with the same call that measured them. Passing a saved rectangle as constructor
   // options came back three pixels wider: the constructor and `setBounds` do not agree about the
   // invisible resize border, and a window that grows a little on every run is a bug people notice.
-  if (onScreen && savedBounds) window.setBounds(savedBounds);
+  window.setBounds(opening);
   // The pin is remembered: a window kept on top yesterday is kept on top today.
   if (config.ui().alwaysOnTop) window.setAlwaysOnTop(true);
 

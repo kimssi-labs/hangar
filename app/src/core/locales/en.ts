@@ -18,7 +18,6 @@ export const en = {
   "app.settings": "Settings",
   "app.settings.title": "Settings (S)",
   "app.noMatch": "No project matches.",
-  "app.showAll": "Show all {count} sessions (Enter)",
   "app.running": "{count} running",
   "app.running.none": "idle",
   "app.sessionsRunning": "{count} sessions running",

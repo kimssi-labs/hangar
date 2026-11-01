@@ -25,7 +25,6 @@ export const ko: Dictionary = {
   "app.settings": "설정",
   "app.settings.title": "설정 (S)",
   "app.noMatch": "검색 결과가 없습니다.",
-  "app.showAll": "세션 {count}개 모두 보기 (Enter)",
   "app.running": "{count}개 실행 중",
   "app.running.none": "실행 없음",
   "app.sessionsRunning": "세션 {count}개 실행 중",
