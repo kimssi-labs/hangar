@@ -21,9 +21,6 @@ import type { OpenSessionRequest } from "./contract";
 
 type Translate = ReturnType<typeof useText>;
 
-/** How many of a project's sessions the projects screen shows before offering the rest. */
-const PREVIEW_COUNT = 8;
-
 /** The rows, read and re-read: the list every other part of the window reads. */
 export function useProjects() {
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
@@ -386,10 +383,11 @@ export function SessionPreview({ project, samples, onEnter, onContextMenu }: {
   onEnter(): void;
   onContextMenu(item: SessionInfo, index: number): void;
 }) {
-  const t = useText();
+  // Every session, in the list that scrolls: a "show all" button at the end was one more click to
+  // reach what scrolling already reaches.
   return (
     <>
-      {project.sessions.slice(0, PREVIEW_COUNT).map((item, index) => (
+      {project.sessions.map((item, index) => (
         <SessionRow
           key={item.id}
           session={item}
@@ -400,11 +398,6 @@ export function SessionPreview({ project, samples, onEnter, onContextMenu }: {
           onContextMenu={() => onContextMenu(item, index)}
         />
       ))}
-      {project.sessions.length > PREVIEW_COUNT ? (
-        <button type="button" className="btn w-full mt-1" onClick={onEnter}>
-          {t("app.showAll", { count: project.sessions.length })}
-        </button>
-      ) : null}
     </>
   );
 }

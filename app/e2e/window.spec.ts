@@ -1233,9 +1233,13 @@ test("minimising a docked band leaves nothing on the screen", async () => {
     const primary = (await monitors(page)).find((d) => d.primary)!;
     await page.evaluate((device) => window.hangar.applyDock({ enabled: true, device, edge: "right", percent: 15 }), primary.id);
     await page.waitForTimeout(1700);                          // past the settle window
+    const docked = await workAreaOf(app, primary.id);
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.minimize());
     await expect.poll(async () => (await iconicRect(app))?.iconic, { timeout: 5000 }).toBe(true);
+    // Minimising gives the edge back on a later turn; read "before" only once it has (under load in
+    // the full run it had not yet, and the release landing afterwards read as an edge taken).
+    await expect.poll(async () => (await workAreaOf(app, primary.id)).width, { timeout: 8000 }).toBeGreaterThan(docked.width);
     const parked = await iconicRect(app);
     expect(parked?.x, "a minimised window is parked off the screen, not drawn as a stub").toBe(-32000);
     expect(await app.evaluate(({ BrowserWindow }) =>
@@ -1254,6 +1258,28 @@ test("minimising a docked band leaves nothing on the screen", async () => {
       .toBe(false);                                           // a band again, and the keyboard back with the terminal
   } finally {
     await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
+    await app.close();
+  }
+});
+
+/**
+ * A remembered rectangle bigger than the screen it reopens on — saved on a larger monitor — opens
+ * fitted inside that screen's work area, not past its edge with the buttons out of reach (reported).
+ */
+test("a remembered window too big for the screen opens fitted inside it", async () => {
+  const { app, page } = await launch(fixture({ window: { x: 40, y: 40, width: 9000, height: 9000 } }));
+  try {
+    await page.waitForTimeout(1500);
+    const fits = await app.evaluate(({ BrowserWindow, screen }) => {
+      const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))!;
+      const b = win.getBounds();
+      const area = screen.getDisplayMatching(b).workArea;
+      const slack = 16;                                     // the frame Electron counts in or out
+      return b.x >= area.x - slack && b.y >= area.y - slack
+        && b.x + b.width <= area.x + area.width + slack && b.y + b.height <= area.y + area.height + slack;
+    });
+    expect(fits, "the whole window is on the screen").toBe(true);
+  } finally {
     await app.close();
   }
 });

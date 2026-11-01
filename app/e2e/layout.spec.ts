@@ -2,7 +2,7 @@
  * The two things a docked window must get right: it follows the chosen theme, and at either thin
  * shape it fits — no page scrolling, nothing pushed off the side.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
@@ -478,6 +478,31 @@ test("the project search spans the lists, and follows the side panel's divider",
     await expect.poll(async () => Math.abs((await panelLeft()) - (await plusRight())), { timeout: 5000 }).toBeLessThanOrEqual(16);
     await drag(page, 1, -120, 0);                              // widen the side panel
     await expect.poll(async () => Math.abs((await panelLeft()) - (await plusRight())), { timeout: 5000 }).toBeLessThanOrEqual(16);
+  } finally {
+    await app.close();
+  }
+});
+
+/** A project's sessions are all in the list, reached by scrolling — no "show all" button at its end. */
+test("every session of the selected project is listed, with nothing to press to see the rest", async () => {
+  const home = fixture();
+  const projectDir = readdirSync(join(home, "projects"))[0]!;
+  const cwd = join(home, "..", "workspace");
+  for (let i = 0; i < 12; i += 1) {
+    const id = `ffffffff-0000-0000-0000-${String(i).padStart(12, "0")}`;
+    writeFileSync(join(home, "projects", projectDir, `${id}.jsonl`), [
+      JSON.stringify({ type: "user", cwd, sessionId: id, message: { content: `topic ${i}` }, origin: { kind: "human" } }),
+      JSON.stringify({ type: "assistant", message: { content: "…" } }),
+    ].join(String.fromCharCode(10)) + String.fromCharCode(10));
+  }
+  mkdirSync(join(home, "config"), { recursive: true });
+  writeFileSync(join(home, "config", "manager.json"), JSON.stringify({ ui: { layout: "vertical" } }));
+  const { app, page } = await launch(home);
+  try {
+    await resize(app, page, 430, 900);
+    const list = page.getByTestId("stack-sessions");
+    for (const i of [0, 5, 11]) await expect(list).toContainText(`topic ${i}`);
+    await expect(page.getByRole("button", { name: /Show all/ })).toHaveCount(0);
   } finally {
     await app.close();
   }
