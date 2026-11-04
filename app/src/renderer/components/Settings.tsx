@@ -8,8 +8,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 
+import { LAYOUT_MODES, THEME_MODES } from "@core/constants";
 import { LANGUAGES, resolveLanguage } from "@core/i18n";
-import type { LayoutMode, ThemeMode } from "@core/types";
 
 import { PasteSettings } from "../../features/clipboard/ui";
 import { DockSettings, KeepIconsSetting } from "../../features/dock/ui";
@@ -23,18 +23,6 @@ import type { DisplayInfo, PageName, SettingsPayload } from "../api";
 import { useText } from "../useText";
 import { Card, Choice } from "./SettingsCard";
 import { Truncated } from "./Truncated";
-
-const THEMES: { key: ThemeMode; label: string; note: string }[] = [
-  { key: "system", label: "System", note: "follows the OS setting, and changes with it" },
-  { key: "light", label: "Light", note: "" },
-  { key: "dark", label: "Dark", note: "" },
-];
-
-const LAYOUTS: { key: LayoutMode; label: string; note: string }[] = [
-  { key: "auto", label: "Auto", note: "side by side, stacked once the window is narrower than the width below" },
-  { key: "horizontal", label: "Side by side", note: "lists beside each other, whatever the size" },
-  { key: "vertical", label: "Stacked", note: "project list, sessions and graphs one under the other" },
-];
 
 export interface SettingsViewProps {
   settings: SettingsPayload;
@@ -87,13 +75,13 @@ export function SettingsView({ settings, displays, onChange, onApplyDock, onOpen
       </div>
 
       <Card title={t("settings.appearance")}>
-        {THEMES.map((theme) => (
+        {THEME_MODES.map((theme) => (
           <Choice
-            key={theme.key}
-            label={t(`settings.appearance.${theme.key}` as "settings.appearance.system")}
-            note={theme.key === "system" ? t("settings.appearance.system.note") : undefined}
-            selected={draft.ui.theme === theme.key}
-            onSelect={() => section("ui")({ ...draft.ui, theme: theme.key })}
+            key={theme}
+            label={t(`settings.appearance.${theme}` as const)}
+            note={theme === "system" ? t("settings.appearance.system.note") : undefined}
+            selected={draft.ui.theme === theme}
+            onSelect={() => section("ui")({ ...draft.ui, theme })}
           />
         ))}
       </Card>
@@ -117,13 +105,13 @@ export function SettingsView({ settings, displays, onChange, onApplyDock, onOpen
 
       <Card title={t("settings.layout")} hint={t("settings.layout.hint")} body="space-y-3">
         <div className="space-y-1">
-          {LAYOUTS.map((option) => (
+          {LAYOUT_MODES.map((layout) => (
             <Choice
-              key={option.key}
-              label={t(`settings.layout.${option.key}` as "settings.layout.auto")}
-              note={t(`settings.layout.${option.key}.note` as "settings.layout.auto.note")}
-              selected={draft.ui.layout === option.key}
-              onSelect={() => section("ui")({ ...draft.ui, layout: option.key })}
+              key={layout}
+              label={t(`settings.layout.${layout}` as const)}
+              note={t(`settings.layout.${layout}.note` as const)}
+              selected={draft.ui.layout === layout}
+              onSelect={() => section("ui")({ ...draft.ui, layout })}
             />
           ))}
         </div>
