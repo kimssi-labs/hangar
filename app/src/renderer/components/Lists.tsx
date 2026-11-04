@@ -7,7 +7,7 @@
 import { useEffect, useRef } from "react";
 
 import { NOT_RUNNING, projectState, sessionMark, statusLabel } from "@core/sessionMark";
-import type { MetricSample, ProjectInfo, SessionInfo } from "@core/types";
+import type { ProjectInfo, SessionInfo } from "@core/types";
 
 import { Sparkline } from "./Chart";
 import { Truncated } from "./Truncated";
@@ -191,11 +191,6 @@ export function SessionRow({
 }: {
   session: SessionInfo;
   selected: boolean;
-  /**
-   * Unused: the row reads its own series (`RowUsage`), so a sample re-renders the readings and not
-   * the list around them. Still accepted because the lists pass it.
-   */
-  samples?: readonly MetricSample[];
   onSelect: () => void;
   onOpen: () => void;
   onContextMenu?: () => void;
