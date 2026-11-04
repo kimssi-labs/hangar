@@ -19,7 +19,7 @@ import { launchCommand, sessionEnvironment, WT_EXE } from "../../core/launcher.j
 import { scanSignature } from "../../core/store.js";
 import type { ProjectInfo } from "../../core/types.js";
 import { linkWorktrees } from "../../core/worktree.js";
-import { cachedWhich, claudeExecutable, detectLinuxTerminal, haveExecutable } from "../../main/executables.js";
+import { claudeExecutable, detectLinuxTerminal, which } from "../../main/executables.js";
 import { headOf, isLinkedWorktree, mainCheckoutOf } from "../../main/gitStatus.js";
 import { helperExecutable, helpersDir } from "../../main/helpers.js";
 import { FOCUS_HELPER, focusSession, stopSession } from "../../main/liveSession.js";
@@ -174,9 +174,9 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
         config: launch,
         target: request.target,
         platform: process.platform,
-        hasWindowsTerminal: process.platform === "win32" && Boolean(cachedWhich(WT_EXE)),
+        hasWindowsTerminal: process.platform === "win32" && Boolean(which(WT_EXE)),
         linuxTerminal: process.platform === "win32" ? null : detectLinuxTerminal(launch.terminal),
-      }, haveExecutable);
+      }, (exe) => Boolean(which(exe)));
       try {
         const child = spawn(command.exe, command.args, {
           cwd: command.cwd,
