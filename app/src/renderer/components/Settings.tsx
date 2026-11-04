@@ -21,10 +21,8 @@ import { UpdatesSettings, type Updates } from "../../features/updates/ui";
 import { UsageSettings } from "../../features/usage/ui";
 import type { DisplayInfo, SettingsPayload } from "../api";
 import { useText } from "../useText";
-import { Card, Choice, SETTINGS_SECTIONS, type SettingsSection } from "./SettingsCard";
+import { Card, Choice } from "./SettingsCard";
 import { Truncated } from "./Truncated";
-
-export { SETTINGS_SECTIONS, type SettingsSection };
 
 const THEMES: { key: ThemeMode; label: string; note: string }[] = [
   { key: "system", label: "System", note: "follows the OS setting, and changes with it" },

@@ -26,14 +26,13 @@ import { SIDE_PANE_TABS } from "@core/constants";
 import { api, MENU_SEPARATOR, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
 import { chosenMonitor } from "../features/dock/contract";
 import { DockButton, DockGrip, useDock } from "../features/dock/ui";
-import { ProjectDetail, ProjectTitle, SessionDetail } from "./components/Lists";
-import { SETTINGS_SECTIONS, SettingsView, type SettingsSection } from "./components/Settings";
+import { ProjectDetail, ProjectTitle, projectRowId, SessionDetail, sessionRowId } from "./components/Lists";
+import { SettingsView } from "./components/Settings";
 import { Modal, type Ask, type AskResult } from "./components/Modal";
 import { TitleBar } from "./components/TitleBar";
 import { Splitter } from "./components/Splitter";
 import { Truncated } from "./components/Truncated";
 import { WindowControls } from "./components/WindowControls";
-import { projectRowId, sessionRowId } from "./components/Lists";
 import { FilesPane, useFiles } from "../features/files/ui";
 import { SkillsPane, useSkills } from "../features/skills/ui";
 import { ArtifactsPane, useArtifacts } from "../features/artifacts/ui";
@@ -899,9 +898,12 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                   className={`${asideWidth ? "" : "w-80"} shrink-0 border-l border-ink-600 flex flex-col`}
                   style={asideWidth ? { width: asideWidth } : undefined}
                 >
-                  {/* Three bands: what is selected, the folder, the gauges. Only the middle one
-                      scrolls — with one scrollbar for the lot, the gauges left the screen. */}
-                  <div className="shrink-0 max-h-[50%] overflow-auto">
+                  {/* Three bands: what is selected, the folder, the gauges, each scrolling on its
+                      own — with one scrollbar for the lot, the gauges left the screen. When the
+                      window is short the details give way first: the folder keeps room for its tabs
+                      and a few rows (at 620 px it was squeezed to nothing and the gauges were drawn
+                      over its tabs), and the gauges keep theirs. */}
+                  <div className="shrink min-h-0 max-h-[50%] overflow-auto">
                     {screen === "sessions" && session ? (
                       <SessionDetail session={session} />
                     ) : project ? (
@@ -909,12 +911,12 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                     ) : null}
                   </div>
                   {showPane ? (
-                    <div data-testid="files-section" className="flex-1 min-h-0 flex flex-col border-t border-ink-600">
+                    <div data-testid="files-section" className="flex-1 min-h-[7.5rem] overflow-hidden flex flex-col border-t border-ink-600">
                       {sidePane}
                     </div>
                   ) : <div className="flex-1" />}
 
-                  <div className="shrink-0 p-3 space-y-2 border-t border-ink-600">
+                  <div data-testid="aside-gauges" className="shrink-0 p-3 space-y-2 border-t border-ink-600">
                     <UsageGauges windows={usageWindows} />
                     {monitoring ? <MachineGauges wide /> : null}
                     <div className="text-[11px] text-bone-500">
