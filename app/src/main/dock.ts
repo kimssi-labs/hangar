@@ -809,14 +809,6 @@ export class Dock {
   }
 
   /**
-   * Re-reserve the edge at the size the band already has, leaving the window where it is.
-   *
-   * The alternative — re-applying the dock — recomputes the band from a percentage rounded to a
-   * whole number, so a drag settled at 487 px was answered by placing the window at 480: the band
-   * visibly jumped once, at the end of every resize. One percent of a tall screen is twenty pixels.
-   * The shell only needs to be told the new extent; the window is already correct.
-   */
-  /**
    * Move the band to a new thickness without telling the shell — for a drag in progress.
    *
    * Reserving costs the best part of half a second (the shell notifies every top-level window), so
@@ -837,6 +829,14 @@ export class Dock {
     this.place(band.band);
   }
 
+  /**
+   * Re-reserve the edge at the size the band already has, leaving the window where it is.
+   *
+   * The alternative — re-applying the dock — recomputes the band from a percentage rounded to a
+   * whole number, so a drag settled at 487 px was answered by placing the window at 480: the band
+   * visibly jumped once, at the end of every resize. One percent of a tall screen is twenty pixels.
+   * The shell only needs to be told the new extent; the window is already correct.
+   */
   async resizeTo(thickness: number): Promise<void> {
     const config = this.current;
     this.dragging = false;                        // the hand is off; re-asserting may resume
