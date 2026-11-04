@@ -36,12 +36,42 @@
 @layer components {
   /* The window has no title bar of its own: this strip is what you drag it by. */
   .drag { -webkit-app-region: drag; }
+  /* The title strip's colour: the panel at 60 % over the page, as the translucent strip it was came
+     out — mixed once, opaque, so there is nothing behind it to blend or blur on every frame. */
+  .title-bar { background: color-mix(in srgb, rgb(var(--panel)) 60%, rgb(var(--surface))); }
   .no-drag { -webkit-app-region: no-drag; }
   /* Scrollable, but without a visible bar: in a 32 px strip the bar is taller than the content. */
   .no-bar { scrollbar-width: none; }
   .no-bar::-webkit-scrollbar { display: none; }
-  /* relative: a narrow row measures itself with a zero-height probe inside it. */
-  .row { @apply relative flex items-center gap-3 px-3 py-2 rounded-lg cursor-default; }
+  /* A row is the container its numbers are laid out against (.row-figures below). Off screen it
+     skips layout and paint until scrolled to; 52 px is a two-line row as drawn, and once a row has
+     been drawn its own height is remembered instead (auto). */
+  .row {
+    @apply flex flex-wrap items-center gap-3 px-3 py-2 rounded-lg cursor-default;
+    container-type: inline-size;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 52px;
+  }
+  /* A row's numbers: beside the name where there is room, on a line of their own under it where
+     there is not. Below these widths a row cannot hold its name and its numbers on one line: a
+     project row spends about 110 px on the session count and the time, a LIVE session row 324 (a
+     96 px sparkline, 96 px of CPU and memory, a 112 px size-and-time column), which at a 460 px
+     row left "Claude Projects" as "Claude Pro…". Measured across the padding box they were 300 and
+     520 px; a container query sees the content box, 24 px of padding less. The row always wraps:
+     with the name flexible from zero, only numbers that are full width go to a second line. */
+  .row-figures { @apply shrink-0 tabular-nums text-right; }
+  .row-figures > :first-child { @apply text-xs text-bone-300; }
+  .row-figures > :last-child { @apply text-[11px] text-bone-500; }
+  .row-session .row-figures, .row-live .row-figures { @apply w-28; }
+  @container (max-width: 275.98px) {
+    .row .row-figures { @apply w-full pl-5 flex gap-2 text-[11px] text-bone-400 text-left; }
+    .row .row-figures > :first-child { font-size: inherit; line-height: inherit; color: inherit; }
+  }
+  @container (max-width: 495.98px) {
+    .row-live .row-figures { @apply w-full pl-5 flex gap-2 text-[11px] text-bone-400 text-left; }
+    .row-live .row-figures > :first-child { font-size: inherit; line-height: inherit; color: inherit; }
+    .row-live .row-usage { @apply w-full pl-5; }
+  }
   .row-selected { @apply bg-ink-700 ring-1 ring-accent/40; }
   .card { @apply bg-ink-800 border border-ink-600 rounded-xl; }
   .chip { @apply text-[11px] px-1.5 py-0.5 rounded-md bg-ink-700 text-bone-400; }

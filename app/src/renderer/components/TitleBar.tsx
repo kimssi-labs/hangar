@@ -16,7 +16,7 @@ export function TitleBar({ version, draggable = true, controls }: {
 }) {
   return (
     <header
-      className={`${draggable ? "drag" : ""} flex h-8 shrink-0 items-center gap-2 border-b border-ink-600 bg-ink-800/60 pl-2 backdrop-blur`}
+      className={`${draggable ? "drag" : ""} flex h-8 shrink-0 items-center gap-2 border-b border-ink-600 title-bar pl-2`}
     >
       {/* The app's own mark, so a docked band still says whose band it is. */}
       <img src="./icon.png" alt="" className="h-4 w-4 shrink-0 rounded-sm" />

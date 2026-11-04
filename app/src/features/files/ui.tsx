@@ -72,10 +72,11 @@ export interface Files {
 /**
  * The folder of one project, as far as it has been opened.
  *
- * Nothing is read until there is a project and the setting is on, and a directory is read when it
- * is expanded — never a walk of the tree. What is already open is read again on `refresh`, which
- * the screen calls on its own fifteen-second tick, so a file the agent just wrote appears without
- * anyone pressing anything.
+ * Nothing is read until there is a project and the panel is on screen (`enabled`), and a directory
+ * is read when it is expanded — never a walk of the tree. What is already open is read again on
+ * `refresh`, which the screen calls on its own fifteen-second tick, so a file the agent just wrote
+ * appears without anyone pressing anything; and again at once whenever the panel comes back on
+ * screen, so what it shows then is current rather than as it was when it left.
  */
 export function useFiles(cwd: string | null, enabled: boolean): Files {
   const [listings, setListings] = useState<Map<string, DirListing>>(new Map());
@@ -89,6 +90,9 @@ export function useFiles(cwd: string | null, enabled: boolean): Files {
   // set changes, or every expand would restart the timer.
   const openDirs = useRef<Set<string>>(new Set());
   openDirs.current = expanded;
+  // The project being shown, for an answer that arrives after the project changed: it is dropped.
+  const shown = useRef(cwd);
+  shown.current = cwd;
 
   const read = useCallback(async (dir: string): Promise<void> => {
     if (!cwd) return;
@@ -105,16 +109,32 @@ export function useFiles(cwd: string | null, enabled: boolean): Files {
     }
   }, [cwd]);
 
+  // A tick re-reads quietly: no loading marks, one state change for every directory at once, and
+  // none at all when nothing changed — a tick that found the folder as it was draws nothing.
   const refresh = useCallback(() => {
     if (!cwd || !enabled) return;
     // The changed list first, and only then the directories: it is the call that warms git's cache,
     // so the rows come back already coloured rather than plain and coloured a tick later.
     void (async () => {
-      setChanged(await api.changedFiles(cwd));
-      await read("");
-      for (const dir of openDirs.current) await read(dir);
+      const nowChanged = await api.changedFiles(cwd);
+      if (shown.current !== cwd) return;
+      setChanged((was) => (JSON.stringify(was) === JSON.stringify(nowChanged) ? was : nowChanged));
+      const dirs = ["", ...openDirs.current];
+      const read = await Promise.all(dirs.map((dir) => api.listDir({ cwd, dir }).catch(() => null)));
+      if (shown.current !== cwd) return;
+      setListings((was) => {
+        // Only the root and what is open: a folder closed since is not kept, or read, again.
+        const next = new Map<string, DirListing>();
+        dirs.forEach((dir, index) => {
+          const listing = read[index] ?? was.get(dir);   // a read that failed keeps what was shown
+          if (listing) next.set(dir, listing);
+        });
+        const same = next.size === was.size
+          && [...next].every(([dir, listing]) => JSON.stringify(was.get(dir)) === JSON.stringify(listing));
+        return same ? was : next;
+      });
     })();
-  }, [cwd, enabled, read]);
+  }, [cwd, enabled]);
 
   // A different project is a different folder: nothing of the last one may show while this one loads.
   useEffect(() => {
@@ -122,8 +142,11 @@ export function useFiles(cwd: string | null, enabled: boolean): Files {
     setExpanded(new Set());
     setChanged({ items: [], hidden: 0 });
     openDirs.current = new Set();
-    refresh();
-  }, [cwd, enabled, refresh]);
+  }, [cwd]);
+
+  // Read on a new project, and whenever the panel comes on screen; switching tabs away and back
+  // keeps the folders that were open.
+  useEffect(() => { refresh(); }, [refresh]);
 
   const toggle = useCallback((dir: string) => {
     setExpanded((was) => {

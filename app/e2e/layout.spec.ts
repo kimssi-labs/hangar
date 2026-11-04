@@ -289,6 +289,58 @@ test("neither thin shape makes the page scroll", async () => {
   }
 });
 
+/**
+ * The gauges draw when their samples or their box change, not on every render, so the canvas has
+ * to follow its box on its own: its backing store matches the box in device pixels, and something
+ * is drawn in it, in both shapes.
+ */
+test("a gauge's canvas follows its box, and is drawn in", async () => {
+  const { app, page } = await launch(fixture());
+  try {
+    const sized = (): Promise<boolean> => page.evaluate(() => {
+      const canvas = document.querySelector(".card canvas") as HTMLCanvasElement | null;
+      if (!canvas || !canvas.clientWidth) return false;
+      const ratio = window.devicePixelRatio || 1;
+      const close = (pixels: number, css: number): boolean => Math.abs(pixels - css * ratio) <= 1;
+      if (!close(canvas.width, canvas.clientWidth) || !close(canvas.height, canvas.clientHeight)) return false;
+      const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+      for (let i = 3; i < data.length; i += 4) if (data[i]) return true;   // the grid at least
+      return false;
+    });
+    for (const [width, height] of [[1200, 800], [430, 900]] as const) {
+      await resize(app, page, width, height);
+      await expect.poll(sized, { timeout: 8000, message: `${width}x${height}` }).toBe(true);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * A row too narrow for its name and its numbers puts the numbers on a line of their own — decided
+ * by a container query on the row now, not by the row measuring itself.
+ */
+test("a narrow row puts its numbers under the name, a wide one beside it", async () => {
+  const { app, page } = await launch(fixture());
+  try {
+    const row = page.locator(".row").filter({ hasText: "workspace" }).first();
+    const below = (): Promise<boolean> => row.evaluate((el) => {
+      const name = el.querySelector(".min-w-0")!.getBoundingClientRect();
+      const figures = el.querySelector(".row-figures")!.getBoundingClientRect();
+      return figures.top >= name.bottom - 1;
+    });
+    // Wide, the project list is its default 288 px column: a row there is under its 300 px.
+    await resize(app, page, 1200, 800);
+    await expect(row).toBeVisible();
+    await expect.poll(below).toBe(true);
+    // Stacked, the list spans the window and the row has room for both on one line.
+    await resize(app, page, 430, 900);
+    await expect.poll(below).toBe(false);
+  } finally {
+    await app.close();
+  }
+});
+
 test("text that does not fit says the whole of itself on hover", async () => {
   // A name long enough to be cut in any window, on any platform: the CI runner's temp paths are
   // short, and a test that only clips on one machine proves nothing on the other.

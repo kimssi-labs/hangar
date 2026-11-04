@@ -9,25 +9,17 @@ import { useEffect, useRef } from "react";
 import { NOT_RUNNING, projectState, sessionMark, statusLabel } from "@core/sessionMark";
 import type { MetricSample, ProjectInfo, SessionInfo } from "@core/types";
 
-import { Sparkline, useElementWidth } from "./Chart";
+import { Sparkline } from "./Chart";
 import { Truncated } from "./Truncated";
 import { formatBytes, formatTime, sinceParts } from "../format";
 import { useText } from "../useText";
 import { gitLabel, gitTitle } from "@core/git";
 import type { Worktree } from "@core/worktree";
+import { useSessionSamples } from "../../features/metrics/ui";
 
-/**
- * Below these widths a row cannot hold its name and its numbers on one line.
- *
- * They differ because the rows carry different fixed content, measured: a project row spends about
- * 110 px on the session count and the time, while a LIVE session row spends 324 — a 96 px
- * sparkline, 96 px of CPU and memory, and a 112 px size-and-time column. At a 460 px row that left
- * the name 90 px and "Claude Projects" became "Claude Pro…", which is the half a reader needs.
- * Narrow, the numbers drop to a second line: the row is taller and all of it is legible.
- */
-const PROJECT_STACK_WIDTH = 300;
-const SESSION_STACK_WIDTH = 300;
-const LIVE_SESSION_STACK_WIDTH = 520;
+// How narrow a row has to be before its numbers drop to a second line is a container query on the
+// row itself (index.css, `.row-figures`), not a measurement in here: a row that measured itself
+// re-rendered on every frame of a divider drag, and drew its first frame in the wrong shape.
 
 /**
  * The state for the pointer to rest on, in the language the window is in.
@@ -41,6 +33,15 @@ function stateTitle(state: string, t: ReturnType<typeof useText>): string {
   return said === key ? state : said;
 }
 
+/**
+ * The mark of something answering right now: the running dot with a ring around it.
+ *
+ * It used to pulse. A pulse is an animation, and an animation that runs for as long as a session
+ * works — hours — kept the compositor drawing at the display's refresh rate the whole time. A ring
+ * says "busy" as plainly to a glance, and costs nothing once it is drawn.
+ */
+const BUSY_MARK = "bg-ok shadow-[0_0_6px] shadow-ok/60 outline outline-1 outline-offset-2 outline-ok/80";
+
 /** A project's own mark: the busiest thing happening inside it. */
 function ProjectMark({ project }: { project: ProjectInfo }) {
   const t = useText();
@@ -49,7 +50,7 @@ function ProjectMark({ project }: { project: ProjectInfo }) {
     <span
       className={`w-2 h-2 rounded-full shrink-0 ${state === NOT_RUNNING
         ? "bg-ink-500"
-        : state === "busy" ? "bg-ok shadow-[0_0_6px] shadow-ok/60 animate-pulse" : "bg-ok shadow-[0_0_6px] shadow-ok/60"}`}
+        : state === "busy" ? BUSY_MARK : "bg-ok shadow-[0_0_6px] shadow-ok/60"}`}
       title={stateTitle(state, t)}
     />
   );
@@ -67,7 +68,7 @@ function Bell() {
 /**
  * What the session is doing, before its name.
  *
- * A dot while it is answering — it pulses, so a glance says something is happening — and a bell once
+ * A ringed dot while it is answering, so a glance says something is happening, and a bell once
  * the turn is the person's, whether Claude Code finished or stopped to ask something. A session that
  * is not running shows the quiet dot it always did: it is a transcript, waiting for nobody.
  */
@@ -78,9 +79,7 @@ function StatusMark({ session }: { session: SessionInfo }) {
   if (mark === "turn") return <span title={label}><Bell /></span>;
   return (
     <span
-      className={`w-2 h-2 rounded-full shrink-0 ${mark === "working"
-        ? "bg-ok shadow-[0_0_6px] shadow-ok/60 animate-pulse"
-        : "bg-ink-500"}`}
+      className={`w-2 h-2 rounded-full shrink-0 ${mark === "working" ? BUSY_MARK : "bg-ink-500"}`}
       title={label}
     />
   );
@@ -144,19 +143,16 @@ export function ProjectRow({
 }) {
   const t = useText();
   const ref = useScrollIntoView(selected);
-  const [box, width] = useElementWidth<HTMLDivElement>();
-  const stacked = width > 0 && width < PROJECT_STACK_WIDTH;
   return (
     <div
       ref={ref}
-      className={`row ${selected ? "row-selected" : "hover:bg-ink-700/60"} ${stacked ? "flex-wrap" : ""}`}
+      className={`row ${selected ? "row-selected" : "hover:bg-ink-700/60"}`}
       style={depth ? { marginLeft: depth * 14 } : undefined}
       onMouseDown={notePointerSelect}
       onClick={onSelect}
       onDoubleClick={onOpen}
       onContextMenu={(event) => { event.preventDefault(); onContextMenu?.(); }}
     >
-      <div ref={box} className="absolute inset-x-0 h-0" aria-hidden="true" />
       {/* A rule down the left, so an indented row reads as belonging to the one above it. */}
       {depth ? <span className="self-stretch w-px bg-ink-600 shrink-0" aria-hidden="true" /> : null}
       <ProjectMark project={project} />
@@ -182,39 +178,39 @@ export function ProjectRow({
           </Truncated>
         ) : null}
       </div>
-      <div className={`shrink-0 tabular-nums ${stacked ? "w-full pl-5 flex gap-2 text-[11px] text-bone-400" : "text-right"}`}>
-        <div className={stacked ? "" : "text-xs text-bone-300"}>{t("list.sessions", { count: project.sessions.length })}</div>
-        <div className={stacked ? "text-bone-500" : "text-[11px] text-bone-500"}>{since(t, project.lastUsed)}</div>
+      <div className="row-figures">
+        <div>{t("list.sessions", { count: project.sessions.length })}</div>
+        <div>{since(t, project.lastUsed)}</div>
       </div>
     </div>
   );
 }
 
 export function SessionRow({
-  session, selected, samples, onSelect, onOpen, onContextMenu,
+  session, selected, onSelect, onOpen, onContextMenu,
 }: {
   session: SessionInfo;
   selected: boolean;
-  samples: MetricSample[];
+  /**
+   * Unused: the row reads its own series (`RowUsage`), so a sample re-renders the readings and not
+   * the list around them. Still accepted because the lists pass it.
+   */
+  samples?: readonly MetricSample[];
   onSelect: () => void;
   onOpen: () => void;
   onContextMenu?: () => void;
 }) {
   const t = useText();
   const ref = useScrollIntoView(selected);
-  const [box, width] = useElementWidth<HTMLDivElement>();
-  const stacked = width > 0 && width < (session.live ? LIVE_SESSION_STACK_WIDTH : SESSION_STACK_WIDTH);
-  const latest = samples.length ? samples[samples.length - 1] : null;
   return (
     <div
       ref={ref}
-      className={`row ${selected ? "row-selected" : "hover:bg-ink-700/60"} ${stacked ? "flex-wrap" : ""}`}
+      className={`row ${session.live ? "row-live" : "row-session"} ${selected ? "row-selected" : "hover:bg-ink-700/60"}`}
       onMouseDown={notePointerSelect}
       onClick={onSelect}
       onDoubleClick={onOpen}
       onContextMenu={(event) => { event.preventDefault(); onContextMenu?.(); }}
     >
-      <div ref={box} className="absolute inset-x-0 h-0" aria-hidden="true" />
       <StatusMark session={session} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
@@ -225,27 +221,38 @@ export function SessionRow({
           {session.named && session.prompt ? session.prompt : session.id}
         </Truncated>
       </div>
-      {session.live ? (
-        // CPU and memory are different questions, so each gets its own line and its own number.
-        <div className={`flex items-center gap-3 shrink-0 ${stacked ? "w-full pl-5" : ""}`}>
-          <span className="flex items-center gap-1.5" title={t("tip.rowCpu")}>
-            <Sparkline samples={samples} field="cpu" className="w-16" />
-            <span className="text-[11px] text-bone-400 tabular-nums">
-              {latest ? `${latest.cpu.toFixed(0)}%` : "—"}
-            </span>
-          </span>
-          <span className="flex items-center gap-1.5" title={t("tip.rowMemory")}>
-            <Sparkline samples={samples} field="memoryBytes" className="w-16" />
-            <span className="text-[11px] text-bone-400 tabular-nums">
-              {latest ? formatBytes(latest.memoryBytes) : "—"}
-            </span>
-          </span>
-        </div>
-      ) : null}
-      <div className={`shrink-0 tabular-nums ${stacked ? "w-full pl-5 flex gap-2 text-[11px] text-bone-400" : "text-right w-28"}`}>
-        <div className={stacked ? "" : "text-xs text-bone-300"}>{formatBytes(session.bytes)}</div>
-        <div className={stacked ? "text-bone-500" : "text-[11px] text-bone-500"}>{formatTime(session.modifiedAt)}</div>
+      {session.live ? <RowUsage sessionId={session.id} /> : null}
+      <div className="row-figures">
+        <div>{formatBytes(session.bytes)}</div>
+        <div>{formatTime(session.modifiedAt)}</div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A live row's CPU and memory, subscribed on its own: a sample re-renders these two readings, not
+ * the row, the list or the window around them.
+ */
+function RowUsage({ sessionId }: { sessionId: string }) {
+  const t = useText();
+  const samples = useSessionSamples(sessionId);
+  const latest = samples[samples.length - 1] ?? null;
+  return (
+    // CPU and memory are different questions, so each gets its own line and its own number.
+    <div className="row-usage flex items-center gap-3 shrink-0">
+      <span className="flex items-center gap-1.5" title={t("tip.rowCpu")}>
+        <Sparkline samples={samples} field="cpu" className="w-16" />
+        <span className="text-[11px] text-bone-400 tabular-nums">
+          {latest ? `${latest.cpu.toFixed(0)}%` : "—"}
+        </span>
+      </span>
+      <span className="flex items-center gap-1.5" title={t("tip.rowMemory")}>
+        <Sparkline samples={samples} field="memoryBytes" className="w-16" />
+        <span className="text-[11px] text-bone-400 tabular-nums">
+          {latest ? formatBytes(latest.memoryBytes) : "—"}
+        </span>
+      </span>
     </div>
   );
 }
@@ -310,9 +317,18 @@ export function ProjectDetail({ project, worktrees = [] }: {
   );
 }
 
-export function SessionDetail({ session, samples }: { session: SessionInfo; samples: MetricSample[] }) {
+/** The detail panel's one live line, subscribed on its own like a row's readings. */
+function SessionUsing({ sessionId }: { sessionId: string }) {
   const t = useText();
-  const latest = samples.length ? samples[samples.length - 1] : null;
+  const samples = useSessionSamples(sessionId);
+  const latest = samples[samples.length - 1];
+  return latest ? (
+    <Field label={t("detail.using")}>{`${latest.cpu.toFixed(0)}% CPU · ${formatBytes(latest.memoryBytes)}`}</Field>
+  ) : null;
+}
+
+export function SessionDetail({ session }: { session: SessionInfo }) {
+  const t = useText();
   return (
     <div className="p-4">
       <h2 className="text-sm font-medium text-bone-100 mb-2">{session.title}</h2>
@@ -326,9 +342,7 @@ export function SessionDetail({ session, samples }: { session: SessionInfo; samp
         {session.live ? t("detail.state.running", { pid: String(session.pid) }) : t("detail.state.idle")}
       </Field>
       {session.continues ? <Field label={t("detail.continues")}>{t("detail.continues.value", { count: session.continues })}</Field> : null}
-      {session.live && latest ? (
-        <Field label={t("detail.using")}>{`${latest.cpu.toFixed(0)}% CPU · ${formatBytes(latest.memoryBytes)}`}</Field>
-      ) : null}
+      {session.live ? <SessionUsing sessionId={session.id} /> : null}
       <Field label={t("detail.file")}>{session.file}</Field>
     </div>
   );

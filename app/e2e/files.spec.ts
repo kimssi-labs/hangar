@@ -178,6 +178,42 @@ test("turning the folder off in settings stops it being drawn at all", async () 
   }
 });
 
+/**
+ * The folder is read only while it is on screen. With the Skills tab in front, the refresh the
+ * fifteen-second tick runs (F5 runs the same one) must not read it; turning back to Files reads it
+ * at once, so a file made in the meantime is there without waiting for the next tick.
+ */
+test("the folder is not read while another tab is in front, and is read at once on coming back", async () => {
+  const { home, workspace } = fixture("vertical");
+  const { app, page } = await launch(home, 1400, 900);
+  try {
+    const column = page.getByTestId("files-column");
+    await expect(column.getByTitle("package.json", { exact: true })).toBeVisible();
+    await page.getByTestId("pane-tab-skills").click();
+    // Counted where the read is served: the bridge the page holds cannot be wrapped (contextBridge
+    // hands over a frozen copy), so the main process's handler for the channel is.
+    await app.evaluate(({ ipcMain }) => {
+      type Handler = (...args: unknown[]) => unknown;
+      const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, Handler> })._invokeHandlers;
+      const original = handlers.get("files:list")!;
+      const counter = globalThis as unknown as { folderReads: number };
+      counter.folderReads = 0;
+      handlers.set("files:list", (...args: unknown[]) => { counter.folderReads += 1; return original(...args); });
+    });
+    writeFileSync(join(workspace, "fresh.txt"), "new");
+    await page.keyboard.press("F5");
+    await page.waitForTimeout(1500);
+    const reads = (): Promise<number> => app.evaluate(() => (globalThis as unknown as { folderReads: number }).folderReads);
+    expect(await reads(), "no folder read while Skills is in front").toBe(0);
+
+    await page.getByTestId("pane-tab-files").click();
+    await expect(column.getByTitle("fresh.txt", { exact: true })).toBeVisible({ timeout: 3000 });
+    expect(await reads(), "the spy saw the reads coming back").toBeGreaterThan(0);
+  } finally {
+    await app.close();
+  }
+});
+
 test("a drag onto a folder moves the file there, on disk", async () => {
   const { home, workspace } = fixture("vertical");
   const { app, page } = await launch(home, 1400, 900);

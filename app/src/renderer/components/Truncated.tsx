@@ -36,7 +36,17 @@ export function Truncated({ children, title, className = "", as = "div", testId 
     else element.removeAttribute("title");
   }, [title]);
 
-  useLayoutEffect(measure);
+  // Measured when the text or the tooltip changes, not on every render: reading scrollWidth forces a
+  // layout, and with a label in every row that was a layout per label per render. The text is read
+  // from the DOM, which costs no layout, so a child that is not a plain string is covered too; a
+  // change of width is the observer's below.
+  const measured = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const key = `${title ?? ""}\u0000${ref.current?.textContent ?? ""}`;
+    if (key === measured.current) return;
+    measured.current = key;
+    measure();
+  });
 
   useEffect(() => {
     const element = ref.current;

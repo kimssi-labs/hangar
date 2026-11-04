@@ -9,7 +9,7 @@
  * Claude usage gauges `features/usage`. This file knows neither, so a change to one cannot reach
  * the other through it (pinned by the boundaries test).
  */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type DependencyList } from "react";
 
 import type { MetricSample } from "@core/types";
 
@@ -19,29 +19,94 @@ import { Truncated } from "./Truncated";
 const ACCENT = "#d97757";
 const ACCENT_SOFT = "rgba(217, 119, 87, 0.18)";
 
-/** A palette token as a canvas colour — the grid has to invert with the theme like everything else. */
-function token(name: string, alpha: number): string {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  const channels = raw ? raw.split(/\s+/).join(", ") : "128, 128, 128";
-  return `rgba(${channels}, ${alpha})`;
+/** The theme the page is in, as `useTheme` stamps it on the root — read without a style lookup. */
+const themeName = (): string => document.documentElement.dataset["theme"] ?? "";
+
+/** One observer for every chart: the charts redraw when the theme changes, and at no other time for it. */
+const themeListeners = new Set<() => void>();
+let themeObserver: MutationObserver | null = null;
+function subscribeTheme(listener: () => void): () => void {
+  themeListeners.add(listener);
+  if (!themeObserver) {
+    themeObserver = new MutationObserver(() => { for (const each of themeListeners) each(); });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+  return () => { themeListeners.delete(listener); };
 }
 
-function useCanvas(draw: (context: CanvasRenderingContext2D, width: number, height: number) => void): React.RefObject<HTMLCanvasElement> {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current;
+/** Palette tokens as canvas colours, per theme: a style lookup once per theme, not once per draw. */
+const colours = new Map<string, string>();
+
+/** A palette token as a canvas colour — the grid has to invert with the theme like everything else. */
+function token(name: string, alpha: number): string {
+  const key = `${themeName()}|${name}|${alpha}`;
+  let colour = colours.get(key);
+  if (colour === undefined) {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const channels = raw ? raw.split(/\s+/).join(", ") : "128, 128, 128";
+    colour = `rgba(${channels}, ${alpha})`;
+    colours.set(key, colour);
+  }
+  return colour;
+}
+
+/** The canvas's size in CSS pixels, and in device pixels for its backing store. */
+interface CanvasSize { width: number; height: number; pixelWidth: number; pixelHeight: number }
+
+/**
+ * A canvas drawn by `draw` — again only when `deps`, its size or the theme change.
+ *
+ * It used to draw on every render, which with a sample a second meant every chart on screen was
+ * reallocated (assigning width/height always does), measured and painted once a second whether
+ * anything in it had moved or not. The size comes from a ResizeObserver in device pixels, so a
+ * move to a screen of another DPI redraws it sharp; the backing store is resized only when that
+ * size actually differs.
+ */
+function useCanvas(
+  draw: (context: CanvasRenderingContext2D, width: number, height: number) => void,
+  deps: DependencyList,
+): (canvas: HTMLCanvasElement | null) => void {
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [size, setSize] = useState<CanvasSize | null>(null);
+  const theme = useSyncExternalStore(subscribeTheme, themeName);
+
+  useLayoutEffect(() => {
     if (!canvas) return;
     const ratio = window.devicePixelRatio || 1;
-    const { clientWidth, clientHeight } = canvas;
-    canvas.width = Math.max(1, Math.round(clientWidth * ratio));
-    canvas.height = Math.max(1, Math.round(clientHeight * ratio));
+    const read = (width: number, height: number, pixelWidth: number, pixelHeight: number): void => setSize((was) =>
+      was && was.width === width && was.height === height && was.pixelWidth === pixelWidth && was.pixelHeight === pixelHeight
+        ? was
+        : { width, height, pixelWidth, pixelHeight });
+    read(canvas.clientWidth, canvas.clientHeight, Math.round(canvas.clientWidth * ratio), Math.round(canvas.clientHeight * ratio));
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const device = entry.devicePixelContentBoxSize?.[0];
+      const scale = window.devicePixelRatio || 1;
+      const { width, height } = entry.contentRect;
+      read(width, height, device ? device.inlineSize : Math.round(width * scale), device ? device.blockSize : Math.round(height * scale));
+    });
+    try {
+      observer.observe(canvas, { box: "device-pixel-content-box" });
+    } catch {
+      observer.observe(canvas);                    // no device-pixel box here: CSS size times the ratio
+    }
+    return () => observer.disconnect();
+  }, [canvas]);
+
+  useEffect(() => {
+    if (!canvas || !size) return;
+    const pixelWidth = Math.max(1, size.pixelWidth);
+    const pixelHeight = Math.max(1, size.pixelHeight);
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     const context = canvas.getContext("2d");
     if (!context) return;
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    context.clearRect(0, 0, clientWidth, clientHeight);
-    draw(context, clientWidth, clientHeight);
-  });
-  return ref;
+    context.setTransform(pixelWidth / Math.max(1, size.width), 0, 0, pixelHeight / Math.max(1, size.height), 0, 0);
+    context.clearRect(0, 0, size.width, size.height);
+    draw(context, size.width, size.height);
+  }, [canvas, size, theme, ...deps]);
+  return setCanvas;
 }
 
 function path(
@@ -61,7 +126,7 @@ function path(
 }
 
 export function Sparkline({ samples, field = "cpu", max = 100, className = "w-24" }: {
-  samples: MetricSample[];
+  samples: readonly MetricSample[];
   /** What to plot. Memory is plotted against its own peak — the shape, with the number beside it. */
   field?: "cpu" | "memoryBytes";
   max?: number;
@@ -98,7 +163,7 @@ export function Sparkline({ samples, field = "cpu", max = 100, className = "w-24
     context.strokeStyle = ACCENT;
     context.lineWidth = 1.5;
     context.stroke();
-  });
+  }, [samples, field, max]);
   return <canvas ref={ref} className={`h-6 ${className}`} />;
 }
 
@@ -192,7 +257,7 @@ export function UprightBar({ percent, tone }: { percent: number; tone: string })
 }
 
 export interface AreaChartProps {
-  samples: MetricSample[];
+  samples: readonly MetricSample[];
   /** Which field to plot, and the ceiling it is measured against. */
   field: "cpu" | "memoryBytes";
   max: number;
@@ -237,7 +302,7 @@ export function AreaChart({ samples, field, max, label, value, total, short, cla
     context.closePath();
     context.fillStyle = ACCENT_SOFT;
     context.fill();
-  });
+  }, [samples, field, max]);
 
   const latest = samples.length ? samples[samples.length - 1] : null;
   const percent = latest
