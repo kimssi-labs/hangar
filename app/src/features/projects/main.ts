@@ -150,12 +150,9 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
         // Only a name the user chose. --name is persisted as a *custom* title, so passing the title
         // this app happens to be showing overwrites the one Claude Code generated — permanently, in
         // its own tab and /resume picker too. Left alone, it keeps refining that title as the
-        // conversation grows, and this app now reads it rather than competing with it.
+        // conversation grows, and this app now reads it rather than competing with it. The same
+        // name titles the tab; an unnamed session's tab is Claude Code's to name.
         displayName: session?.named ? session.title : null,
-        // Only a renamed session states its tab title. Claude Code names the tab itself, from the
-        // same session name this app shows, and keeps renaming it as the conversation grows — so
-        // the two agree without us, and a title of ours would just be overwritten a second later.
-        tabTitle: session?.named ? session.title : null,
         config: launch,
         target: request.target,
         platform: process.platform,
