@@ -11,14 +11,14 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { MENU_SEPARATOR } from "@core/constants";
 import { nameOf, type DirEntry, type DirListing, type FileStatus } from "@core/fileTree";
 
-import { api } from "../../renderer/api";
+import { api, type ActionResult, type MenuItemSpec } from "../../renderer/api";
 import { Choice } from "../../renderer/components/SettingsCard";
 import { useRovingRows } from "../../renderer/components/SidePane";
 import { Truncated } from "../../renderer/components/Truncated";
 import { useText } from "../../renderer/useText";
-import { api as bridge, MENU_SEPARATOR, type ActionResult, type MenuItemSpec } from "../../renderer/api";
 import type { Ask, AskResult } from "../../renderer/components/Modal";
 import type { Translate } from "@core/i18n";
 import type { ChangedFiles } from "./contract";
@@ -238,7 +238,7 @@ export function fileMenuItems(entry: { directory: boolean }, t: Translate): Menu
  */
 async function runFileMenu(entry: DirEntry, files: Files, ui: FilesUi): Promise<void> {
   const { askUser, notify, t } = ui;
-  const choice = await bridge.contextMenu(fileMenuItems(entry, t));
+  const choice = await api.contextMenu(fileMenuItems(entry, t));
   if (!isFileAction(choice)) return;
   switch (choice) {
     case "open": {

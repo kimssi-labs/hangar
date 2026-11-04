@@ -71,7 +71,7 @@ export interface ActionResult {
   message?: string;
 }
 
-/** One entry of a right-click menu; an id of MENU_SEPARATOR draws a line instead. */
+/** One entry of a right-click menu; an id of MENU_SEPARATOR (core/constants.ts) draws a line instead. */
 export interface MenuItemSpec {
   id: string;
   label: string;
@@ -79,7 +79,6 @@ export interface MenuItemSpec {
   /** Present at all: the item is a checkbox, ticked or not. */
   checked?: boolean;
 }
-export const MENU_SEPARATOR = "-";
 
 /** Adding a project: where it landed, when a folder was actually picked. Shared with worktrees. */
 export interface AddProjectResult extends ActionResult {

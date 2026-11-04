@@ -26,6 +26,8 @@ export const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 export const LAYOUT_MODES: LayoutMode[] = ["auto", "horizontal", "vertical"];
 /** The side pane's tabs, in the order they are drawn. */
 export const SIDE_PANE_TABS: SidePaneTab[] = ["files", "skills", "artifacts"];
+/** The id of a right-click menu entry that is drawn as a line rather than an item. */
+export const MENU_SEPARATOR = "-";
 /** Ctrl+Alt+V: near the paste it assists, and not a shortcut a terminal or editor already wants. */
 export const DEFAULT_PASTE_HOTKEY = "CommandOrControl+Alt+V";
 /** The stacking width is a real window width, so the useful range is a real window's range. */

@@ -14,6 +14,7 @@ import { app, BrowserWindow, ipcMain, Menu, Notification, screen, shell } from "
 import { wire } from "../bridge/build.js";
 import type { MainContext } from "../bridge/context.js";
 import { ConfigStore } from "../core/config.js";
+import { MENU_SEPARATOR } from "../core/constants.js";
 import { CLAUDE_HOME_ENV, claudeHome } from "../core/paths.js";
 import { Store } from "../core/store.js";
 import { followTheme, resolveTheme, surfaceFor, WindowChrome, withoutFrame } from "./chrome.js";
@@ -30,7 +31,7 @@ import { register as registerUpdates } from "../features/updates/main.js";
 import { register as registerUsage } from "../features/usage/main.js";
 import { openingRect } from "../core/windowPlacement.js";
 import { which } from "./executables.js";
-import { CHANNEL, MENU_SEPARATOR, PAGES, type ActionResult, type AppInfo, type MenuItemSpec, type PageName, type WindowCommand, type WindowState } from "./ipc.js";
+import { CHANNEL, PAGES, type ActionResult, type AppInfo, type MenuItemSpec, type PageName, type WindowCommand, type WindowState } from "./ipc.js";
 
 const DEV_SERVER = "http://localhost:5273";
 const WINDOW = { width: 1180, height: 760, minWidth: 420, minHeight: 320 } as const;

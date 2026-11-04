@@ -21,9 +21,9 @@ import { UsageGauges, useUsage } from "../features/usage/ui";
 import { MachineGauges, useMetrics } from "../features/metrics/ui";
 import { usePasteResults } from "../features/clipboard/ui";
 import type { ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
-import { SIDE_PANE_TABS } from "@core/constants";
+import { MENU_SEPARATOR, SIDE_PANE_TABS } from "@core/constants";
 
-import { api, MENU_SEPARATOR, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
+import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
 import { chosenMonitor } from "../features/dock/contract";
 import { DockButton, DockGrip, useDock } from "../features/dock/ui";
 import { ProjectDetail, ProjectTitle, projectRowId, SessionDetail, sessionRowId } from "./components/Lists";
