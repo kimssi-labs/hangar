@@ -38,7 +38,7 @@ import { SkillsPane, useSkills } from "../features/skills/ui";
 import { ArtifactsPane, useArtifacts } from "../features/artifacts/ui";
 import { SidePane, usePaneOpen } from "./components/SidePane";
 import type { ArtifactScope } from "@core/artifactOrigins";
-import { hasFileColumn, STACK_MIN, stackedTopHeight, useLayoutMode } from "./useLayoutMode";
+import { hasFileColumn, STACK_MIN, stackedTopHeight, useLayoutMode, useMeasured } from "./useLayoutMode";
 import { useTheme } from "./useTheme";
 import { TextProvider, useText } from "./useText";
 
@@ -131,8 +131,9 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const [stackFraction, setStackFraction] = useState(0);
   /** The side pane's share of the stack when it sits under the sessions; 0 is its default height. */
   const [paneFraction, setPaneFraction] = useState(0);
-  /** Measured height of the stacked pair, so the divider can be kept inside it. */
-  const [stackHeight, setStackHeight] = useState(0);
+  // The room the two stacked panes share, measured rather than guessed from the window: the header
+  // and toolbar above them came to 149 px here, which is more than a divider can spare.
+  const [stackHeight, stackRef] = useMeasured("height");
   const [fileColumn, setFileColumn] = useState(false);
   const filesRef = useRef<() => void>(() => undefined);
   useTheme(theme);
@@ -201,38 +202,11 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     api.holdKeyboard(Boolean(editing) || screen === "settings" || dialog !== null || searching);
   }, [editing, screen, dialog, searching]);
 
-  // Measure the room the two stacked panes share, rather than guessing it from the window: the
-  // header and toolbar above them came to 149 px here, which is more than a divider can spare.
-  // Measured whenever the stack is drawn, not when the shape changes: docking from the settings
-  // screen turns the window into a stack while no stack is on screen, the height read 0, and the
-  // dividers were pinned at their minimum until the shape changed again.
-  const stackObserver = useRef<ResizeObserver | null>(null);
-  const stackRef = useCallback((element: HTMLDivElement | null) => {
-    stackObserver.current?.disconnect();
-    stackObserver.current = null;
-    if (!element) { setStackHeight(0); return; }
-    setStackHeight(element.getBoundingClientRect().height);
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => setStackHeight(entry?.contentRect.height ?? 0));
-    observer.observe(element);
-    stackObserver.current = observer;
-  }, []);
   useEffect(() => { void api.windowState().then(setWindowState); }, []);
 
   // How wide the right-hand panel is, whichever shape drew it, so the top bar can split where the
   // panes below split: the project search spans the lists, the buttons sit over the panel.
-  const [asidePx, setAsidePx] = useState(0);
-  const asideObserver = useRef<ResizeObserver | null>(null);
-  const asideRef = useCallback((element: HTMLElement | null) => {
-    asideObserver.current?.disconnect();
-    asideObserver.current = null;
-    if (!element) { setAsidePx(0); return; }
-    setAsidePx(element.getBoundingClientRect().width);
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => setAsidePx(element.getBoundingClientRect().width));
-    observer.observe(element);
-    asideObserver.current = observer;
-  }, []);
+  const [asidePx, asideRef] = useMeasured("width");
 
   // The list as it is drawn — one array for both the drawing and the keyboard, or the arrow keys
   // would walk a different list from the one on screen.
