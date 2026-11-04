@@ -45,10 +45,8 @@ export interface HomePaths {
   skills: string;
   /** Where a pasted screenshot is written, so a terminal session can be given its path. */
   clips: string;
-  /** Claude Code's own settings file; read only to take an older version's hook back out. */
+  /** Claude Code's own settings file; read only to learn which plugins are enabled. */
   settings: string;
-  /** Directory older versions wrote a hook script into; only ever cleaned now. */
-  hooks: string;
   /** Claude Code's login, kept for its own requests; read here only to ask its usage endpoint. */
   credentials: string;
 }
@@ -72,7 +70,6 @@ export function homePaths(root = claudeHome()): HomePaths {
     skills: join(root, "skills"),
     clips: join(root, "cache", "hangar-clips"),
     settings: join(root, "settings.json"),
-    hooks: join(root, "hooks"),
     credentials: join(root, ".credentials.json"),
   };
 }

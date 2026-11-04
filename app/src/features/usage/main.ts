@@ -8,14 +8,9 @@
  * (core/usageEndpoint.ts). A timer of this process does the asking whether or not the window is
  * looking — every minute while a Claude Code session is running, every ten minutes otherwise, and
  * never twice within a minute; a double-click on any gauge asks at once, and the card turned off
- * asks for nothing at all. Nothing to install,
- * nothing to switch on, and nothing spent: the endpoint is a reading, not a model call.
- *
- * Earlier versions offered a Stop hook instead (core/usageHook.ts says what became of it); one an
- * older version installed is taken back out at start-up.
+ * asks for nothing at all. Nothing to install, nothing to switch on, and nothing spent: the
+ * endpoint is a reading, not a model call.
  */
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { net } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
@@ -24,7 +19,6 @@ import { readJson, writeJson } from "../../core/json.js";
 import { homePaths } from "../../core/paths.js";
 import { readStatus, readStatusUpdatedAt } from "../../core/status.js";
 import { accessTokenFrom, backoffFor, cacheFromEndpoint, type EndpointFailure, failureFor, loginState, OAUTH_BETA, shouldAsk, USAGE_ENDPOINT, USER_AGENT } from "../../core/usageEndpoint.js";
-import { hookFileName, hookInstalled, withoutHook } from "../../core/usageHook.js";
 import { usageContract, type UsageState } from "./contract.js";
 
 /** What the rest of main may ask of this feature. */
@@ -40,58 +34,6 @@ export interface UsageFeature {
   start(): void;
   /** Stop asking; the app is leaving. */
   stop(): void;
-}
-
-/**
- * Claude Code's own settings file, read as it is.
- *
- * It is the user's file, not ours: they may have hooks, permissions and anything else in it, and
- * writing our own object over it would delete every setting they have. So an unreadable file stops
- * the operation rather than starting from an empty one — "absent" and "unparseable" are different
- * answers, and only the first is a file we may leave alone without a word.
- */
-function readClaudeSettings(): { settings: Record<string, unknown>; readable: boolean } {
-  let text: string;
-  try {
-    // A BOM here is normal: plenty of editors and PowerShell itself write one.
-    text = readFileSync(homePaths().settings, "utf8").replace(/^﻿/, "");
-  } catch {
-    return { settings: {}, readable: true };
-  }
-  if (!text.trim()) return { settings: {}, readable: true };
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? { settings: parsed as Record<string, unknown>, readable: true }
-      : { settings: {}, readable: false };
-  } catch {
-    return { settings: {}, readable: false };
-  }
-}
-
-/**
- * Take out the Stop hook an older version installed, once, quietly.
- *
- * Its entry in settings.json and its script go together: the entry alone would have Claude Code
- * report a failing hook at the end of every turn, the script alone would keep running for nothing.
- * Only our own entry is touched (core/usageHook.ts), and a settings file that does not parse is
- * left exactly as it is — the fault is reported, not written over.
- */
-function retireHook(): void {
-  try {
-    const paths = homePaths();
-    const current = readClaudeSettings();
-    if (!hookInstalled(current.settings)) return;
-    if (!current.readable) {
-      console.error(`[hangar] ${paths.settings} is not valid JSON; the old usage hook entry was left in it`);
-      return;
-    }
-    writeFileSync(paths.settings, `${JSON.stringify(withoutHook(current.settings), null, 2)}\n`, "utf8");
-    rmSync(join(paths.hooks, hookFileName(process.platform)), { force: true });
-    console.log("[hangar] the usage hook an older version installed was removed");
-  } catch (error) {
-    console.error("[hangar] retiring the usage hook:", (error as Error).message);
-  }
 }
 
 /** Whether any Claude Code session is running right now, by the registry Claude Code keeps. */
@@ -158,7 +100,6 @@ async function refreshFromEndpoint(landed: () => void, live: boolean, manual = f
 }
 
 export function register(ctx: MainContext, wire: Wire): UsageFeature {
-  retireHook();
   const publish = (): void => wire.emit(usageContract.onStatus, readStatus(undefined, ctx.config.status()));
   /** Whether any gauge is drawn: off is off, and nothing is asked for what nothing shows. */
   const showing = (): boolean => {
