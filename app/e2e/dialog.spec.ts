@@ -24,8 +24,12 @@ test.afterAll(() => {
   }
 });
 
-/** A home whose one project is a real git repository, so the git features have something to act on. */
-function fixture(): { home: string; workspace: string } {
+/**
+ * A home whose one project is a real git repository, so the git features have something to act on.
+ * `separate` keeps the repository's store outside the checkout (`git init --separate-git-dir`), which
+ * leaves a `.git` file there, just as a linked worktree has.
+ */
+function fixture({ separate = false } = {}): { home: string; workspace: string } {
   const root = mkdtempSync(join(tmpdir(), "hangar-dialog-"));
   roots.push(root);
   const home = join(root, ".claude");
@@ -43,7 +47,7 @@ function fixture(): { home: string; workspace: string } {
   const git = (...args: string[]): void => {
     execFileSync("git", args, { cwd: workspace, stdio: "ignore" });
   };
-  git("init", "-q", "-b", "main");
+  git("init", "-q", "-b", "main", ...(separate ? ["--separate-git-dir", join(root, "store.git")] : []));
   git("config", "user.email", "t@e.st");
   git("config", "user.name", "Test");
   writeFileSync(join(workspace, "a.txt"), "hi\n");
@@ -73,8 +77,11 @@ test("the app asks in its own dialog, and a worktree becomes a project", async (
   const { app, page } = await launch(home);
   try {
     await expect(page.getByText("workspace", { exact: true }).first()).toBeVisible();
-    // The branch shows without git being asked anything: it is read from .git.
-    await expect(page.getByText("main", { exact: false }).first()).toBeVisible();
+    // The branch shows beside the name without git being asked anything: it is read from .git.
+    const parentRow = page.locator(".row").filter({
+      has: page.getByTestId("project-name").filter({ hasText: /^workspace$/ }),
+    });
+    await expect(parentRow.getByTestId("project-branch")).toHaveText("[main]");
 
     // The menu is the OS's own and cannot be clicked from here, and the bridge the renderer talks
     // through is frozen, so the stand-in goes where the menu is actually built.
@@ -94,21 +101,24 @@ test("the app asks in its own dialog, and a worktree becomes a project", async (
     await page.getByRole("button", { name: "Create" }).click();
 
     // The worktree exists on disk, and its folder is a project row of its own, called by its
-    // branch: the folder name `<repo>-<branch>` lost the branch to a narrow list. The folder is
-    // still there, in the tooltip.
+    // repository with its branch beside it, as the repository's row is: the folder name
+    // `<repo>-<branch>` would say the branch twice. The folder is still there, in the tooltip.
     const expected = `${workspace}-feature-dialog`;
     await expect.poll(() => existsSync(expected), { timeout: 15000 }).toBe(true);
-    const childName = page.getByTestId("project-name").filter({ hasText: /^feature\/dialog$/ });
-    await expect(childName).toBeVisible();
+    const childRow = page.locator(".row").filter({
+      has: page.getByTestId("project-branch").filter({ hasText: "[feature/dialog]" }),
+    });
+    const childName = childRow.getByTestId("project-name");
+    await expect(childName).toHaveText("workspace");
     await expect(childName).toHaveAttribute("title", /workspace-feature-dialog/);
     // Marked by a drawn fork that says what it is, rather than by the word.
-    const childRow = page.locator(".row").filter({ has: childName });
     await expect(childRow.getByRole("img", { name: "worktree" })).toBeVisible();
-    // The repository's row counts the worktree under it.
-    const parentRow = page.locator(".row").filter({
-      has: page.getByTestId("project-name").filter({ hasText: /^workspace$/ }),
+    // The repository's row counts the worktree under it. Both rows carry the name now; the branch
+    // tells them apart.
+    const repoRow = page.locator(".row").filter({
+      has: page.getByTestId("project-branch").filter({ hasText: "[main]" }),
     });
-    const count = parentRow.getByTitle("1 worktree(s)");
+    const count = repoRow.getByTitle("1 worktree(s)");
     await expect(count).toHaveText("1");
     await expect(count.getByRole("img", { name: "worktree" })).toBeVisible();
 
@@ -119,20 +129,48 @@ test("the app asks in its own dialog, and a worktree becomes a project", async (
     // The worktree sits UNDER its repository rather than beside it: indented, and directly after.
     const rows = await page.evaluate(() => Array.from(document.querySelectorAll(".row"))
       .map((row) => ({
-        name: row.querySelector("[data-testid='project-name']")?.textContent ?? "",
+        branch: row.querySelector("[data-testid='project-branch']")?.textContent ?? "",
         indent: Number.parseFloat(getComputedStyle(row).marginLeft) || 0,
       })));
-    const parent = rows.findIndex((row) => row.name === "workspace");
-    const child = rows.findIndex((row) => row.name === "feature/dialog");
+    const parent = rows.findIndex((row) => row.branch === "[main]");
+    const child = rows.findIndex((row) => row.branch === "[feature/dialog]");
     expect(child).toBe(parent + 1);
     expect(rows[child]?.indent).toBeGreaterThan(0);
     expect(rows[parent]?.indent).toBe(0);
 
-    // Its sessions screen has no repository row above it, so the top bar names the repository.
+    // Its sessions screen has no repository row above it, so the top bar says it the row's way.
     await childName.dblclick();
     const title = page.getByTestId("screen-title");
-    await expect(title).toHaveText(/workspace\s*feature\/dialog/);
+    await expect(title).toHaveText(/workspace\s*\[feature\/dialog\]/);
     await expect(title.getByRole("img", { name: "worktree" })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test("a repository whose store is kept elsewhere is a repository, not a worktree", async () => {
+  // Its `.git` is a file, as a linked worktree's is. Taken for one, the row lost its name to the
+  // branch and its menu offered to remove it as a worktree.
+  const { home } = fixture({ separate: true });
+  const { app, page } = await launch(home);
+  try {
+    const row = page.locator(".row").filter({
+      has: page.getByTestId("project-name").filter({ hasText: /^workspace$/ }),
+    });
+    await expect(row.getByTestId("project-branch")).toHaveText("[main]");
+    await expect(row.getByRole("img", { name: "worktree" })).toHaveCount(0);
+
+    // The menu is the OS's own: keep what it was asked to show, and close it unchosen.
+    await app.evaluate(({ Menu }) => {
+      type Item = { label?: string; enabled?: boolean };
+      (Menu as unknown as { buildFromTemplate: (t: Item[]) => unknown }).buildFromTemplate = (template: Item[]) => {
+        (globalThis as { shownMenu?: Item[] }).shownMenu = template;
+        return { popup: ({ callback }: { callback?: () => void }) => callback?.() };
+      };
+    });
+    await row.click({ button: "right" });
+    await expect.poll(() => app.evaluate(() => (globalThis as { shownMenu?: { label?: string; enabled?: boolean }[] })
+      .shownMenu?.find((item) => item.label === "Remove this worktree…")?.enabled)).toBe(false);
   } finally {
     await app.close();
   }

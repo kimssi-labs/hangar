@@ -109,16 +109,22 @@ function Fork({ className = "w-3 h-3 shrink-0" }: { className?: string }) {
   );
 }
 
-/** The branch on a repository's line: the fork's colour and weight, git's usual drawing. */
-function BranchMark() {
+/**
+ * The branch beside a repository's name, in brackets: `app [main]`. It is the thing to check before
+ * resuming a session, and on the name line it costs no line of its own.
+ *
+ * It keeps up to 60% of that line, so a narrow list cuts the name first: the branch is what tells two
+ * worktrees of one repository apart, and their repository's row above says the name. Only the branch
+ * itself is cut, inside brackets that stay.
+ */
+function Branch({ git }: { git: GitInfo }) {
+  const t = useText();
   return (
-    <svg viewBox="0 0 16 16" className="w-3 h-3 shrink-0 text-tree" fill="none" stroke="currentColor"
-      strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-      <circle cx="4.5" cy="3.5" r="1.75" />
-      <circle cx="4.5" cy="12.5" r="1.75" />
-      <circle cx="11.5" cy="4.5" r="1.75" />
-      <path d="M4.5 5.25v5.5M11.5 6.25c0 3-7 2-7 4.5" />
-    </svg>
+    <span className="inline-flex max-w-[60%] shrink-0 text-xs text-tree" data-testid="project-branch">
+      [<span className="truncate" title={gitTitle(git, t)}>
+        {git.detached ? `${git.head} ${t("list.detached")}` : git.head}
+      </span>]
+    </span>
   );
 }
 
@@ -138,33 +144,19 @@ function TreeCount({ count }: { count: number }) {
 }
 
 /**
- * The repository line: the branch, and what is uncommitted. Only the branch gives way when the row
- * is narrow, so a docked band still shows the mark and the count beside whatever fits of the name.
- */
-function GitLine({ git }: { git: GitInfo }) {
-  const t = useText();
-  return (
-    <div className="flex items-center gap-1 text-[11px] text-bone-400" title={gitTitle(git, t)}>
-      <BranchMark />
-      <span className="truncate">{git.detached ? `${git.head} ${t("list.detached")}` : git.head}</span>
-      <Uncommitted git={git} />
-    </div>
-  );
-}
-
-/**
- * A project's name in the sessions screen's top bar. A worktree reads `<repository> ⑂ <branch>`:
- * there is no row above it there to say which repository it belongs to.
+ * A project's name in the sessions screen's top bar, said the way its row says it: the branch beside
+ * the name, and a worktree marked by the fork and called by its repository. A line of its own, so the
+ * name gives way before the branch here too.
  */
 export function ProjectTitle({ project, projects }: { project: ProjectInfo; projects: ProjectInfo[] }) {
-  if (!project.worktree) return <>{project.name}</>;
-  const parent = project.parentDir ? projects.find((p) => p.dir === project.parentDir) : undefined;
-  const tree = treeName(project, parent?.name ?? null);
+  const parent = project.worktree && project.parentDir
+    ? projects.find((p) => p.dir === project.parentDir) : undefined;
   return (
-    <>
-      {tree.repo ? `${tree.repo} ` : null}
-      <Fork className="inline-block w-3.5 h-3.5 align-[-2px]" /> {tree.name}
-    </>
+    <span className="flex min-w-0 items-center gap-1.5">
+      {project.worktree ? <Fork className="w-3.5 h-3.5 shrink-0" /> : null}
+      <Truncated as="span">{project.worktree ? treeName(project, parent?.name ?? null) : project.name}</Truncated>
+      {project.git ? <Branch git={project.git} /> : null}
+    </span>
   );
 }
 
@@ -246,8 +238,8 @@ export function ProjectRow({
   const t = useText();
   const ref = useScrollIntoView(selected);
   const { git } = project;
-  // A worktree goes by its branch: its folder, `<repo>-<branch>`, lost the branch to a narrow list.
-  const tree = project.worktree ? treeName(project, parent?.name ?? null) : null;
+  // A worktree goes by its repository, with its branch beside it like any repository row.
+  const name = project.worktree ? treeName(project, parent?.name ?? null) : project.name;
   return (
     <div
       ref={ref}
@@ -267,29 +259,24 @@ export function ProjectRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           {project.pinned ? <Pin /> : null}
-          {tree ? <Fork /> : null}
+          {project.worktree ? <Fork /> : null}
           <Truncated
             as="span"
             testId="project-name"
             // A worktree's folder name stays findable: first in its tooltip, above the path.
-            title={tree && project.cwd
+            title={project.worktree && project.cwd
               ? `${project.cwd.split(/[\\/]/).pop()}\n${project.cwd}`
               : project.cwd ?? project.dir}
             className={`text-sm ${project.exists ? "text-bone-100" : "text-bad"}`}
           >
-            {tree ? tree.name : project.name}
-            {/* Under its repository's row the repository goes without saying; anywhere else it is said. */}
-            {tree?.repo && !parent ? <span className="text-bone-500"> · {tree.repo}</span> : null}
+            {name}
           </Truncated>
-          {tree?.isBranch && git ? <Uncommitted git={git} /> : null}
+          {git ? <Branch git={git} /> : null}
+          {git ? <Uncommitted git={git} /> : null}
           {project.hasMemory ? <span className="chip">{t("list.memory")}</span> : null}
           {trees ? <TreeCount count={trees} /> : null}
         </div>
         <Truncated className="text-[11px] text-bone-500">{project.cwd ?? t("list.folderUnknown")}</Truncated>
-        {/* One line, and only where there is a repository: the branch is the thing you check before
-            resuming a session, and opening a terminal to find it out is the friction this removes.
-            A worktree named by its branch already says it, and keeps only the count, beside the name. */}
-        {git && !tree?.isBranch ? <GitLine git={git} /> : null}
       </div>
       <div className="row-figures">
         <div>{t("list.sessions", { count: project.sessions.length })}</div>

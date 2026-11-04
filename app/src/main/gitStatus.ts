@@ -7,8 +7,8 @@
  * branch immediately and gains the count when it arrives.
  */
 import { execFile } from "node:child_process";
-import { access, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { access, existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 import { randomUUID } from "node:crypto";
 
@@ -19,8 +19,8 @@ import {
   type GitSyncConfig, type SyncOutcome,
 } from "../core/gitSync.js";
 import {
-  addArgs, classifyWorktree, cleanBranchName, mainRepoFrom, parseWorktrees, removeArgs, suggestPath,
-  type Worktree, type WorktreeOutcome,
+  addArgs, classifyWorktree, cleanBranchName, gitdirOf, mainRepoFrom, parseWorktrees, removeArgs,
+  suggestPath, type Worktree, type WorktreeOutcome,
 } from "../core/worktree.js";
 
 /** Give up rather than hold anything up; a huge repository is not worth a stalled row. */
@@ -72,10 +72,10 @@ export function gitDir(cwd: string): string | null {
       const stat = statSync(candidate);
       if (stat.isDirectory()) return candidate;
       if (stat.isFile()) {
-        // A linked worktree: the file holds "gitdir: <path>".
-        const pointer = /^gitdir:\s*(.+)$/m.exec(readFileSync(candidate, "utf8"));
-        const target = pointer?.[1]?.trim();
-        if (target) return target;
+        // A pointer file (a linked worktree, a submodule, a separate git dir): "gitdir: <path>",
+        // relative to this folder when a submodule or `worktree.useRelativePaths` wrote it.
+        const target = gitdirOf(readFileSync(candidate, "utf8"));
+        if (target) return resolve(here, target);
       }
     } catch {
       /* not here; try the parent */
@@ -258,10 +258,21 @@ export function mainCheckoutOf(cwd: string): string | null {
   }
 }
 
-/** True when this folder is a linked worktree rather than the repository's own checkout. */
+/**
+ * True when this folder is a linked worktree rather than the repository's own checkout.
+ *
+ * A linked worktree's `.git` is a pointer file, but so is a submodule's, and so is that of a checkout
+ * made with `--separate-git-dir`: an ordinary repository whose store is kept elsewhere (a notes vault
+ * in a synced folder, say). Taking every pointer for a worktree named such a repository by its branch
+ * alone and offered to remove it as a worktree. Only a linked worktree's git directory holds a
+ * `commondir`, naming the repository it shares.
+ */
 export function isLinkedWorktree(cwd: string): boolean {
   try {
-    return statSync(join(cwd, ".git")).isFile();     // a linked worktree's .git is a pointer file
+    const marker = join(cwd, ".git");
+    if (!statSync(marker).isFile()) return false;     // a directory: the repository's own checkout
+    const target = gitdirOf(readFileSync(marker, "utf8"));
+    return target !== null && existsSync(join(resolve(cwd, target), "commondir"));
   } catch {
     return false;
   }
