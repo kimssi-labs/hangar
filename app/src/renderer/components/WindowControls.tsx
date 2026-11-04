@@ -23,7 +23,9 @@ export interface WindowControlsProps {
   slot?: ReactNode;
 }
 
-const BUTTON = "no-drag grid h-8 w-11 place-items-center text-bone-400 transition-colors";
+/** A caption button; `caption-button` lets a narrow title bar narrow them (index.css). */
+export const CAPTION_BUTTON = "caption-button no-drag grid h-8 w-11 place-items-center text-bone-400 transition-colors";
+const BUTTON = CAPTION_BUTTON;
 
 export function WindowControls({ maximized, onMinimize, onMaximize, onClose, onTop, onPin, slot }: WindowControlsProps) {
   const t = useText();
