@@ -151,6 +151,11 @@ export function classifyWorktree(code: number, output: string): WorktreeOutcome 
   return { ok: false, kind: "failed", message: last || "git refused to create the worktree." };
 }
 
+/** The git directory a `.git` pointer file names (`gitdir: <path>`), as written: it may be relative. */
+export function gitdirOf(pointer: string): string | null {
+  return /^gitdir:\s*(.+)$/m.exec(pointer)?.[1]?.trim() || null;
+}
+
 /**
  * The repository a linked worktree belongs to, from the pointer its `.git` file holds.
  *
@@ -158,8 +163,7 @@ export function classifyWorktree(code: number, output: string): WorktreeOutcome 
  * `/.git/worktrees/`. A string, not a git call: this runs for every project on every scan.
  */
 export function mainRepoFrom(pointer: string): string | null {
-  const match = /^gitdir:\s*(.+)$/m.exec(pointer.trim());
-  const gitdir = match?.[1]?.trim();
+  const gitdir = gitdirOf(pointer);
   if (!gitdir) return null;
   const cut = gitdir.replace(/\\/g, "/").toLowerCase().indexOf("/.git/worktrees/");
   return cut > 0 ? gitdir.slice(0, cut) : null;
@@ -231,27 +235,19 @@ export function placeWorktrees<T extends { dir: string; parentDir?: string | nul
 }
 
 /**
- * What a worktree is called on screen: its branch, and the repository it belongs to.
+ * What a worktree is called on screen: the repository it belongs to. Its branch stands beside the
+ * name, as on every repository row.
  *
- * Its folder is `<repo>-<branch>` (suggestPath), which a narrow list cut off right where the branch
- * starts. A name the user gave the row still wins, and a detached head has no branch to show, so
- * those keep the row's own name; a folder name loses the repository's prefix on the way.
- * `repo` is the repository's row name when it is listed, else its folder.
+ * Its folder is `<repo>-<branch>` (suggestPath), which would say the branch twice and lose it first
+ * in a narrow list. A name the user gave the row still wins, and a worktree whose repository cannot
+ * be read keeps its own. `parentName` is the repository's row name when it is listed; otherwise the
+ * repository's folder names it.
  */
 export function treeName(
-  project: {
-    name: string; alias: string | null; mainRepo: string | null;
-    git: { head: string; detached: boolean } | null;
-  },
+  project: { name: string; alias: string | null; mainRepo: string | null },
   parentName: string | null,
-): { name: string; isBranch: boolean; repo: string | null } {
+): string {
+  if (project.alias) return project.name;
   const folder = project.mainRepo?.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || null;
-  const repo = parentName ?? folder;
-  if (!project.alias && project.git && !project.git.detached) {
-    return { name: project.git.head, isBranch: true, repo };
-  }
-  const prefix = `${folder}-`.toLowerCase();
-  const strip = !project.alias && folder && project.name.length > prefix.length
-    && project.name.toLowerCase().startsWith(prefix);
-  return { name: strip ? project.name.slice(prefix.length) : project.name, isBranch: false, repo };
+  return parentName ?? folder ?? project.name;
 }

@@ -106,32 +106,21 @@ describe("treeName", () => {
     name: "app-feature-dialog",
     alias: null,
     mainRepo: "C:/src/app",
-    git: { head: "feature/dialog", detached: false },
     ...overrides,
   });
 
-  it("calls a worktree by its branch, slashes and all", () => {
-    expect(treeName(tree(), "app")).toEqual({ name: "feature/dialog", isBranch: true, repo: "app" });
+  it("calls a worktree by its repository's row when that is listed, else by the repository's folder", () => {
+    // Not by its own folder, `<repo>-<branch>`: the branch stands beside the name already.
+    expect(treeName(tree(), "My App")).toBe("My App");
+    expect(treeName(tree(), null)).toBe("app");
+    expect(treeName(tree({ mainRepo: "C:\\src\\app\\" }), null)).toBe("app");
   });
 
-  it("names the repository by its row when it is listed, else by its folder", () => {
-    expect(treeName(tree(), "My App").repo).toBe("My App");
-    expect(treeName(tree(), null).repo).toBe("app");
-    expect(treeName(tree({ mainRepo: null }), null).repo).toBeNull();
+  it("keeps its own name when the repository cannot be read", () => {
+    expect(treeName(tree({ mainRepo: null }), null)).toBe("app-feature-dialog");
   });
 
-  it("falls back to the folder, less the repository's prefix, for a head with no branch", () => {
-    const detached = tree({ git: { head: "a1b2c3d", detached: true } });
-    expect(treeName(detached, null)).toEqual({ name: "feature-dialog", isBranch: false, repo: "app" });
-    // Whatever the case the transcript wrote the folder in.
-    expect(treeName({ ...detached, name: "App-feature-dialog" }, null).name).toBe("feature-dialog");
-    // A folder that is not `<repo>-…`, or is the prefix and nothing more, keeps its whole name.
-    expect(treeName({ ...detached, name: "elsewhere" }, null).name).toBe("elsewhere");
-    expect(treeName({ ...detached, name: "app-" }, null).name).toBe("app-");
-  });
-
-  it("keeps a name the user gave the row over the branch", () => {
-    expect(treeName(tree({ name: "Dialog work", alias: "Dialog work" }), "app"))
-      .toEqual({ name: "Dialog work", isBranch: false, repo: "app" });
+  it("keeps a name the user gave the row", () => {
+    expect(treeName(tree({ name: "Dialog work", alias: "Dialog work" }), "app")).toBe("Dialog work");
   });
 });
