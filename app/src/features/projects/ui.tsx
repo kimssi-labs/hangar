@@ -118,7 +118,7 @@ export async function rename(target: { projectDir: string; sessionId?: string },
   await ui.refresh();
 }
 
-/** Ask in the app's own dialog, then delete; the main side is told it was already asked. */
+/** Ask in the app's own dialog, then delete. */
 export async function deleteProject(target: ProjectInfo, ui: ProjectsUi): Promise<void> {
   const { askUser, notify, refresh, t } = ui;
   const yes = await askUser({
@@ -131,7 +131,7 @@ export async function deleteProject(target: ProjectInfo, ui: ProjectsUi): Promis
     danger: true,
   });
   if (!yes) return;
-  const result = await api.deleteProject({ projectDir: target.dir, confirmed: true });
+  const result = await api.deleteProject({ projectDir: target.dir });
   notify(result);
   if (result.ok) await refresh();
 }
@@ -148,7 +148,7 @@ export async function deleteSession(projectDir: string, target: SessionInfo, ui:
     danger: true,
   });
   if (!yes) return;
-  const result = await api.deleteSession({ projectDir, sessionId: target.id, confirmed: true });
+  const result = await api.deleteSession({ projectDir, sessionId: target.id });
   notify(result);
   if (result.ok) await refresh();
 }

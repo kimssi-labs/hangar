@@ -23,8 +23,6 @@ export interface RenameRequest {
 }
 
 export interface DeleteRequest {
-  /** Ignored: the window always asks before it sends a delete. Kept while the page still sets it. */
-  confirmed?: boolean;
   projectDir: string;
   sessionId?: string;
 }
