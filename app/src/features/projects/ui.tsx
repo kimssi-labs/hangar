@@ -9,8 +9,9 @@
  */
 import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 
-import { MENU_SEPARATOR } from "@core/constants";
-import type { LaunchConfig, PermissionMode, ProjectInfo, SessionInfo, ShellChoice } from "@core/types";
+import { MENU_SEPARATOR, PERMISSION_MODES, SHELL_CHOICES } from "@core/constants";
+import { PERMISSION_ARGS } from "@core/launcher";
+import type { LaunchConfig, ProjectInfo, SessionInfo, ShellChoice } from "@core/types";
 import { placeWorktrees, type Placed } from "@core/worktree";
 
 import { api, type MenuItemSpec } from "../../renderer/api";
@@ -414,23 +415,10 @@ export function SessionPreview({ project, onEnter, onContextMenu }: {
 
 // ---- how a session starts: the settings cards ----------------------------------------------------
 
-const SHELLS: { key: ShellChoice; label: string; note: string }[] = [
-  { key: "auto", label: "Auto", note: "PowerShell 7 when installed, else the system shell" },
-  { key: "pwsh", label: "PowerShell 7", note: "pwsh" },
-  { key: "powershell", label: "Windows PowerShell", note: "powershell.exe" },
-  { key: "cmd", label: "Command Prompt", note: "cmd.exe /k" },
-  { key: "bash", label: "bash", note: "bash -lc" },
-  { key: "custom", label: "Custom program", note: "an editor like VS Code, opened on the project folder" },
-  { key: "none", label: "No shell", note: "claude directly — the window closes when it exits" },
-];
-
-const PERMISSIONS: { key: PermissionMode; label: string; note: string }[] = [
-  { key: "default", label: "Ask (default)", note: "the normal prompts" },
-  { key: "bypass", label: "Bypass permissions", note: "--dangerously-skip-permissions" },
-  { key: "accept", label: "Accept edits", note: "file edits go through, other tools still ask" },
-  { key: "plan", label: "Plan", note: "plan first, change nothing until you approve" },
-  { key: "auto", label: "Auto", note: "claude decides per tool call" },
-];
+/** The shells whose note is the command they run, which is not translated; the rest explain themselves. */
+const SHELL_COMMANDS: Partial<Record<ShellChoice, string>> = {
+  pwsh: "pwsh", powershell: "powershell.exe", cmd: "cmd.exe /k", bash: "bash -lc",
+};
 
 /** The settings card body: which shell hosts a session, and the program when it is a custom one. */
 export function LaunchSettings({ launch, onChange }: { launch: LaunchConfig; onChange(launch: LaunchConfig): void }) {
@@ -438,16 +426,13 @@ export function LaunchSettings({ launch, onChange }: { launch: LaunchConfig; onC
   const set = (patch: Partial<LaunchConfig>): void => onChange({ ...launch, ...patch });
   return (
     <>
-      {SHELLS.map((shell) => (
+      {SHELL_CHOICES.map((shell) => (
         <Choice
-          key={shell.key}
-          label={t(`settings.shell.${shell.key}` as "settings.shell.auto")}
-          // Two of these explain themselves; the rest name an executable, which is not translated.
-          note={shell.key === "auto" || shell.key === "custom" || shell.key === "none"
-            ? t(`settings.shell.${shell.key}.note` as "settings.shell.auto.note")
-            : shell.note}
-          selected={launch.shell === shell.key}
-          onSelect={() => set({ shell: shell.key })}
+          key={shell}
+          label={t(`settings.shell.${shell}` as const)}
+          note={SHELL_COMMANDS[shell] ?? t(`settings.shell.${shell}.note` as "settings.shell.auto.note")}
+          selected={launch.shell === shell}
+          onSelect={() => set({ shell })}
         />
       ))}
 
@@ -475,16 +460,14 @@ export function PermissionSettings({ launch, onChange }: { launch: LaunchConfig;
   const t = useText();
   return (
     <>
-      {PERMISSIONS.map((mode) => (
+      {PERMISSION_MODES.map((mode) => (
         <Choice
-          key={mode.key}
-          label={t(`settings.permission.${mode.key}` as "settings.permission.default")}
+          key={mode}
+          label={t(`settings.permission.${mode}` as const)}
           // The bypass note is the flag itself, which stays as it is written on the command line.
-          note={mode.key === "bypass"
-            ? mode.note
-            : t(`settings.permission.${mode.key}.note` as "settings.permission.default.note")}
-          selected={launch.permission === mode.key}
-          onSelect={() => onChange({ ...launch, permission: mode.key })}
+          note={mode === "bypass" ? PERMISSION_ARGS.bypass.join(" ") : t(`settings.permission.${mode}.note` as const)}
+          selected={launch.permission === mode}
+          onSelect={() => onChange({ ...launch, permission: mode })}
         />
       ))}
     </>
