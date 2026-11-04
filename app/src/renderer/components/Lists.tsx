@@ -174,31 +174,51 @@ function since(t: ReturnType<typeof useText>, ms: number): string {
 }
 
 /**
- * Whether the pointer is doing the selecting.
- *
- * A row you clicked is already under your eye — often one the list's top edge clips, and bringing
- * THAT fully into view drags everything down a row (measured: 308 -> 286 in a band-width window,
- * which reads as the list bouncing). Only the keyboard needs the list to move, so a click says so
- * here and the row's effect takes it back out again.
+ * How long a clicked row waits before the list moves to show all of it: Windows' default
+ * double-click time. A click selects, and moving the list then put a different row under the second
+ * click of a double-click (measured: scrollTop 308 -> 286 in a band-width window), so the open went
+ * to the wrong row; once a second click can no longer make a double-click, the list may move.
  */
-let pointerPicked = false;
+const DOUBLE_CLICK_MS = 500;
+
+/** When the pointer last pressed a row: a selection made within the double-click time is a click's. */
+let pressedAt = -Infinity;
 
 export function notePointerSelect(): void {
-  pointerPicked = true;
+  pressedAt = performance.now();
 }
 
-/** Keeps the selected row in view when the keyboard moves it off screen — never after a click. */
+/**
+ * Whether the list the row scrolls in cuts any of it off — the nearest box with more in it than it
+ * shows, which for the project list is the list itself rather than the pane inside it.
+ */
+function clipped(row: HTMLElement): boolean {
+  let list = row.parentElement;
+  while (list && list.scrollHeight <= list.clientHeight) list = list.parentElement;
+  if (!list) return false;
+  const shown = list.getBoundingClientRect();
+  const box = row.getBoundingClientRect();
+  return box.top < shown.top || box.bottom > shown.bottom;
+}
+
+/**
+ * Keeps the selected row whole on screen: at once when the keyboard selected it, and after the
+ * double-click time when a click did — smoothly, and only if the list cuts it off and it is still the
+ * selected, mounted row by then.
+ */
 function useScrollIntoView(selected: boolean): React.RefObject<HTMLDivElement> {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    // Only the row that just became selected may take the flag: the one being deselected runs this
-    // effect too, and if it cleared the flag the new row would scroll after all.
-    if (!selected) return;
-    if (pointerPicked) {
-      pointerPicked = false;
+    const row = ref.current;
+    if (!selected || !row) return;
+    if (performance.now() - pressedAt > DOUBLE_CLICK_MS) {
+      row.scrollIntoView({ block: "nearest" });
       return;
     }
-    ref.current?.scrollIntoView({ block: "nearest" });
+    const timer = setTimeout(() => {
+      if (clipped(row)) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, DOUBLE_CLICK_MS);
+    return () => clearTimeout(timer);
   }, [selected]);
   return ref;
 }
