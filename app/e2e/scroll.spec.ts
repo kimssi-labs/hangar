@@ -138,9 +138,15 @@ for (const edge of ["top", "bottom"] as const) {
       const target = await rowAt(page, list, x, y);
       expect(target.clipped, `the ${edge} edge must cut the row clicked`).toBe(true);
 
+      // Where the clicked row is on screen, which is what "the list held still" means to a person:
+      // scrollTop alone can shift while nothing moves, when rows coming into view are measured and
+      // scroll anchoring keeps the content where it was (content-visibility rows, under load).
+      const rowTop = (): Promise<number> => page.evaluate((id) =>
+        document.getElementById(id)?.getBoundingClientRect().top ?? Number.NaN, target.id);
+      const topBefore = await rowTop();
       await page.mouse.click(x, y);
       await page.waitForTimeout(DURING_MS);
-      expect(await list.evaluate((el) => el.scrollTop), "the list moved inside the double-click time").toBe(before);
+      expect(Math.abs((await rowTop()) - topBefore), "the list moved inside the double-click time").toBeLessThanOrEqual(1);
 
       await page.waitForTimeout(AFTER_MS);
       expect(await list.locator("[aria-selected='true']").getAttribute("id")).toBe(target.id);
