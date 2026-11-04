@@ -15,10 +15,9 @@
  * (2 s of that PowerShell's own start-up, 1 s its exit) against a double-click that wants an answer
  * now. Nothing has to be found on disk or unpacked from the archive: the source is this string.
  */
-import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { execFile, spawnSync } from "node:child_process";
+
+import { helperExecutable, type HelperSpec } from "./helpers.js";
 
 export interface FocusOutcome {
   /** A window was found and raised. */
@@ -31,7 +30,6 @@ export interface FocusOutcome {
 }
 
 const HELPER_TIMEOUT_MS = 8000;
-const COMPILE_TIMEOUT_MS = 60_000;
 const STOP_TIMEOUT_MS = 5000;
 
 /**
@@ -194,63 +192,8 @@ static class Program {
 }
 `;
 
-/** The helper's file name carries its source's hash, so a change in the source is a new build. */
-export function helperName(source = FOCUS_SOURCE, kind = "focus"): string {
-  return `hangar-${kind}-${createHash("sha1").update(source).digest("hex").slice(0, 12)}.exe`;
-}
-
-/** A C# helper: its source, a name for its file, and the assemblies it needs beyond mscorlib. */
-export interface HelperSpec {
-  source: string;
-  kind: string;
-  references: string;
-}
-
-const FOCUS_HELPER: HelperSpec = { source: FOCUS_SOURCE, kind: "focus", references: "UIAutomationClient, UIAutomationTypes" };
-
-/** Builds in flight, by file name, so two callers asking at once share one compiler run. */
-const building = new Map<string, Promise<string | null>>();
-
-/**
- * The compiled helper under `cacheDir`, built on first use. PowerShell's Add-Type is the C# compiler
- * every Windows has; it is only ever run for the build, not for the work.
- */
-export function helperExecutable(cacheDir: string, spec: HelperSpec = FOCUS_HELPER): Promise<string | null> {
-  const name = helperName(spec.source, spec.kind);
-  const exe = join(cacheDir, name);
-  if (existsSync(exe)) return Promise.resolve(exe);
-  const inFlight = building.get(name);
-  if (inFlight) return inFlight;
-  const build = new Promise<string | null>((resolve) => {
-    try {
-      mkdirSync(cacheDir, { recursive: true });
-      const source = exe.replace(/\.exe$/, ".cs");
-      writeFileSync(source, spec.source);
-      const quote = (path: string): string => `'${path.replace(/'/g, "''")}'`;
-      const command = `Add-Type -Path ${quote(source)} -OutputAssembly ${quote(exe)} -OutputType ConsoleApplication -ReferencedAssemblies ${spec.references}`;
-      execFile(
-        "powershell.exe",
-        ["-NoProfile", "-NonInteractive", "-Command", command],
-        { windowsHide: true, timeout: COMPILE_TIMEOUT_MS },
-        (error, _stdout, stderr) => {
-          if (error || !existsSync(exe)) {
-            console.error(`[hangar] the ${spec.kind} helper did not build:`, String(stderr || error?.message || "").trim().slice(0, 300));
-            resolve(null);
-          } else {
-            resolve(exe);
-          }
-        },
-      );
-    } catch (error) {
-      console.error(`[hangar] the ${spec.kind} helper did not build:`, (error as Error).message);
-      resolve(null);
-    }
-  }).finally(() => {
-    building.delete(name);
-  });
-  building.set(name, build);
-  return build;
-}
+/** The focus helper, for helpers.ts to build. */
+export const FOCUS_HELPER: HelperSpec = { source: FOCUS_SOURCE, kind: "focus", references: "UIAutomationClient, UIAutomationTypes" };
 
 /** What the helper's output means; the outcome is its last non-empty line. */
 export function parseOutcome(stdout: string): FocusOutcome {
@@ -270,7 +213,7 @@ export function parseOutcome(stdout: string): FocusOutcome {
 /** Bring the window of the session running as `pid` to the front. Windows only; elsewhere nothing is found. */
 export async function focusSession(pid: number, cacheDir: string): Promise<FocusOutcome> {
   if (process.platform !== "win32") return { found: false };
-  const exe = await helperExecutable(cacheDir);
+  const exe = await helperExecutable(cacheDir, FOCUS_HELPER);
   if (!exe) return { found: false, error: "the focus helper is not available" };
   return new Promise((resolve) => {
     execFile(exe, [String(pid)], { windowsHide: true, timeout: HELPER_TIMEOUT_MS }, (error, stdout) => {
@@ -290,12 +233,5 @@ export function stopSession(pid: number): boolean {
       return false;
     }
   }
-  const result = spawnSyncTaskkill(pid);
-  return result === 0;
-}
-
-function spawnSyncTaskkill(pid: number): number | null {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
-  return spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, timeout: STOP_TIMEOUT_MS }).status;
+  return spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, timeout: STOP_TIMEOUT_MS }).status === 0;
 }
