@@ -5,7 +5,7 @@
  * (left/right edge), and both have to work without a scrollbar — so the mode is decided per axis
  * rather than by one breakpoint.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { LayoutMode } from "@core/types";
 
@@ -70,6 +70,28 @@ export function layoutFor(
   if (height <= BAND_MAX_HEIGHT) return "band";
   if (width <= COMPACT_MAX_WIDTH) return "compact";
   return "full";
+}
+
+/**
+ * An element's border-box size along one axis, and the callback ref that keeps it measured.
+ *
+ * Measured whenever the element is drawn, not when the window changes shape: docking from the
+ * settings screen draws the stack while the window keeps its size, and it read 0 until a resize.
+ */
+export function useMeasured(axis: "width" | "height"): [number, (element: HTMLElement | null) => void] {
+  const [size, setSize] = useState(0);
+  const observer = useRef<ResizeObserver | null>(null);
+  const ref = useCallback((element: HTMLElement | null) => {
+    observer.current?.disconnect();
+    observer.current = null;
+    if (!element) { setSize(0); return; }
+    const measure = (): void => setSize(element.getBoundingClientRect()[axis]);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    observer.current = new ResizeObserver(measure);
+    observer.current.observe(element);
+  }, [axis]);
+  return [size, ref];
 }
 
 export function useLayoutMode(
