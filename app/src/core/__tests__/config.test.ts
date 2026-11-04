@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -96,5 +96,36 @@ describe("ConfigStore", () => {
   it("stores project aliases next to the settings", () => {
     config.saveAliases({ "C:/src/demo": "Demo" });
     expect(config.aliases()).toEqual({ "C:/src/demo": "Demo" });
+  });
+});
+
+describe("reading the settings file", () => {
+  it("is not re-read while its size and mtime stand", () => {
+    const home = makeHome();
+    const file = join(home, "config", "manager.json");
+    const old = new Date(Date.now() - 3_600_000);
+    writeFileSync(file, JSON.stringify({ launch: { terminal: "aaaa" } }));
+    utimesSync(file, old, old);
+    const config = new ConfigStore(home);
+    expect(config.launch().terminal).toBe("aaaa");
+    // Same length, same mtime: only a cached read still says aaaa.
+    writeFileSync(file, JSON.stringify({ launch: { terminal: "bbbb" } }));
+    utimesSync(file, old, old);
+    expect(config.launch().terminal).toBe("aaaa");
+  });
+
+  it("sees a write through another store at once, and hands out copies its callers may edit", () => {
+    const home = makeHome();
+    const file = join(home, "config", "manager.json");
+    const old = new Date(Date.now() - 3_600_000);
+    const writer = new ConfigStore(home);
+    const reader = new ConfigStore(home);
+    writer.saveSection("pins", { projects: ["a"], sessions: [] });
+    utimesSync(file, old, old);
+    expect(reader.pins().projects).toEqual(["a"]);
+    (reader.section("pins")["projects"] as string[]).push("edited");
+    expect(reader.pins().projects).toEqual(["a"]);
+    writer.togglePin("projects", "b");
+    expect(reader.pins().projects).toEqual(["a", "b"]);
   });
 });

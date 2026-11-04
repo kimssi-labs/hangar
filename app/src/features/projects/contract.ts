@@ -34,9 +34,18 @@ export interface PinRequest {
   key: string;
 }
 
+/**
+ * A scan's answer. `projects` is left out when the list is the same as the one `signature` was
+ * last handed out for — the page passes that signature back and keeps the rows it already has.
+ */
+export interface ScanAnswer {
+  signature: string;
+  projects?: ProjectInfo[];
+}
+
 export const projectsContract = {
-  /** Every project with its sessions, read again from disk. */
-  scan: invoke<void, ProjectInfo[]>("projects:scan"),
+  /** Every project with its sessions, read again from disk. Pass the last signature, or null for the full list. */
+  scan: invoke<string | null, ScanAnswer>("projects:scan"),
   /** Start or resume a session in a terminal. */
   openSession: invoke<OpenSessionRequest, OpenSessionResult>("session:open"),
   renameSession: invoke<RenameRequest, ActionResult>("session:rename"),

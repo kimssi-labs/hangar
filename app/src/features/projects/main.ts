@@ -15,14 +15,15 @@ import { app, dialog, shell } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
-import { launchCommand, sessionEnvironment } from "../../core/launcher.js";
+import { launchCommand, sessionEnvironment, WT_EXE } from "../../core/launcher.js";
+import { scanSignature } from "../../core/store.js";
 import type { ProjectInfo } from "../../core/types.js";
-import { claudeExecutable, detectLinuxTerminal, haveExecutable, which } from "../../main/executables.js";
+import { cachedWhich, claudeExecutable, detectLinuxTerminal, haveExecutable } from "../../main/executables.js";
 import { headOf, isLinkedWorktree, mainCheckoutOf } from "../../main/gitStatus.js";
 import { focusSession, helperExecutable, stopSession } from "../../main/liveSession.js";
 import type { ActionResult, AddProjectResult } from "../../main/ipc.js";
 import type { SessionTarget } from "../../main/sampler.js";
-import { projectsContract, type OpenSessionResult } from "./contract.js";
+import { projectsContract, type OpenSessionResult, type ScanAnswer } from "./contract.js";
 
 /** A scan slower than this is worth a line in the log. */
 const SLOW_SCAN_MS = 200;
@@ -51,6 +52,8 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
   if (process.platform === "win32") setTimeout(() => void helperExecutable(helpersDir()), HELPER_WARMUP_MS).unref();
 
   const find = (dir: string): ProjectInfo | undefined => projects.find((p) => p.dir === dir);
+  /** Resolved real paths, per folder — dropped whenever the store reads everything again. */
+  const realPaths = new Map<string, string>();
 
   function scan(): ProjectInfo[] {
     const t0 = Date.now();
@@ -68,25 +71,37 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
       // the window can show each worktree under the repository it came from.
       // Compared with separators and case normalised: the pointer file writes forward slashes where
       // a transcript's cwd on Windows has backslashes, and the two would never match as written.
-      const key = (path: string): string => {
-        let real = path;
-        try {
-          // 8.3 short names are the one that actually bit: TEMP reads C:\Users\EXAMPL~1 in a
-          // transcript's cwd and C:/Users/ExampleUser in git's own pointer file. Only resolving
-          // the real path makes those the same folder.
-          real = realpathSync.native(path);
-        } catch {
-          /* gone, or unreachable: fall back to what was written */
+      //
+      // Only when there is a worktree to place at all, only for a folder that is there, and once per
+      // folder: resolving a path on an unreachable share waits out the SMB timeout on this thread,
+      // and its answer is "fall back to what was written" anyway.
+      if (ctx.store.lastScanFull) realPaths.clear();
+      const key = (path: string, present: boolean): string => {
+        let real = present ? realPaths.get(path) : path;
+        if (real === undefined) {
+          real = path;
+          try {
+            // 8.3 short names are the one that actually bit: TEMP reads C:\Users\EXAMPL~1 in a
+            // transcript's cwd and C:/Users/ExampleUser in git's own pointer file. Only resolving
+            // the real path makes those the same folder.
+            real = realpathSync.native(path);
+          } catch {
+            /* gone, or unreachable: fall back to what was written */
+          }
+          realPaths.set(path, real);
         }
         return real.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
       };
-      const byPath = new Map(projects
-        .filter((p) => p.cwd)
-        .map((p) => [key(p.cwd as string), p.dir]));
-      for (const project of projects) {
-        if (!project.worktree || !project.cwd) continue;
-        const repo = mainCheckoutOf(project.cwd);
-        project.parentDir = repo ? byPath.get(key(repo)) ?? null : null;
+      if (projects.some((p) => p.worktree)) {
+        const byPath = new Map(projects
+          .filter((p) => p.cwd)
+          .map((p) => [key(p.cwd as string, p.exists), p.dir]));
+        for (const project of projects) {
+          if (!project.worktree || !project.cwd) continue;
+          const repo = mainCheckoutOf(project.cwd);
+          // The repository a worktree we just read points at is taken to be there, as it always was.
+          project.parentDir = repo ? byPath.get(key(repo, true)) ?? null : null;
+        }
       }
     }
     const ms = Date.now() - t0;
@@ -110,8 +125,20 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
     return response === 0;
   }
 
+  /**
+   * The list for the page — or only its signature, when it is the one the page already holds.
+   *
+   * The page asks every fifteen seconds and the list rarely changes between two asks; sending it
+   * anyway cloned every row across the process boundary and re-ran everything drawn from it.
+   */
+  function answer(since: string | null): ScanAnswer {
+    const list = scan();
+    const signature = scanSignature(list);
+    return signature === since ? { signature } : { signature, projects: list };
+  }
+
   wire.bind(projectsContract, {
-    scan: () => scan(),
+    scan: (since) => answer(since ?? null),
 
     openSession: async (request): Promise<OpenSessionResult> => {
       const project = find(request.projectDir);
@@ -155,7 +182,7 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
         config: launch,
         target: request.target,
         platform: process.platform,
-        hasWindowsTerminal: process.platform === "win32" && Boolean(which("wt.exe")),
+        hasWindowsTerminal: process.platform === "win32" && Boolean(cachedWhich(WT_EXE)),
         linuxTerminal: process.platform === "win32" ? null : detectLinuxTerminal(launch.terminal),
       }, haveExecutable);
       try {

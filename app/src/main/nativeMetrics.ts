@@ -71,8 +71,14 @@ function loadWindows(): WinApi | null {
     });
 
     const CreateToolhelp32Snapshot = kernel32.func("__stdcall", "CreateToolhelp32Snapshot", "intptr", ["uint32", "uint32"]);
-    const Process32FirstW = kernel32.func("__stdcall", "Process32FirstW", "bool", ["intptr", koffi.inout(koffi.pointer(PROCESSENTRY32W))]);
-    const Process32NextW = kernel32.func("__stdcall", "Process32NextW", "bool", ["intptr", koffi.inout(koffi.pointer(PROCESSENTRY32W))]);
+    // The entry is handed over as raw memory and only the two pids are read out of it: declared as the
+    // struct, koffi converted every entry both ways, its 260-character name into a 260-number array.
+    const Process32FirstW = kernel32.func("__stdcall", "Process32FirstW", "bool", ["intptr", "void *"]);
+    const Process32NextW = kernel32.func("__stdcall", "Process32NextW", "bool", ["intptr", "void *"]);
+    const ENTRY_SIZE = koffi.sizeof(PROCESSENTRY32W);
+    const PID_AT = koffi.offsetof(PROCESSENTRY32W, "th32ProcessID");
+    const PARENT_AT = koffi.offsetof(PROCESSENTRY32W, "th32ParentProcessID");
+    const entry = Buffer.alloc(ENTRY_SIZE);
     const CloseHandle = kernel32.func("__stdcall", "CloseHandle", "bool", ["intptr"]);
     const OpenProcess = kernel32.func("__stdcall", "OpenProcess", "intptr", ["uint32", "bool", "uint32"]);
     const GetProcessTimes = kernel32.func("__stdcall", "GetProcessTimes", "bool", [
@@ -94,13 +100,11 @@ function loadWindows(): WinApi | null {
         if (snapshot === INVALID_HANDLE) return [];
         const rows: ProcessRow[] = [];
         try {
-          const entry = { dwSize: koffi.sizeof(PROCESSENTRY32W), cntUsage: 0, th32ProcessID: 0,
-            th32DefaultHeapID: 0, th32ModuleID: 0, cntThreads: 0, th32ParentProcessID: 0,
-            pcPriClassBase: 0, dwFlags: 0, szExeFile: new Array<number>(260).fill(0) };
+          entry.writeUInt32LE(ENTRY_SIZE, 0);             // dwSize, the first field
           let more = Process32FirstW(snapshot, entry);
           while (more) {
-            rows.push({ pid: entry.th32ProcessID, parentPid: entry.th32ParentProcessID, cpu: 0, memoryBytes: 0 });
-            entry.dwSize = koffi.sizeof(PROCESSENTRY32W);
+            rows.push({ pid: entry.readUInt32LE(PID_AT), parentPid: entry.readUInt32LE(PARENT_AT), cpu: 0, memoryBytes: 0 });
+            entry.writeUInt32LE(ENTRY_SIZE, 0);
             more = Process32NextW(snapshot, entry);
           }
         } finally {

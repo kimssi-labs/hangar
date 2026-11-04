@@ -114,6 +114,10 @@ export async function withShell<T>(call: () => Promise<T>): Promise<T> {
 
 /** How long a native call waits before looking again while the shell is being asked. */
 export const SHELL_RETRY_MS = 30;
+/** The longest wait between two looks, once the retries have backed off. */
+export const SHELL_RETRY_MAX_MS = 1000;
+/** Retries before giving up until the next frame event: 30 ms doubling to 1 s, about ten seconds in all. */
+export const SHELL_RETRY_LIMIT = 15;
 
 /**
  * Whether one of our own synchronous native calls is on the stack right now.
@@ -183,6 +187,9 @@ export function nativeHandle(window: BrowserWindow): number {
 export class WindowChrome {
   private flushed = false;
   private mode: ThemeMode = "system";
+  /** The retry waiting for native calls to finish, and how many have been made in a row. */
+  private retry: NodeJS.Timeout | null = null;
+  private attempts = 0;
 
   constructor(
     private readonly window: BrowserWindow,
@@ -218,9 +225,20 @@ export class WindowChrome {
   private apply(): void {
     if (this.window.isDestroyed()) return;
     if (nativeBusy()) {                           // never beside or inside another native call
-      setTimeout(() => this.apply(), SHELL_RETRY_MS);
+      // One retry pending at a time, backing off, and only so many: a shell call that never answers
+      // kept a 30 ms timer spinning for as long as it hung, one more per frame event meanwhile. Once
+      // given up, the next event that resets the frame starts over; the retry applies the newest look.
+      if (this.retry || this.attempts >= SHELL_RETRY_LIMIT) return;
+      const delay = Math.min(SHELL_RETRY_MS * 2 ** this.attempts, SHELL_RETRY_MAX_MS);
+      this.attempts += 1;
+      this.retry = setTimeout(() => {
+        this.retry = null;
+        if (this.attempts >= SHELL_RETRY_LIMIT && nativeBusy()) this.attempts = 0;
+        else this.apply();
+      }, delay);
       return;
     }
+    this.attempts = 0;
     const look = lookFor(this.flushed, surfaceFor(this.mode));
     // Windows only: elsewhere there is no such border, and the accent call is not implemented — it
     // threw on Linux, from inside start-up, and the app never got a window (CI, Electron 43).

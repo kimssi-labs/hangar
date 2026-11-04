@@ -53,6 +53,10 @@ export function register(ctx: MainContext, wire: Wire, deps: MetricsDeps): Metri
   function accept(snapshot: MetricsSnapshot): void {
     history.push(snapshot);
     history.keepOnly(Object.keys(snapshot.sessions));
+    // Kept, but not sent to a window nobody can see: each one woke the page to redraw charts off
+    // screen. The page asks for the history again (`metrics`) when it is shown.
+    const window = ctx.window();
+    if (window && !window.isDestroyed() && (window.isMinimized() || !window.isVisible())) return;
     wire.emit(metricsContract.onMetrics, snapshot);
   }
 

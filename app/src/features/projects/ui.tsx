@@ -7,7 +7,7 @@
  * the keyboard drives it — and hands over what an action needs: a dialog, a toast, a rescan, and
  * the two things only the shell can do, changing screen and opening the rename box.
  */
-import { useCallback, useMemo, useState, type RefObject } from "react";
+import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 
 import type { LaunchConfig, MetricSample, PermissionMode, ProjectInfo, SessionInfo, ShellChoice } from "@core/types";
 import { placeWorktrees, type Placed } from "@core/worktree";
@@ -24,8 +24,14 @@ type Translate = ReturnType<typeof useText>;
 /** The rows, read and re-read: the list every other part of the window reads. */
 export function useProjects() {
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
+  // The list as main last sent it. An unchanged answer hands this same array back, so React keeps
+  // the state as it is and nothing drawn from it recomputes — unless a merged dirty count had made
+  // the state a different array, which the rows then lose exactly as a fresh list would take it.
+  const received = useRef<{ signature: string; projects: ProjectInfo[] } | null>(null);
   const scan = useCallback(async (): Promise<ProjectInfo[]> => {
-    const scanned = await api.scan();
+    const answer = await api.scan(received.current?.signature ?? null);
+    const scanned = answer.projects ?? received.current?.projects ?? [];
+    received.current = { signature: answer.signature, projects: scanned };
     setProjects(scanned);
     return scanned;
   }, []);

@@ -18,14 +18,19 @@ export interface ProcessRow {
   memoryBytes: number;
 }
 
-/** Every descendant of `root`, plus `root` itself — one pass, no recursion into missing pids. */
-export function processTree(rows: ProcessRow[], root: number): ProcessRow[] {
+/** Each pid's direct children. Built once per process table, then shared by every tree walked in it. */
+export function childrenOf(rows: ProcessRow[]): Map<number, ProcessRow[]> {
   const children = new Map<number, ProcessRow[]>();
   for (const row of rows) {
     const list = children.get(row.parentPid);
     if (list) list.push(row);
     else children.set(row.parentPid, [row]);
   }
+  return children;
+}
+
+/** Every descendant of `root`, plus `root` itself — one pass, no recursion into missing pids. */
+export function processTree(rows: ProcessRow[], root: number, children = childrenOf(rows)): ProcessRow[] {
   const seen = new Set<number>();
   const out: ProcessRow[] = [];
   const queue = rows.filter((r) => r.pid === root);

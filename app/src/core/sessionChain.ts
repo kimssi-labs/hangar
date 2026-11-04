@@ -87,14 +87,15 @@ export function foldClears(sessions: SessionWithOrigin[], replaced?: Map<string,
   const rows = new Map(sessions.map((s) => [s.id, { ...s }]));
   // Oldest first, so a chain accumulates: the second head counts the first head's predecessors too.
   for (const successor of byStart) {
-    const free = byStart.filter((p) => !folded.has(p.id) && p.id !== successor.id);
+    const isFree = (p: SessionWithOrigin): boolean => !folded.has(p.id) && p.id !== successor.id;
     // Either record is exact: the swap this app watched in the live registry, or the predecessor
     // Claude Code itself named in the transcript. The second also covers a clear that happened
     // while this app was closed, which the registry can say nothing about.
     const recorded = replaced?.get(successor.id) ?? successor.carriedFrom;
-    const watched = recorded ? free.find((p) => p.id === recorded) : undefined;
+    const watched = recorded ? byStart.find((p) => p.id === recorded && isFree(p)) : undefined;
     if (!watched && !isContinuation(successor)) continue;
-    const predecessor = watched ?? predecessorOf(successor, free);
+    // The candidate list only for a continuation: building it for every session made this O(n²).
+    const predecessor = watched ?? predecessorOf(successor, byStart.filter(isFree));
     if (!predecessor) continue;
     folded.add(predecessor.id);
     const head = rows.get(successor.id) as SessionWithOrigin;

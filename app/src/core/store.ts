@@ -5,11 +5,12 @@
  * real folder only exists inside its transcripts, a session's title can come from three places, and
  * a "live" session is a pid that still exists — the registry file outlives the process.
  */
-import { closeSync, existsSync, mkdirSync, openSync, readSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync, appendFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync, appendFileSync, type Stats } from "node:fs";
+import { createHash } from "node:crypto";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 
-import { ConfigStore } from "./config.js";
+import { ConfigStore, fileSignature } from "./config.js";
 import { encodeProjectPath, homePaths, type HomePaths } from "./paths.js";
 import { foldClears, type SessionWithOrigin } from "./sessionChain.js";
 import { type RegistryEntry, SessionLinks } from "./sessionLinks.js";
@@ -58,69 +59,117 @@ interface CacheEntry<T> { signature: string; value: T }
 /** What a transcript says about itself, plus the session it carried on from (see LINK_BYTES). */
 type Facts = TranscriptFacts & { carriedFrom: string | null };
 
-function readLines(file: string, limit?: number): unknown[] {
-  let text: string;
-  try {
-    text = readFileSync(file, "utf8");
-  } catch {
-    return [];
-  }
-  const out: unknown[] = [];
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      out.push(JSON.parse(line));
-    } catch {
-      continue;                                   // a partially written line is normal while a session runs
+/** The size and identity a transcript had when its cached facts were taken. */
+type FileStat = { size: number; mtimeMs: number; ino?: number };
+
+/**
+ * A transcript's facts, and what lets the next read start where this one stopped.
+ *
+ * Past the head window a transcript only ever grows at the end, so its head facts are final and
+ * the newest `ai-title` is the only answer left that can change: it is looked for in the bytes
+ * appended since, not in a fresh half-megabyte tail on every scan of a running session.
+ */
+interface FactsEntry extends CacheEntry<Facts> {
+  size: number;
+  ino: number | undefined;
+  /** Facts from the first HEAD_BYTES, taken once the file was longer than that — they cannot change. */
+  head?: TranscriptFacts;
+  /** The session this one carried on from, final once found or once LINK_BYTES had been read. */
+  link?: { value: string | null; final: boolean };
+  /** The tail window, scanned once and then extended by what was appended. */
+  tail?: TailScan;
+}
+
+/** The newest `ai-title` line seen from `from` up to `end` (the end of the last complete line). */
+interface TailScan { from: number; end: number; title: string | null; at: number }
+
+/** The literal every `ai-title` line carries: lines without it are not worth a JSON.parse. */
+const AI_TITLE_MARK = Buffer.from('"type":"ai-title"');
+const NEWLINE = 0x0a;
+
+/**
+ * The newest `ai-title` in `bytes`, which start at file offset `base`.
+ *
+ * Only a line that parses counts — exactly as a whole-window parse would — and `end` is the offset
+ * just past the last newline, so a line still being written is read again next time. A complete
+ * line that is merely missing its newline still counts, as it would in a full parse.
+ */
+function scanTitles(bytes: Buffer, base: number): { title: string | null; at: number; end: number } {
+  let title: string | null = null;
+  let at = -1;
+  let start = 0;
+  while (start < bytes.length) {
+    const newline = bytes.indexOf(NEWLINE, start);
+    const stop = newline < 0 ? bytes.length : newline;
+    const line = bytes.subarray(start, stop);
+    if (line.includes(AI_TITLE_MARK)) {
+      try {
+        const entry = JSON.parse(line.toString("utf8")) as { type?: string; aiTitle?: string };
+        if (entry.type === "ai-title" && entry.aiTitle?.trim()) {
+          title = entry.aiTitle.trim();
+          at = base + start;
+        }
+      } catch {
+        /* the cut-off first line of a window, or one half-written right now */
+      }
     }
-    if (limit && out.length >= limit) break;
+    if (newline < 0) break;
+    start = newline + 1;
   }
-  return out;
+  const last = bytes.lastIndexOf(NEWLINE);
+  return { title, at, end: base + last + 1 };
+}
+
+/** `length` bytes of a file from `position` — fewer if it is shorter, none if it cannot be read. */
+function readBytes(file: string, position: number, length: number): Buffer {
+  if (length <= 0) return Buffer.alloc(0);
+  let handle: number | null = null;
+  try {
+    handle = openSync(file, "r");
+    const buffer = Buffer.allocUnsafe(length);
+    const read = readSync(handle, buffer, 0, length, position);
+    return buffer.subarray(0, read);
+  } catch {
+    return Buffer.alloc(0);
+  } finally {
+    if (handle !== null) {
+      try {
+        closeSync(handle);
+      } catch {
+        /* already gone */
+      }
+    }
+  }
 }
 
 /** The first `bytes` of a file as text, without reading (or decoding) the rest of it. */
 function readHead(file: string, bytes: number): string {
-  let handle: number | null = null;
-  try {
-    handle = openSync(file, "r");
-    const buffer = Buffer.allocUnsafe(bytes);
-    const read = readSync(handle, buffer, 0, bytes, 0);
-    return buffer.subarray(0, read).toString("utf8");
-  } catch {
-    return "";
-  } finally {
-    if (handle !== null) {
-      try {
-        closeSync(handle);
-      } catch {
-        /* already gone */
-      }
-    }
-  }
+  return readBytes(file, 0, bytes).toString("utf8");
 }
 
-/** The last `bytes` of a file as text. The first line comes back cut; callers drop it. */
-function readTail(file: string, bytes: number, size: number): string {
-  const from = Math.max(0, size - bytes);
-  if (from === 0) return "";                      // the head read already covered the whole file
-  let handle: number | null = null;
-  try {
-    handle = openSync(file, "r");
-    const want = size - from;
-    const buffer = Buffer.allocUnsafe(want);
-    const read = readSync(handle, buffer, 0, want, from);
-    return buffer.subarray(0, read).toString("utf8");
-  } catch {
-    return "";
-  } finally {
-    if (handle !== null) {
-      try {
-        closeSync(handle);
-      } catch {
-        /* already gone */
-      }
-    }
-  }
+/** How long a just-written folder's mtime is not trusted: two changes in one clock tick share it. */
+const MTIME_SETTLE_MS = 2_000;
+/**
+ * How often a scan reads everything again instead of only what changed.
+ *
+ * The incremental scan trusts a folder's mtime for its list of files and re-stats only the running
+ * sessions' transcripts. Anything that slips past that — a transcript written by something other
+ * than a running session — is caught here, within three minutes.
+ */
+export const FULL_RESCAN_MS = 180_000;
+/** A folder known unreachable is asked again this rarely: each probe holds a pool thread for the SMB timeout. */
+export const UNREACHABLE_RECHECK_MS = 180_000;
+
+/** What a project folder held at its last listing, and what was learnt about each transcript in it. */
+interface FolderEntry {
+  mtimeMs: number;
+  transcripts: string[];
+  /** Names of the per-session sub-directories — only those can hold a custom-title.json. */
+  sidecars: Set<string>;
+  hasMemory: boolean;
+  stats: Map<string, Stats>;
+  /** Custom title per session id, against the signature of its custom-title.json. */
+  titles: Map<string, CacheEntry<string | null>>;
 }
 
 /** Objects from the first lines of `text`; a trailing partial line is dropped. */
@@ -151,20 +200,13 @@ function idOf(file: string): string {
   return file.slice(file.lastIndexOf(sep()) + 1, -TRANSCRIPT_EXT.length);
 }
 
-function signature(file: string): string {
-  try {
-    const st = statSync(file);
-    return `${st.size}:${st.mtimeMs}`;
-  } catch {
-    return "-";
-  }
-}
-
 export interface StoreOptions {
   /** Injected so tests can decide liveness without real processes. */
   isAlive?: (pid: number) => boolean;
   /** Injected so a dead network path cannot block a test. */
   folderExists?: (path: string) => boolean;
+  /** Injected so a test can move the clock past FULL_RESCAN_MS. */
+  now?: () => number;
 }
 
 export class Store {
@@ -172,20 +214,33 @@ export class Store {
   readonly config: ConfigStore;
   private readonly isAlive: (pid: number) => boolean;
   private readonly folderExists: (path: string) => boolean;
+  private readonly now: () => number;
   private titles: CacheEntry<Map<string, string>> | null = null;
+  /** Where the last read of history.jsonl stopped — it is only ever appended to. */
+  private historyRead: { ino: number; end: number } | null = null;
   private cwds = new Map<string, CacheEntry<string | null>>();
   /** Per transcript, re-read when it grows — unlike the cwd, the title keeps changing. */
-  private facts = new Map<string, CacheEntry<Facts>>();
+  private facts = new Map<string, FactsEntry>();
   /** Every session swap this app has watched happen — see core/sessionLinks.ts. */
   private readonly links: SessionLinks;
   /** Answers for `folderExists`, filled in by a background probe — see `folderReachable`. */
-  private folders = new Map<string, boolean>();
+  private folders = new Map<string, { reachable: boolean; at: number }>();
   private probing = new Set<string>();
+  /** Per project folder, what its last listing said — see `scan`. */
+  private folderCache = new Map<string, FolderEntry>();
+  /** `.claude.json`'s project paths, re-read only when the file changed: it is rewritten often and can be large. */
+  private claudeJson: CacheEntry<Map<string, string>> | null = null;
+  private lastFull = Number.NEGATIVE_INFINITY;
+  /** Sessions that were running at the last scan: one that just ended may have written its last lines since. */
+  private liveBefore = new Set<string>();
+  /** Whether the last scan read everything again — the main side drops its own caches with it. */
+  lastScanFull = false;
 
   constructor(home?: string, options: StoreOptions = {}) {
     this.paths = homePaths(home);
     this.config = new ConfigStore(home);
     this.isAlive = options.isAlive ?? defaultIsAlive;
+    this.now = options.now ?? Date.now;
     this.links = new SessionLinks(this.paths.hangarChains);
     // The default is deliberately NOT existsSync: a project on an unreachable network share makes
     // it wait for the SMB timeout — measured at 10.9 s here, on the thread that draws the window.
@@ -220,8 +275,12 @@ export class Store {
    * "idle" once the turn is the person's — and it is what a row's mark is drawn from.
    */
   liveSessions(): Map<string, { pid: number; status: string | null }> {
+    return this.liveFrom(this.registry());
+  }
+
+  private liveFrom(entries: RegistryEntry[]): Map<string, { pid: number; status: string | null }> {
     const live = new Map<string, { pid: number; status: string | null }>();
-    for (const entry of this.registry()) {
+    for (const entry of entries) {
       if (this.isAlive(entry.pid)) live.set(entry.sessionId, { pid: entry.pid, status: entry.status ?? null });
     }
     return live;
@@ -233,16 +292,40 @@ export class Store {
     return typeof data.status === "string" ? data.status : null;
   }
 
-  /** First prompt per session. Re-parsed only when history.jsonl changed: it is megabytes. */
+  /**
+   * First prompt per session.
+   *
+   * history.jsonl is megabytes and only ever appended to, and every prompt typed anywhere grows it:
+   * so only the bytes past the last read are parsed, onto a copy of what was known. A file that
+   * shrank or was replaced (another inode) is read from the start again.
+   */
   historyTitles(): Map<string, string> {
-    const sig = signature(this.paths.history);
+    let st: Stats | undefined;
+    try {
+      st = statSync(this.paths.history, { throwIfNoEntry: false });
+    } catch {
+      st = undefined;
+    }
+    const sig = st ? `${st.size}:${st.mtimeMs}` : "-";
     if (this.titles?.signature === sig) return this.titles.value;
-    const titles = new Map<string, string>();
-    for (const entry of readLines(this.paths.history)) {
-      const row = entry as { sessionId?: string; display?: string };
+    const before = this.historyRead;
+    const grown = st && before && this.titles && before.ino === st.ino && st.size >= before.end;
+    const titles = grown ? new Map(this.titles!.value) : new Map<string, string>();
+    const from = grown ? before!.end : 0;
+    const bytes = st ? readBytes(this.paths.history, from, st.size - from) : Buffer.alloc(0);
+    for (const line of bytes.toString("utf8").split("\n")) {
+      if (!line.trim()) continue;
+      let row: { sessionId?: string; display?: string };
+      try {
+        row = JSON.parse(line) as typeof row;
+      } catch {
+        continue;                                 // a partially written line; read again next time
+      }
       if (!row.sessionId || !row.display || titles.has(row.sessionId)) continue;
       titles.set(row.sessionId, row.display.trim().split("\n")[0] ?? "");
     }
+    // Up to the last newline: a line still being written is parsed again once it is whole.
+    this.historyRead = st ? { ino: st.ino, end: from + bytes.lastIndexOf(NEWLINE) + 1 } : null;
     this.titles = { signature: sig, value: titles };
     return titles;
   }
@@ -271,20 +354,50 @@ export class Store {
    *
    * Two bounded reads — the start for the prompt, the end for the newest `ai-title` — cached
    * against size and mtime, so a session being appended to is re-read only when it actually grows.
+   * Once it is past the head window, a growing transcript costs only its new bytes (see FactsEntry).
    */
-  transcriptFacts(file: string, st: { size: number; mtimeMs: number }): Facts {
+  transcriptFacts(file: string, st: FileStat): Facts {
     const sig = `${st.size}:${st.mtimeMs}`;
     const hit = this.facts.get(file);
     if (hit?.signature === sig) return hit.value;
-    const head = readHead(file, HEAD_BYTES);
-    const complete = st.size <= HEAD_BYTES;
-    const facts = factsFrom(head, complete ? "" : readTail(file, TAIL_BYTES, st.size), complete);
-    // Only a transcript that already looks like a continuation earns the deeper read.
-    const carriedFrom = facts.startedByClear || facts.carriedTitle !== null
-      ? previousSession(complete ? head : readHead(file, LINK_BYTES), idOf(file))
-      : null;
-    const value = { ...facts, carriedFrom };
-    this.facts.set(file, { signature: sig, value });
+    if (st.size <= HEAD_BYTES) {
+      // Small enough to read whole, and it may still be changing anything: no shortcuts.
+      const head = readHead(file, HEAD_BYTES);
+      const facts = factsFrom(head, "", true);
+      const carriedFrom = facts.startedByClear || facts.carriedTitle !== null ? previousSession(head, idOf(file)) : null;
+      const value = { ...facts, carriedFrom };
+      this.facts.set(file, { signature: sig, value, size: st.size, ino: st.ino });
+      return value;
+    }
+
+    // Append-only from here on; a file that shrank or is another file starts over.
+    const same = hit !== undefined && hit.ino === st.ino && st.size >= hit.size;
+    const head = (same && hit.head) || factsFrom(readHead(file, HEAD_BYTES), "", false);
+    // Only a transcript that already looks like a continuation earns the deeper read. The first id in
+    // the link window never changes once it is there, and nothing new can enter a full window.
+    let link = same ? hit.link : undefined;
+    if ((head.startedByClear || head.carriedTitle !== null) && !link?.final) {
+      const value = previousSession(readHead(file, LINK_BYTES), idOf(file));
+      link = { value, final: value !== null || st.size >= LINK_BYTES };
+    }
+
+    // The tail window is the last TAIL_BYTES — and nothing at all while the file is shorter than
+    // that, where the head read is all there is (the window used to be empty there, and still is).
+    const from = st.size - TAIL_BYTES;
+    let tail = same ? hit.tail : undefined;
+    if (from > 0) {
+      if (!tail || tail.from > from || tail.end > st.size) {
+        const found = scanTitles(readBytes(file, from, TAIL_BYTES), from);
+        tail = { from, ...found };
+      } else if (st.size > tail.end) {
+        const found = scanTitles(readBytes(file, tail.end, st.size - tail.end), tail.end);
+        tail = { from: tail.from, end: found.end, title: found.title ?? tail.title, at: found.title ? found.at : tail.at };
+      }
+    }
+    // A title that has scrolled out of the window is no longer seen, as with a fresh window read.
+    const tailTitle = from > 0 && tail && tail.at >= from ? tail.title : null;
+    const value = { ...head, aiTitle: tailTitle ?? head.aiTitle, carriedFrom: link?.value ?? null };
+    this.facts.set(file, { signature: sig, value, size: st.size, ino: st.ino, head, link, tail });
     return value;
   }
 
@@ -297,24 +410,33 @@ export class Store {
    */
   private folderReachable(path: string): boolean {
     const known = this.folders.get(path);
-    if (!this.probing.has(path)) {
+    // An unreachable answer is kept for a while: every probe of a dead share sits on one of libuv's
+    // four pool threads for the SMB timeout, where it delays every other file operation in the app.
+    const settled = known && !known.reachable && this.now() - known.at < UNREACHABLE_RECHECK_MS;
+    if (!settled && !this.probing.has(path)) {
       this.probing.add(path);
       void access(path)
-        .then(() => this.folders.set(path, true))
-        .catch(() => this.folders.set(path, false))
+        .then(() => this.folders.set(path, { reachable: true, at: this.now() }))
+        .catch(() => this.folders.set(path, { reachable: false, at: this.now() }))
         .finally(() => this.probing.delete(path));
     }
-    return known ?? true;
+    return known?.reachable ?? true;
   }
 
   /** Folders known to Claude Code, keyed by their encoded name — the fallback for empty projects. */
   knownPaths(): Map<string, string> {
-    const data = readJsonFile<{ projects?: Record<string, unknown> }>(this.paths.claudeJson, {});
-    const known = new Map<string, string>();
-    for (const path of Object.keys(data.projects ?? {})) {
-      const encoded = encodeProjectPath(path);
-      if (!known.has(encoded)) known.set(encoded, path);
+    const sig = fileSignature(this.paths.claudeJson);
+    let fromClaude = this.claudeJson?.signature === sig && sig !== null ? this.claudeJson.value : null;
+    if (!fromClaude) {
+      const data = readJsonFile<{ projects?: Record<string, unknown> }>(this.paths.claudeJson, {});
+      fromClaude = new Map<string, string>();
+      for (const path of Object.keys(data.projects ?? {})) {
+        const encoded = encodeProjectPath(path);
+        if (!fromClaude.has(encoded)) fromClaude.set(encoded, path);
+      }
+      this.claudeJson = sig === null ? null : { signature: sig, value: fromClaude };
     }
+    const known = new Map(fromClaude);
     // A folder added by hand has neither a transcript nor a .claude.json entry yet.
     for (const [dir, path] of Object.entries(this.config.addedProjects())) {
       if (!known.has(dir)) known.set(dir, path);
@@ -328,6 +450,27 @@ export class Store {
   }
 
   /**
+   * A session's custom title, from the folder's listing rather than a blind open per session.
+   *
+   * Only a session with a directory of its own can have a custom-title.json, and only a running one
+   * (or one a full scan is re-checking) can have had it changed since the last look — and then a
+   * stat says whether it did.
+   */
+  private titleIn(folder: FolderEntry, dir: string, id: string, recheck: boolean): string | null {
+    if (!folder.sidecars.has(id)) {
+      folder.titles.delete(id);
+      return null;
+    }
+    const hit = folder.titles.get(id);
+    if (hit && !recheck) return hit.value;
+    const sig = fileSignature(join(dir, id, CUSTOM_TITLE_FILE));
+    if (hit && sig !== null && hit.signature === sig) return hit.value;
+    const value = sig === "-" ? null : this.customTitle(dir, id);
+    folder.titles.set(id, { signature: sig ?? "", value });
+    return value;
+  }
+
+  /**
    * Note who is running what, so a session replaced by /clear can be folded under its successor.
    *
    * Called on a timer of its own, not only from a scan: the list is re-read when the page asks, and
@@ -338,10 +481,22 @@ export class Store {
     this.links.observe(this.registry());
   }
 
-  /** Every project, newest use first. */
+  /**
+   * Every project, newest use first.
+   *
+   * Incremental, because it runs every fifteen seconds all day: a folder whose mtime has not moved
+   * keeps its last listing (a file added, removed or renamed in it moves the mtime), and of its
+   * transcripts only the running sessions' — and those running at the last scan, which may have
+   * written their last lines since — are stat'ed again. Every FULL_RESCAN_MS everything is read
+   * again, which also drops what the caches hold for transcripts that are gone.
+   */
   scan(): ProjectInfo[] {
-    this.watchRegistry();
-    const live = this.liveSessions();
+    const now = this.now();
+    const full = now - this.lastFull >= FULL_RESCAN_MS;
+    // One read of the registry serves both the swap watch and the live marks.
+    const entries = this.registry();
+    this.links.observe(entries);
+    const live = this.liveFrom(entries);
     const titles = this.historyTitles();
     const known = this.knownPaths();
     const aliases = this.config.aliases();
@@ -353,9 +508,44 @@ export class Store {
       return [];
     }
     const replaced = this.links.map();
-    const projects = dirs.map((name) => this.readProject(name, live, titles, known, aliases, pins, replaced));
+    const growing = new Set([...live.keys(), ...this.liveBefore]);
+    const seen = full ? new Set<string>() : null;
+    const pass = { now, full, growing, seen };
+    const projects = dirs.map((name) => this.readProject(name, live, titles, known, aliases, pins, replaced, pass));
+    const listed = new Set(dirs);
+    for (const name of this.folderCache.keys()) if (!listed.has(name)) this.folderCache.delete(name);
+    this.liveBefore = new Set(live.keys());
+    this.lastScanFull = full;
+    if (seen) {
+      this.lastFull = now;
+      // Whatever the caches hold for a transcript or folder this scan did not meet is gone for good.
+      for (const file of this.cwds.keys()) if (!seen.has(file)) this.cwds.delete(file);
+      for (const file of this.facts.keys()) if (!seen.has(file)) this.facts.delete(file);
+      for (const path of this.folders.keys()) if (!seen.has(path)) this.folders.delete(path);
+    }
     // Pinned rows first, then newest use first — a pin is the user overruling the clock.
     return projects.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastUsed - a.lastUsed);
+  }
+
+  /** A project folder's listing: the cached one while its mtime stands, else read again. */
+  private listing(dirName: string, dir: string, mtimeMs: number, now: number, full: boolean): { folder: FolderEntry; fresh: boolean } {
+    const cached = this.folderCache.get(dirName);
+    // A folder changed within the last moment is listed again: a second change in the same clock
+    // tick would leave its mtime where it was.
+    if (cached && !full && cached.mtimeMs === mtimeMs && now - mtimeMs >= MTIME_SETTLE_MS) return { folder: cached, fresh: false };
+    const entries = readdirSync(dir, { withFileTypes: true });
+    const folder: FolderEntry = {
+      mtimeMs,
+      transcripts: entries.filter((e) => e.isFile() && e.name.endsWith(TRANSCRIPT_EXT)).map((e) => e.name),
+      sidecars: new Set(entries.filter((e) => e.isDirectory() || e.isSymbolicLink()).map((e) => e.name)),
+      hasMemory: entries.some((e) => e.name === MEMORY_DIR),
+      stats: cached?.stats ?? new Map(),
+      titles: cached?.titles ?? new Map(),
+    };
+    const ids = new Set(folder.transcripts.map((name) => name.slice(0, -TRANSCRIPT_EXT.length)));
+    for (const id of folder.titles.keys()) if (!ids.has(id)) folder.titles.delete(id);
+    this.folderCache.set(dirName, folder);
+    return { folder, fresh: true };
   }
 
   private readProject(
@@ -366,17 +556,32 @@ export class Store {
     aliases: Record<string, string>,
     pins: { projects: string[]; sessions: string[] },
     replaced: Map<string, string>,
+    pass: { now: number; full: boolean; growing: Set<string>; seen: Set<string> | null },
   ): ProjectInfo {
     const dir = join(this.paths.projects, dirName);
+    // Before the listing: a change landing between the two moves the mtime past what is cached.
+    const dirMtime = statSync(dir).mtimeMs;
+    const { folder, fresh } = this.listing(dirName, dir, dirMtime, pass.now, pass.full);
     // Stat once per file and sort on that: comparing with statSync() inside the comparator asks
     // the filesystem O(n log n) times for numbers that do not change during a scan.
-    const stats = readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isFile() && e.name.endsWith(TRANSCRIPT_EXT))
-      .map((e) => {
-        const file = join(dir, e.name);
-        return { file, stat: statSync(file) };
-      })
-      .sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
+    const stats: { file: string; stat: Stats }[] = [];
+    const statted = new Map<string, Stats>();
+    for (const name of folder.transcripts) {
+      const file = join(dir, name);
+      let stat = fresh || pass.growing.has(idOf(file)) ? undefined : folder.stats.get(file);
+      if (!stat) {
+        try {
+          stat = statSync(file);
+        } catch {
+          continue;                               // gone since the listing; the next one will not list it
+        }
+      }
+      statted.set(file, stat);
+      stats.push({ file, stat });
+      pass.seen?.add(file);
+    }
+    folder.stats = statted;
+    stats.sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
     const files = stats.map((entry) => entry.file);
 
     let cwd: string | null = null;
@@ -392,7 +597,7 @@ export class Store {
       // Claude Code leaves one behind whenever the talking ends up in a different file.
       if (!facts.conversation) return [];
       const id = idOf(file);
-      const custom = this.customTitle(dir, id);
+      const custom = this.titleIn(folder, dir, id, fresh || pass.growing.has(id));
       // The history file is the last resort now, not the first: it is not reliably per-session.
       const prompt = facts.firstPrompt || titles.get(id) || "";
       return [{
@@ -423,7 +628,7 @@ export class Store {
     const sessions: SessionInfo[] = foldClears(transcripts, replaced)
       .sort((a, b) => Number(b.pinned) - Number(a.pinned));   // stable: newest first within each group
 
-    const dirMtime = statSync(dir).mtimeMs;
+    if (cwd) pass.seen?.add(cwd);
     const alias = (cwd && aliases[cwd]) || aliases[dirName] || null;
     return {
       dir: dirName,
@@ -431,7 +636,7 @@ export class Store {
       alias,
       name: alias || (cwd ? baseName(cwd) : dirName),
       sessions,
-      hasMemory: existsSync(join(dir, MEMORY_DIR)),
+      hasMemory: folder.hasMemory,
       exists: cwd ? this.folderExists(cwd) : false,
       lastUsed: sessions.length ? Math.max(...sessions.map((s) => s.modifiedAt)) : dirMtime,
       totalBytes: sessions.reduce((sum, s) => sum + s.bytes, 0),
@@ -454,8 +659,17 @@ export class Store {
     mkdirSync(sideDir, { recursive: true });
     writeFileSync(join(sideDir, CUSTOM_TITLE_FILE), JSON.stringify({ customTitle: title }), "utf8");
     const line = JSON.stringify({ type: CUSTOM_TITLE_TYPE, customTitle: title, sessionId: session.id });
-    const existing = readFileSync(session.file, "utf8");
-    appendFileSync(session.file, `${existing.endsWith("\n") || !existing ? "" : "\n"}${line}\n`, "utf8");
+    // Only the last byte decides whether a newline is owed — not a read of the whole transcript.
+    let size = 0;
+    try {
+      size = statSync(session.file).size;
+    } catch {
+      /* not there yet: appending creates it, with nothing to separate from */
+    }
+    const last = readBytes(session.file, Math.max(0, size - 1), 1);
+    appendFileSync(session.file, `${!last.length || last[0] === NEWLINE ? "" : "\n"}${line}\n`, "utf8");
+    // The sidecar may have changed without the folder's mtime moving; the next scan looks again.
+    this.folderCache.delete(dir.slice(dir.lastIndexOf(sep()) + 1));
   }
 
   /** Display alias for a project; an empty name clears it. */
@@ -518,6 +732,14 @@ function defaultIsAlive(pid: number): boolean {
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "EPERM";   // exists, owned by someone else
   }
+}
+
+/**
+ * One short string that changes whenever anything in the list does — what the page passes back so
+ * an unchanged list need not cross the process boundary again.
+ */
+export function scanSignature(projects: ProjectInfo[]): string {
+  return createHash("sha1").update(JSON.stringify(projects)).digest("base64");
 }
 
 /**
