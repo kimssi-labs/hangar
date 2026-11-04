@@ -13,8 +13,8 @@ import { Sparkline } from "./Chart";
 import { Truncated } from "./Truncated";
 import { formatBytes, formatTime, sinceParts } from "../format";
 import { useText } from "../useText";
-import { gitLabel, gitTitle } from "@core/git";
-import type { Worktree } from "@core/worktree";
+import { gitTitle, type GitInfo } from "@core/git";
+import { treeName, type Worktree } from "@core/worktree";
 import { useSessionSamples } from "../../features/metrics/ui";
 
 // How narrow a row has to be before its numbers drop to a second line is a container query on the
@@ -94,6 +94,79 @@ function Pin() {
   );
 }
 
+/**
+ * The mark of a worktree: a fork, drawn like the pin, in git's own colour (the `tree` token) rather
+ * than the orange a pin or a selection wears.
+ */
+function Fork({ className = "w-3 h-3 shrink-0" }: { className?: string }) {
+  const t = useText();
+  return (
+    <svg viewBox="0 0 16 16" className={`${className} text-tree`} fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" aria-label={t("list.worktree")} role="img">
+      <path d="M4 1.5v4a4 4 0 0 0 8 0v-4M8 9.5V15" />
+    </svg>
+  );
+}
+
+/** The branch on a repository's line: the fork's colour and weight, git's usual drawing. */
+function BranchMark() {
+  return (
+    <svg viewBox="0 0 16 16" className="w-3 h-3 shrink-0 text-tree" fill="none" stroke="currentColor"
+      strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <circle cx="4.5" cy="3.5" r="1.75" />
+      <circle cx="4.5" cy="12.5" r="1.75" />
+      <circle cx="11.5" cy="4.5" r="1.75" />
+      <path d="M4.5 5.25v5.5M11.5 6.25c0 3-7 2-7 4.5" />
+    </svg>
+  );
+}
+
+/**
+ * What is uncommitted, once something counted it: the selected project's own request, or the file
+ * panel's. No row asks for its own count.
+ */
+function Uncommitted({ git }: { git: GitInfo }) {
+  const t = useText();
+  return git.dirty ? <span className="tree-chip" title={gitTitle(git, t)}>●{git.dirty}</span> : null;
+}
+
+/** A repository row's count of the worktrees listed under it: the fork, and how many. */
+function TreeCount({ count }: { count: number }) {
+  const t = useText();
+  return <span className="tree-chip" title={t("list.trees", { count })}><Fork />{count}</span>;
+}
+
+/**
+ * The repository line: the branch, and what is uncommitted. Only the branch gives way when the row
+ * is narrow, so a docked band still shows the mark and the count beside whatever fits of the name.
+ */
+function GitLine({ git }: { git: GitInfo }) {
+  const t = useText();
+  return (
+    <div className="flex items-center gap-1 text-[11px] text-bone-400" title={gitTitle(git, t)}>
+      <BranchMark />
+      <span className="truncate">{git.detached ? `${git.head} ${t("list.detached")}` : git.head}</span>
+      <Uncommitted git={git} />
+    </div>
+  );
+}
+
+/**
+ * A project's name in the sessions screen's top bar. A worktree reads `<repository> ⑂ <branch>`:
+ * there is no row above it there to say which repository it belongs to.
+ */
+export function ProjectTitle({ project, projects }: { project: ProjectInfo; projects: ProjectInfo[] }) {
+  if (!project.worktree) return <>{project.name}</>;
+  const parent = project.parentDir ? projects.find((p) => p.dir === project.parentDir) : undefined;
+  const tree = treeName(project, parent?.name ?? null);
+  return (
+    <>
+      {tree.repo ? `${tree.repo} ` : null}
+      <Fork className="inline-block w-3.5 h-3.5 align-[-2px]" /> {tree.name}
+    </>
+  );
+}
+
 /** "3 min ago" in whichever language the window is in, or a date once that stops meaning much. */
 function since(t: ReturnType<typeof useText>, ms: number): string {
   const { key, vars } = sinceParts(ms);
@@ -131,18 +204,25 @@ function useScrollIntoView(selected: boolean): React.RefObject<HTMLDivElement> {
 }
 
 export function ProjectRow({
-  project, selected, depth = 0, onSelect, onOpen, onContextMenu,
+  project, selected, depth = 0, parent = null, trees = 0, onSelect, onOpen, onContextMenu,
 }: {
   project: ProjectInfo;
   selected: boolean;
   /** 1 for a worktree shown under the repository it belongs to. */
   depth?: number;
+  /** That repository's row, when the worktree is shown under it. */
+  parent?: ProjectInfo | null;
+  /** How many worktrees are shown under this row. */
+  trees?: number;
   onSelect: () => void;
   onOpen: () => void;
   onContextMenu?: () => void;
 }) {
   const t = useText();
   const ref = useScrollIntoView(selected);
+  const { git } = project;
+  // A worktree goes by its branch: its folder, `<repo>-<branch>`, lost the branch to a narrow list.
+  const tree = project.worktree ? treeName(project, parent?.name ?? null) : null;
   return (
     <div
       ref={ref}
@@ -153,30 +233,35 @@ export function ProjectRow({
       onDoubleClick={onOpen}
       onContextMenu={(event) => { event.preventDefault(); onContextMenu?.(); }}
     >
-      {/* A rule down the left, so an indented row reads as belonging to the one above it. */}
-      {depth ? <span className="self-stretch w-px bg-ink-600 shrink-0" aria-hidden="true" /> : null}
+      {/* A rule down the left, in git's colour, so an indented row reads as part of the one above. */}
+      {depth ? <span className="self-stretch w-px bg-tree/70 shrink-0" aria-hidden="true" /> : null}
       <ProjectMark project={project} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           {project.pinned ? <Pin /> : null}
+          {tree ? <Fork /> : null}
           <Truncated
             as="span"
-            title={project.cwd ?? project.dir}
+            testId="project-name"
+            // A worktree's folder name stays findable: first in its tooltip, above the path.
+            title={tree && project.cwd
+              ? `${project.cwd.split(/[\\/]/).pop()}\n${project.cwd}`
+              : project.cwd ?? project.dir}
             className={`text-sm ${project.exists ? "text-bone-100" : "text-bad"}`}
           >
-            {project.name}
+            {tree ? tree.name : project.name}
+            {/* Under its repository's row the repository goes without saying; anywhere else it is said. */}
+            {tree?.repo && !parent ? <span className="text-bone-500"> · {tree.repo}</span> : null}
           </Truncated>
+          {tree?.isBranch && git ? <Uncommitted git={git} /> : null}
           {project.hasMemory ? <span className="chip">{t("list.memory")}</span> : null}
-          {project.worktree ? <span className="chip text-accent">{t("list.worktree")}</span> : null}
+          {trees ? <TreeCount count={trees} /> : null}
         </div>
         <Truncated className="text-[11px] text-bone-500">{project.cwd ?? t("list.folderUnknown")}</Truncated>
         {/* One line, and only where there is a repository: the branch is the thing you check before
-            resuming a session, and opening a terminal to find it out is the friction this removes. */}
-        {project.git ? (
-          <Truncated title={gitTitle(project.git, t)} className="text-[11px] text-bone-400">
-            <span className="text-accent">⌥</span> {gitLabel(project.git)}
-          </Truncated>
-        ) : null}
+            resuming a session, and opening a terminal to find it out is the friction this removes.
+            A worktree named by its branch already says it, and keeps only the count, beside the name. */}
+        {git && !tree?.isBranch ? <GitLine git={git} /> : null}
       </div>
       <div className="row-figures">
         <div>{t("list.sessions", { count: project.sessions.length })}</div>

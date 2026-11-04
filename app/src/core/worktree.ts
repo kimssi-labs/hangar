@@ -165,8 +165,42 @@ export function mainRepoFrom(pointer: string): string | null {
   return cut > 0 ? gitdir.slice(0, cut) : null;
 }
 
-/** A row of the project list, and how deep it sits. */
-export interface Placed<T> { item: T; depth: number }
+/**
+ * Point each linked worktree at its repository: the folder always, and the row when that repository
+ * is in the list too, so the window can tuck the worktree under it.
+ *
+ * `repoOf` reads the repository out of a checkout (one small read, no git process); `key` makes two
+ * spellings of one folder compare equal, and is told whether the folder is there to be resolved.
+ */
+export function linkWorktrees<T extends {
+  dir: string; cwd: string | null; exists: boolean;
+  worktree: boolean; mainRepo: string | null; parentDir: string | null;
+}>(
+  projects: T[],
+  repoOf: (cwd: string) => string | null,
+  key: (path: string, present: boolean) => string,
+): void {
+  if (!projects.some((project) => project.worktree)) return;
+  const byPath = new Map(projects
+    .filter((project) => project.cwd)
+    .map((project) => [key(project.cwd as string, project.exists), project.dir]));
+  for (const project of projects) {
+    if (!project.worktree || !project.cwd) continue;
+    project.mainRepo = repoOf(project.cwd);
+    // The repository a worktree we just read points at is taken to be there, as it always was.
+    project.parentDir = project.mainRepo ? byPath.get(key(project.mainRepo, true)) ?? null : null;
+  }
+}
+
+/** A row of the project list, and how it sits. */
+export interface Placed<T> {
+  item: T;
+  depth: number;
+  /** The row a worktree is tucked under, or null for a row at the top level. */
+  parent: T | null;
+  /** How many worktrees are tucked under this row. */
+  trees: number;
+}
 
 /**
  * The list order, with each worktree tucked under the project it belongs to.
@@ -189,8 +223,35 @@ export function placeWorktrees<T extends { dir: string; parentDir?: string | nul
   for (const project of projects) {
     const parent = project.parentDir;
     if (parent && parent !== project.dir && known.has(parent)) continue;   // placed under its parent
-    placed.push({ item: project, depth: 0 });
-    for (const child of children.get(project.dir) ?? []) placed.push({ item: child, depth: 1 });
+    const trees = children.get(project.dir) ?? [];
+    placed.push({ item: project, depth: 0, parent: null, trees: trees.length });
+    for (const child of trees) placed.push({ item: child, depth: 1, parent: project, trees: 0 });
   }
   return placed;
+}
+
+/**
+ * What a worktree is called on screen: its branch, and the repository it belongs to.
+ *
+ * Its folder is `<repo>-<branch>` (suggestPath), which a narrow list cut off right where the branch
+ * starts. A name the user gave the row still wins, and a detached head has no branch to show, so
+ * those keep the row's own name; a folder name loses the repository's prefix on the way.
+ * `repo` is the repository's row name when it is listed, else its folder.
+ */
+export function treeName(
+  project: {
+    name: string; alias: string | null; mainRepo: string | null;
+    git: { head: string; detached: boolean } | null;
+  },
+  parentName: string | null,
+): { name: string; isBranch: boolean; repo: string | null } {
+  const folder = project.mainRepo?.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || null;
+  const repo = parentName ?? folder;
+  if (!project.alias && project.git && !project.git.detached) {
+    return { name: project.git.head, isBranch: true, repo };
+  }
+  const prefix = `${folder}-`.toLowerCase();
+  const strip = !project.alias && folder && project.name.length > prefix.length
+    && project.name.toLowerCase().startsWith(prefix);
+  return { name: strip ? project.name.slice(prefix.length) : project.name, isBranch: false, repo };
 }

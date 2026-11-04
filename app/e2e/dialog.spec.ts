@@ -93,10 +93,24 @@ test("the app asks in its own dialog, and a worktree becomes a project", async (
     await field.fill("feature/dialog");
     await page.getByRole("button", { name: "Create" }).click();
 
-    // The worktree exists on disk, and its folder is a project row of its own.
+    // The worktree exists on disk, and its folder is a project row of its own, called by its
+    // branch: the folder name `<repo>-<branch>` lost the branch to a narrow list. The folder is
+    // still there, in the tooltip.
     const expected = `${workspace}-feature-dialog`;
     await expect.poll(() => existsSync(expected), { timeout: 15000 }).toBe(true);
-    await expect(page.getByText("workspace-feature-dialog", { exact: true }).first()).toBeVisible();
+    const childName = page.getByTestId("project-name").filter({ hasText: /^feature\/dialog$/ });
+    await expect(childName).toBeVisible();
+    await expect(childName).toHaveAttribute("title", /workspace-feature-dialog/);
+    // Marked by a drawn fork that says what it is, rather than by the word.
+    const childRow = page.locator(".row").filter({ has: childName });
+    await expect(childRow.getByRole("img", { name: "worktree" })).toBeVisible();
+    // The repository's row counts the worktree under it.
+    const parentRow = page.locator(".row").filter({
+      has: page.getByTestId("project-name").filter({ hasText: /^workspace$/ }),
+    });
+    const count = parentRow.getByTitle("1 worktree(s)");
+    await expect(count).toHaveText("1");
+    await expect(count.getByRole("img", { name: "worktree" })).toBeVisible();
 
     // And the detail panel lists both checkouts of the repository.
     await expect(page.getByText("Worktrees", { exact: true })).toBeVisible();
@@ -105,15 +119,20 @@ test("the app asks in its own dialog, and a worktree becomes a project", async (
     // The worktree sits UNDER its repository rather than beside it: indented, and directly after.
     const rows = await page.evaluate(() => Array.from(document.querySelectorAll(".row"))
       .map((row) => ({
-        text: row.textContent ?? "",
+        name: row.querySelector("[data-testid='project-name']")?.textContent ?? "",
         indent: Number.parseFloat(getComputedStyle(row).marginLeft) || 0,
-      }))
-      .filter((row) => row.text.includes("workspace")));
-    const parent = rows.findIndex((row) => !row.text.includes("feature-dialog"));
-    const child = rows.findIndex((row) => row.text.includes("workspace-feature-dialog"));
+      })));
+    const parent = rows.findIndex((row) => row.name === "workspace");
+    const child = rows.findIndex((row) => row.name === "feature/dialog");
     expect(child).toBe(parent + 1);
     expect(rows[child]?.indent).toBeGreaterThan(0);
     expect(rows[parent]?.indent).toBe(0);
+
+    // Its sessions screen has no repository row above it, so the top bar names the repository.
+    await childName.dblclick();
+    const title = page.getByTestId("screen-title");
+    await expect(title).toHaveText(/workspace\s*feature\/dialog/);
+    await expect(title.getByRole("img", { name: "worktree" })).toBeVisible();
   } finally {
     await app.close();
   }

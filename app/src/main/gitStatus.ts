@@ -97,12 +97,7 @@ export function headOf(cwd: string): GitInfo | null {
   const parsed = parseHead(head);
   if (!parsed) return null;
   const cached = counts.get(cwd);
-  return {
-    ...parsed,
-    ahead: 0,
-    behind: 0,
-    dirty: cached && Date.now() - cached.at < COUNT_TTL_MS ? cached.dirty : null,
-  };
+  return { ...parsed, dirty: cached && Date.now() - cached.at < COUNT_TTL_MS ? cached.dirty : null };
 }
 
 /**

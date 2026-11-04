@@ -17,9 +17,6 @@ export interface GitInfo {
   head: string;
   /** True when the head is a commit rather than a branch. */
   detached: boolean;
-  /** Commits ahead of / behind the upstream, when there is one and it has been fetched. */
-  ahead: number;
-  behind: number;
   /** Files with uncommitted changes, or null when nobody counted. */
   dirty: number | null;
 }
@@ -35,42 +32,13 @@ export function parseHead(head: string): { head: string; detached: boolean } | n
   return null;
 }
 
-/**
- * Ahead/behind, counted from the two commit lists a rev-list would produce.
- *
- * Kept separate so the caller can decide whether that walk is worth doing; on a row that only shows
- * a branch name, it is not.
- */
-export function aheadBehind(local: string[], remote: string[]): { ahead: number; behind: number } {
-  const theirs = new Set(remote);
-  const ours = new Set(local);
-  return {
-    ahead: local.filter((commit) => !theirs.has(commit)).length,
-    behind: remote.filter((commit) => !ours.has(commit)).length,
-  };
-}
-
 /** The porcelain-v1 lines of `git status`, counted as "files with something uncommitted". */
 export function countDirty(porcelain: string): number {
   return porcelain.split("\n").filter((line) => line.trim().length > 0).length;
 }
 
 /**
- * The line a row shows: `main +2` or `main ●3` or `a1b2c3d detached`.
- *
- * Short by construction. A row has a name, a size and a time on it already, and a git line that
- * wraps costs more than it tells.
- */
-export function gitLabel(info: GitInfo): string {
-  const parts = [info.detached ? `${info.head} detached` : info.head];
-  if (info.ahead) parts.push(`↑${info.ahead}`);
-  if (info.behind) parts.push(`↓${info.behind}`);
-  if (info.dirty) parts.push(`●${info.dirty}`);
-  return parts.join(" ");
-}
-
-/**
- * The longer form, for a tooltip and the detail panel.
+ * The head and what is uncommitted, in words: the row's tooltip and the detail panel.
  *
  * A translator is passed in rather than imported: this module is the rules, and the wording is the
  * window's. English is what a caller without one gets, which keeps the tests readable.
@@ -83,8 +51,6 @@ export type GitPhrase = (key: any, vars?: Record<string, string | number>) => st
 const EN_GIT: Record<string, (v: Record<string, string | number>) => string> = {
   "git.on": (v) => `Git: on ${v.branch}`,
   "git.detached": (v) => `Git: detached at ${v.commit}`,
-  "git.push": (v) => `${v.count} to push`,
-  "git.pull": (v) => `${v.count} to pull`,
   "git.uncounted": () => "changes not counted",
   "git.clean": () => "nothing uncommitted",
   "git.dirty": (v) => `${v.count} uncommitted`,
@@ -95,11 +61,8 @@ export function gitTitle(info: GitInfo, t: GitPhrase = inEnglish): string {
   const where = info.detached
     ? t("git.detached", { commit: info.head })
     : t("git.on", { branch: info.head });
-  const state: string[] = [];
-  if (info.ahead) state.push(t("git.push", { count: info.ahead }));
-  if (info.behind) state.push(t("git.pull", { count: info.behind }));
-  if (info.dirty === null) state.push(t("git.uncounted"));
-  else if (info.dirty === 0) state.push(t("git.clean"));
-  else state.push(t("git.dirty", { count: info.dirty }));
-  return `${where}, ${state.join(", ")}`;
+  const state = info.dirty === null ? t("git.uncounted")
+    : info.dirty === 0 ? t("git.clean")
+      : t("git.dirty", { count: info.dirty });
+  return `${where}, ${state}`;
 }

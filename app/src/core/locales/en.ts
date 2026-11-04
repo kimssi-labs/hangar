@@ -43,6 +43,8 @@ export const en = {
   // -- lists -----------------------------------------------------------------------------------------
   "list.sessions": "{count} sessions",
   "list.worktree": "worktree",
+  "list.trees": "{count} worktree(s)",
+  "list.detached": "detached",
   "list.folderUnknown": "folder unknown",
   "list.memory": "memory",
   // What a row's mark says when the pointer rests on it.
@@ -324,8 +326,6 @@ export const en = {
   "tip.usageResets": "{label} — {percent} used, {left} left, resets {clock}",
   "git.on": "Git: on {branch}",
   "git.detached": "Git: detached at {commit}",
-  "git.push": "{count} to push",
-  "git.pull": "{count} to pull",
   "git.uncounted": "changes not counted",
   "git.clean": "nothing uncommitted",
   "git.dirty": "{count} uncommitted",

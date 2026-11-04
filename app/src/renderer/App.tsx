@@ -26,7 +26,7 @@ import { SIDE_PANE_TABS } from "@core/constants";
 import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
 import { chosenMonitor } from "../features/dock/contract";
 import { DockButton, DockGrip, useDock } from "../features/dock/ui";
-import { ProjectDetail, SessionDetail } from "./components/Lists";
+import { ProjectDetail, ProjectTitle, SessionDetail } from "./components/Lists";
 import { SETTINGS_SECTIONS, SettingsView, type SettingsSection } from "./components/Settings";
 import { Modal, type Ask, type AskResult } from "./components/Modal";
 import { TitleBar } from "./components/TitleBar";
@@ -649,10 +649,11 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 <div className={`flex flex-1 min-w-0 items-center gap-2 ${tight ? "pr-1" : "pr-2"}`}>
                 <Truncated
                   as="span"
+                  testId="screen-title"
                   title={screen === "sessions" && openProjectInfo ? openProjectInfo.cwd ?? undefined : undefined}
                   className="text-sm text-bone-200"
                 >
-                  {screen === "sessions" && openProjectInfo ? openProjectInfo.name : t("app.projects")}
+                  {screen === "sessions" && openProjectInfo ? <ProjectTitle project={openProjectInfo} projects={projects} /> : t("app.projects")}
                 </Truncated>
                 <span className="chip">{screen === "sessions"
                   ? t("app.sessions.count", { count: sessions.length })
