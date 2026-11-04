@@ -9,7 +9,7 @@
  * cover the branches that happened to be taken; the literals are in the source either way.
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const COMPONENTS = join(__dirname, "..", "components");
@@ -27,6 +27,16 @@ const VISIBLE_TEXT = />\s*([A-Z][A-Za-z][^<>{}]{2,})\s*</g;
  * them harder to find, not easier to read.
  */
 const PROPER_NOUNS = /^(Hangar|Claude|Claude Code|Git|CPU|PowerShell|Windows PowerShell|PowerShell 7|bash|cmd\.exe|pwsh|English|System|Auto|Tab|Ctrl|Esc|Enter)\b/;
+
+/**
+ * A choice's words given to it as they are written: a literal (`label="On"`), or a field read
+ * straight off a data array (`label={mode.label}`). The second is how the git card's strategies and
+ * modes reached the Korean screen in English — their words sat in an array in core, where neither
+ * scan above can see them — and the first is how the monitor card did.
+ */
+const UNTRANSLATED_CHOICE = /(?<![\w-])(?:label|note)=(?:"([^"]*[A-Za-z][^"]*)"|\{\s*([\w$]+(?:\??\.[\w$]+)*\.(?:label|note))\s*\})/g;
+/** Read off an array on purpose: each language is named in its own language (`LANGUAGES`). */
+const AS_WRITTEN = ["language.label"];
 
 /** Each feature's page side, where its own strings now live — they must not escape this check. */
 const FEATURES = join(RENDERER, "..", "features");
@@ -66,6 +76,14 @@ describe("every string a person reads goes through the dictionary", () => {
   it("has no English left as element text", () => {
     const left = sources().flatMap(({ file, text }) =>
       findings(VISIBLE_TEXT, text).map((phrase) => `${file.split(/[\/]/).pop()}: ${phrase}`));
+    expect(left).toEqual([]);
+  });
+
+  it("gives no choice a label or note that skipped the dictionary", () => {
+    const left = sources().flatMap(({ file, text }) => [...text.matchAll(UNTRANSLATED_CHOICE)]
+      .map((match) => match[1] ?? match[2] ?? "")
+      .filter((found) => !AS_WRITTEN.includes(found))
+      .map((found) => `${relative(join(RENDERER, ".."), file)}: ${found}`));
     expect(left).toEqual([]);
   });
 });

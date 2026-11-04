@@ -20,11 +20,8 @@ export type AutoMode =
   /** Use the configured strategy, so local commits are rebased or merged. */
   | "full";
 
-export const AUTO_MODES: { key: AutoMode; label: string; note: string }[] = [
-  { key: "off", label: "Never", note: "update only from the right-click menu" },
-  { key: "safe", label: "When it fast-forwards", note: "only where nothing local is in the way — nothing is ever rewritten" },
-  { key: "full", label: "Using the strategy above", note: "rebase or merge without asking; a conflict stops and waits for you" },
-];
+/** In the order they are offered; what each is called on screen is the dictionary's (settings.git.auto.*). */
+export const AUTO_MODES: AutoMode[] = ["off", "safe", "full"];
 
 export interface AutoConfig {
   mode: AutoMode;

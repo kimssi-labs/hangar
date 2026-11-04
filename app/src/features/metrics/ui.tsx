@@ -46,17 +46,18 @@ export function useSessionSamples(id: string | null): readonly MetricSample[] {
 
 /** The settings card body: whether anything is measured at all. */
 export function MonitorSettings({ on, onChange }: { on: boolean; onChange(on: boolean): void }) {
+  const t = useText();
   return (
     <>
       <Choice
-        label="On"
-        note="CPU and memory sampled once a second, in-process"
+        label={t("settings.monitor.on")}
+        note={t("settings.monitor.on.note")}
         selected={on}
         onSelect={() => onChange(true)}
       />
       <Choice
-        label="Off"
-        note="no sampling at all — the graphs disappear and nothing is measured"
+        label={t("settings.monitor.off")}
+        note={t("settings.monitor.off.note")}
         selected={!on}
         onSelect={() => onChange(false)}
       />

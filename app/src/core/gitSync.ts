@@ -14,11 +14,8 @@
 /** How local commits are reconciled with the base. */
 export type MergeStrategy = "rebase" | "merge" | "ff-only";
 
-export const MERGE_STRATEGIES: { key: MergeStrategy; label: string; note: string }[] = [
-  { key: "rebase", label: "Rebase", note: "replay local commits on top of the base — a straight line" },
-  { key: "merge", label: "Merge", note: "join the base in with a merge commit" },
-  { key: "ff-only", label: "Fast-forward only", note: "move forward when nothing local is in the way, otherwise stop" },
-];
+/** In the order they are offered; what each is called on screen is the dictionary's (settings.git.strategy.*). */
+export const MERGE_STRATEGIES: MergeStrategy[] = ["rebase", "merge", "ff-only"];
 
 export interface GitSyncConfig {
   strategy: MergeStrategy;

@@ -202,12 +202,12 @@ export class ConfigStore {
       enabled: raw["enabled"] !== false,          // on unless it was turned off
       // Off by default: it runs `git status`, and on a big repository that is not free.
       countChanges: raw["countChanges"] === true,
-      strategy: MERGE_STRATEGIES.some((s) => s.key === raw["strategy"])
+      strategy: MERGE_STRATEGIES.includes(raw["strategy"] as GitConfig["strategy"])
         ? raw["strategy"] as GitConfig["strategy"]
         : SYNC_DEFAULTS.strategy,
       base: typeof raw["base"] === "string" ? (raw["base"] as string).trim() : SYNC_DEFAULTS.base,
       auto: {
-        mode: AUTO_MODES.some((m) => m.key === auto["mode"]) ? auto["mode"] as AutoConfig["mode"] : AUTO_DEFAULTS.mode,
+        mode: AUTO_MODES.includes(auto["mode"] as AutoConfig["mode"]) ? auto["mode"] as AutoConfig["mode"] : AUTO_DEFAULTS.mode,
         everyMinutes: Number.isFinite(Number(auto["everyMinutes"])) && Number(auto["everyMinutes"]) > 0
           ? Math.round(Number(auto["everyMinutes"]))
           : AUTO_DEFAULTS.everyMinutes,
