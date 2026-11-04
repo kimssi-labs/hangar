@@ -40,22 +40,25 @@ const SPLASH = { width: 380, height: 96 } as const;
 const FIRST_PAINT_CAP_MS = 4000;
 /** How long the app waits for the loading window to paint before getting on with it. */
 const SPLASH_PAINT_CAP_MS = 450;
+/** How long the loading window may wait for its first paint before it is shown regardless. */
+const SPLASH_SHOW_CAP_MS = 1500;
 /** Electron's indeterminate value for the taskbar progress; -1 clears it. */
 const TASKBAR_BUSY = 2;
 const TASKBAR_IDLE = -1;
 /**
  * The loading window: shown first, alone, and closed when the app is ready to take over.
  *
- * Shown at construction rather than on its first paint — a window with a background colour is
- * painted by the compositor as soon as it appears — and the app's own window is not created until
- * this one has painted, because two renderers starting at once is what made the loading window
- * arrive at the end of the loading it was meant to explain.
+ * Shown on its first paint, not at construction: shown at once it was an empty dark panel for as long
+ * as its renderer took to start (reported), and only then did "Starting…" appear. The page's own
+ * text is in its first frame, so it now appears with its words, and each step replaces them. The
+ * app's own window is not created until this one has painted, because two renderers starting at
+ * once is what made the loading window arrive at the end of the loading it was meant to explain.
  */
 function openSplash(): void {
   try {
     splash = new BrowserWindow({
       ...SPLASH,
-      show: true,
+      show: false,
       frame: false,
       resizable: false,
       skipTaskbar: false,
@@ -69,8 +72,21 @@ function openSplash(): void {
     splash.setMenu(null);
     splash.setProgressBar(TASKBAR_BUSY);
     const theme = resolveTheme(config.ui().theme);
+    // A slow first paint still gets a window, with whatever it has by then.
+    const showAnyway = setTimeout(() => { if (splash && !splash.isDestroyed()) splash.show(); }, SPLASH_SHOW_CAP_MS);
+    // When it painted and when it was shown, kept where a test (or a debugger) can read them: the
+    // order is the whole point, and it is over before anything outside the process can look.
+    const timeline = { painted: 0, shown: 0 };
+    (globalThis as { hangarSplash?: typeof timeline }).hangarSplash = timeline;
+    splash.once("show", () => { timeline.shown = Date.now(); });
+    splash.once("ready-to-show", () => {
+      timeline.painted = Date.now();
+      clearTimeout(showAnyway);
+      if (splash && !splash.isDestroyed()) splash.show();
+    });
     void splash.loadFile(join(__dirname, "..", "renderer", "splash.html"));
-    splash.webContents.once("did-finish-load", () => {
+    // On `dom-ready`, before the first paint: the theme and the current step are in the first frame.
+    splash.webContents.once("dom-ready", () => {
       void splash?.webContents
         .executeJavaScript(`document.documentElement.dataset.theme = ${JSON.stringify(theme)};`)
         .catch(() => undefined);

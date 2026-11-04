@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { actionLabel, describe as describeState, initialState, mayInstallOnQuit, MIN_CHECK_GAP_MS, shouldCheck, type UpdateState } from "../updates.js";
+import { actionLabel, describe as describeState, initialState, mayInstallOnQuit, MIN_CHECK_GAP_MS, shouldCheck, shouldPrompt, UPDATE_SNOOZE_MS, type UpdateState } from "../updates.js";
 import { en } from "../locales/en.js";
 
 const NOW = 1_700_000_000_000;
@@ -98,5 +98,22 @@ describe("mayInstallOnQuit", () => {
   it("makes a per-machine copy wait for the button, where Windows can ask for rights", () => {
     expect(mayInstallOnQuit("C:\\Program Files\\Hangar\\Hangar.exe")).toBe(false);
     expect(mayInstallOnQuit("c:/program files (x86)/Hangar/Hangar.exe")).toBe(false);
+  });
+});
+
+describe("shouldPrompt", () => {
+  const found = { ...initialState("2.20.2", true), phase: "available" as const, latest: "2.21.0" };
+  const now = 1_000_000;
+  it("asks once a newer version is found, downloading or downloaded", () => {
+    for (const phase of ["available", "downloading", "ready"] as const) {
+      expect(shouldPrompt({ ...found, phase }, { now, snoozedUntil: 0, asked: false })).toBe(true);
+    }
+  });
+  it("does not ask twice in a run, during the snooze, or with nothing found", () => {
+    expect(shouldPrompt(found, { now, snoozedUntil: 0, asked: true })).toBe(false);
+    expect(shouldPrompt(found, { now, snoozedUntil: now + 1, asked: false })).toBe(false);
+    expect(shouldPrompt(found, { now: now + UPDATE_SNOOZE_MS, snoozedUntil: now + 1, asked: false })).toBe(true);
+    expect(shouldPrompt({ ...found, phase: "current" }, { now, snoozedUntil: 0, asked: false })).toBe(false);
+    expect(shouldPrompt({ ...found, latest: null }, { now, snoozedUntil: 0, asked: false })).toBe(false);
   });
 });

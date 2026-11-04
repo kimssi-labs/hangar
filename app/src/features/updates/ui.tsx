@@ -70,3 +70,54 @@ export function UpdatesSettings({ automatic, onChange, updates }: {
     </>
   );
 }
+
+/**
+ * The question asked as the app opens when a newer version is out: what is happening with it in
+ * words that fit — found, downloading, or downloaded — and yes restarts into it as soon as it can.
+ * "Not for a week" goes with the no.
+ */
+export function UpdatePrompt({ state, onAnswer }: {
+  state: UpdateState;
+  /** Yes or no, and whether the box asking not to be asked for a week was ticked. */
+  onAnswer(yes: boolean, snooze: boolean): void;
+}) {
+  const t = useText();
+  const [snooze, setSnooze] = useState(false);
+  const key = state.phase === "ready" ? "update.prompt.ready" : state.phase === "downloading" ? "update.prompt.downloading" : "update.prompt.available";
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") { event.preventDefault(); onAnswer(false, snooze); }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onAnswer, snooze]);
+  return (
+    <div role="dialog" aria-modal="true" aria-label={t("update.prompt.title")}
+      className="absolute inset-0 z-50 bg-ink-900/80 flex items-center justify-center p-6">
+      <div className="card w-[28rem] max-w-full overflow-hidden">
+        <div className="flex items-start gap-3 p-4">
+          {/* A download arrow in a circle: the kind of message this is, at a glance. */}
+          <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true" className="shrink-0 text-accent">
+            <circle cx="16" cy="16" r="15" fill="currentColor" />
+            <path d="M16 8v11M11 15l5 5 5-5M10 23h12" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <div className="min-w-0">
+            <h2 className="text-sm font-medium text-bone-100">{t("update.prompt.title")}</h2>
+            <p className="mt-1 text-xs text-bone-300 whitespace-pre-line">{t(key, { version: state.latest ?? "", current: state.current })}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 px-4 py-3 border-t border-ink-600 bg-ink-800/60">
+          <label className="flex items-center gap-1.5 text-[11px] text-bone-400 cursor-pointer select-none">
+            <input type="checkbox" checked={snooze} onChange={(event) => setSnooze(event.target.checked)} />
+            {t("update.prompt.snooze")}
+          </label>
+          <div className="flex-1" />
+          <button type="button" className="btn btn-accent" ref={(node) => node?.focus()} onClick={() => onAnswer(true, false)}>
+            {t("update.prompt.yes")}
+          </button>
+          <button type="button" className="btn" onClick={() => onAnswer(false, snooze)}>{t("update.prompt.no")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}

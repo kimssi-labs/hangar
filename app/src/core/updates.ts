@@ -53,8 +53,23 @@ export function mayInstallOnQuit(exePath: string): boolean {
   return !/^[a-z]:[\\/]+program files/i.test(exePath);
 }
 
-/** Wait before the first check, so a launch is not held up by the network. */
-export const FIRST_CHECK_DELAY_MS = 30_000;
+/**
+ * Wait before the first check, so a launch is not held up by the network — but not so long that the
+ * question "update now?" arrives well after the window did; it is asked as the app opens.
+ */
+export const FIRST_CHECK_DELAY_MS = 5_000;
+/** "Don't show this for a week" on the update question. */
+export const UPDATE_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether to ask "a new version is out — update now?": once a run, when a newer version has been
+ * found (or is already downloading, or downloaded), unless the user asked not to be asked until
+ * `snoozedUntil`.
+ */
+export function shouldPrompt(state: UpdateState, at: { now: number; snoozedUntil: number; asked: boolean }): boolean {
+  if (at.asked || !state.latest || at.now < at.snoozedUntil) return false;
+  return state.phase === "available" || state.phase === "downloading" || state.phase === "ready";
+}
 /** And between checks after that. Six hours: releases are not that frequent. */
 export const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 /**
