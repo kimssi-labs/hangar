@@ -67,7 +67,7 @@ async function launch(home: string, width: number, height: number): Promise<{ ap
     .catch(() => app.windows().find((w) => w.url().includes("index.html")) as Page);
   await page.waitForLoadState("domcontentloaded");
   await app.evaluate(({ BrowserWindow }, size) => {
-    BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
+    BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.setContentSize(size.width, size.height);
   }, { width, height });
   await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
   return { app, page };

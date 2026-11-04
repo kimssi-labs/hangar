@@ -53,7 +53,7 @@ async function launch(home: string): Promise<{ app: ElectronApplication; page: P
   const page = await app.waitForEvent("window", { predicate: (w) => w.url().includes("index.html") })
     .catch(() => app.windows().find((w) => w.url().includes("index.html")) as Page);
   await page.waitForLoadState("domcontentloaded");
-  await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.setContentSize(1400, 900); });
+  await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.setContentSize(1400, 900); });
   await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
   return { app, page };
 }

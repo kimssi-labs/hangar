@@ -6,11 +6,6 @@
  */
 import type { ReactNode } from "react";
 
-// ponytail: unused since Tab stopped cycling the cards; App.tsx still imports it on a line next to
-// the worktree branch's own import change. Delete both once that branch has merged.
-export const SETTINGS_SECTIONS = ["appearance", "language", "layout", "monitor", "dock", "usage", "files", "git", "updates", "launch", "permissions"] as const;
-export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
-
 /** A card: its ring says the keyboard is inside it, wherever Tab has taken it. */
 export function Card({
   title, hint, body = "space-y-1", children,

@@ -63,8 +63,9 @@ export async function mainWindow(app: ElectronApplication): Promise<Page> {
 }
 
 async function resize(app: ElectronApplication, page: Page, width: number, height: number): Promise<void> {
+  // The app's own window, found by its page: right after launch the first window can still be the splash.
   await app.evaluate(({ BrowserWindow }, size) => {
-    BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
+    BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.setContentSize(size.width, size.height);
   }, { width, height });
   // Within a few pixels: the window frame and the viewport do not agree to the pixel on Windows,
   // and this test is about the shape of the layout, not about that arithmetic.
@@ -367,7 +368,7 @@ test("text that does not fit says the whole of itself on hover", async () => {
     });
 
     // Narrow: the name cannot fit, and every cut label carries its full self.
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(430, 800));
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.setContentSize(430, 800));
     await expect.poll(async () => (await clipping()).cut, { timeout: 8000 }).toBeGreaterThan(0);
     // Polled, not sampled: a label is measured after layout, and the assertion should not race the
     // frame in which it happens.
@@ -621,6 +622,29 @@ test("stacked: the divider drags after the window became a stack while settings 
     await drag(page, 0, 0, 120);
     const [after = 0] = await dividers(page);
     expect(after - before, "the divider follows the drag").toBeGreaterThan(60);
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * Full layout in a short window: the side pane keeps its tabs and a few rows, and the gauges below
+ * it never cover them.
+ *
+ * At 1100 x 620 the details and the gauges did not give way, the side pane was squeezed to one
+ * pixel, and the CPU card was drawn over the Files / Skills / Artifacts tabs (seen in 2.22.0 too).
+ */
+test("full layout, short window: the gauges do not cover the side pane's tabs", async () => {
+  const { app, page } = await launch(fixture());
+  try {
+    await resize(app, page, 1100, 620);
+    await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
+    const tabs = await page.getByRole("tablist").boundingBox();
+    const gauges = await page.getByTestId("aside-gauges").boundingBox();
+    const pane = await page.getByTestId("files-section").boundingBox();
+    expect(tabs && gauges && pane, "tabs, gauges and the pane are all drawn").toBeTruthy();
+    expect(tabs!.y + tabs!.height, "the tabs end above the gauges").toBeLessThanOrEqual(gauges!.y + 1);
+    expect(pane!.height, "the pane keeps room for its tabs and a few rows").toBeGreaterThanOrEqual(110);
   } finally {
     await app.close();
   }
