@@ -3,6 +3,15 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.21.2
+
+- **The stacked panes resize after docking from the settings screen.** Docking from the settings
+  card turned the window into a stack while the settings screen covered it, so the height the
+  dividers work inside was read as 0; back in the list both dividers were pinned at their minimum
+  and would not move until the window changed shape again. The stack is now measured whenever it
+  is drawn. The same happened after switching the layout to vertical in settings, or a monitor
+  change while settings was open.
+
 ## v2.21.1
 
 - **Minimising a docked band gives the screen edge back at once.** The caption's minimise button

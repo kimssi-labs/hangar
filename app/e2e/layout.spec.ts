@@ -543,3 +543,29 @@ test("the update question appears once, and 'not for a week' is remembered", asy
     await app.close();
   }
 });
+
+/**
+ * The stacked dividers still move after the window turned into a stack behind the settings screen.
+ *
+ * Reported from a docked band: docking from the settings card makes the window a stack while no
+ * stack is on screen, its height was read as 0, and back in the list both dividers were pinned at
+ * their minimum, so neither pane could be resized until the shape changed again.
+ */
+test("stacked: the divider drags after the window became a stack while settings was open", async () => {
+  const home = fixture();
+  const { app, page } = await launch(home);
+  try {
+    await resize(app, page, 1080, 762);                          // side by side
+    await page.getByRole("button", { name: "Settings" }).click();
+    await resize(app, page, 480, 900);                           // a stack, as docking to a side makes it
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(page.getByTestId("stack-sessions")).toBeVisible();
+
+    const [before = 0] = await dividers(page);
+    await drag(page, 0, 0, 120);
+    const [after = 0] = await dividers(page);
+    expect(after - before, "the divider follows the drag").toBeGreaterThan(60);
+  } finally {
+    await app.close();
+  }
+});
