@@ -42,6 +42,20 @@ const FIRST_PAINT_CAP_MS = 4000;
 const SPLASH_PAINT_CAP_MS = 450;
 /** How long the loading window may wait for its first paint before it is shown regardless. */
 const SPLASH_SHOW_CAP_MS = 1500;
+/**
+ * Set by the test suite: the window appears without taking the foreground.
+ *
+ * The suite starts the app dozens of times while someone works at the same desk, and every window
+ * that took the foreground cancelled whatever that person was dragging in another window or
+ * selecting in a terminal (measured: nine foreground changes in 25 s of one run).
+ */
+const NO_ACTIVATE_ENV = "HANGAR_NO_ACTIVATE";
+
+/** Show a window: as any window is shown, or without taking the foreground under the test suite. */
+function reveal(target: BrowserWindow): void {
+  if (process.env[NO_ACTIVATE_ENV]) target.showInactive();
+  else target.show();
+}
 /** Electron's indeterminate value for the taskbar progress; -1 clears it. */
 const TASKBAR_BUSY = 2;
 const TASKBAR_IDLE = -1;
@@ -73,7 +87,7 @@ function openSplash(): void {
     splash.setProgressBar(TASKBAR_BUSY);
     const theme = resolveTheme(config.ui().theme);
     // A slow first paint still gets a window, with whatever it has by then.
-    const showAnyway = setTimeout(() => { if (splash && !splash.isDestroyed()) splash.show(); }, SPLASH_SHOW_CAP_MS);
+    const showAnyway = setTimeout(() => { if (splash && !splash.isDestroyed()) reveal(splash); }, SPLASH_SHOW_CAP_MS);
     // When it painted and when it was shown, kept where a test (or a debugger) can read them: the
     // order is the whole point, and it is over before anything outside the process can look.
     const timeline = { painted: 0, shown: 0 };
@@ -82,7 +96,7 @@ function openSplash(): void {
     splash.once("ready-to-show", () => {
       timeline.painted = Date.now();
       clearTimeout(showAnyway);
-      if (splash && !splash.isDestroyed()) splash.show();
+      if (splash && !splash.isDestroyed()) reveal(splash);
     });
     void splash.loadFile(join(__dirname, "..", "renderer", "splash.html"));
     // On `dom-ready`, before the first paint: the theme and the current step are in the first frame.
@@ -426,8 +440,10 @@ async function start(): Promise<void> {
   clipboardFeature.rearm();
 
   closeSplash();
-  window?.show();
-  window?.focus();
+  if (window) {
+    reveal(window);
+    if (!process.env[NO_ACTIVATE_ENV]) window.focus();
+  }
   shown = true;
   console.log(`[hangar] window ready — ${found} projects from ${claudeHome()}`);
   app.on("activate", async () => {
