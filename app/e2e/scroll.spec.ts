@@ -75,10 +75,14 @@ async function bandWindow(): Promise<{ app: ElectronApplication; page: Page; lis
     win?.setBounds(bounds);
   }, BAND);
   await page.locator(".row").first().waitFor({ state: "visible", timeout: 30_000 });
-  // The band's stack draws the project list anew, so the keyboard is put back in it before Enter.
-  await page.getByRole("listbox", { name: "Projects" }).focus();
-  await page.keyboard.press("Enter");           // into the project's sessions
+  // The band's stack draws the project list anew, so the keyboard is put back in it before Enter —
+  // once the stack is drawn: focused earlier, the list that took it is the one the stack replaces.
   const list = page.getByTestId("stack-sessions");
+  await expect(list).toBeVisible();
+  const projects = page.getByRole("listbox", { name: "Projects" });
+  await projects.focus();
+  await expect(projects).toBeFocused();
+  await page.keyboard.press("Enter");           // into the project's sessions
   await expect(list).toBeFocused();
   await expect(page.getByText("세션 0").first()).toBeVisible();
   // The rows the sessions screen mounts settle over a frame or two (measured: the list 2791 px tall,

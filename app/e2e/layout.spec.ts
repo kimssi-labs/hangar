@@ -277,8 +277,12 @@ test("neither thin shape makes the page scroll", async () => {
     await expect(page.getByPlaceholder("Search projects", { exact: false })).toBeVisible();
 
     // ...and the sessions screen inside it, too. The stack draws the list anew, so it is given the
-    // keyboard again first.
-    await page.getByRole("listbox", { name: "Projects" }).focus();
+    // keyboard again first, once the stack is really drawn: focused any earlier (a slow runner),
+    // the list that took the focus is the one the stack then replaces.
+    await expect(page.getByTestId("stack-sessions")).toBeVisible();
+    const projects = page.getByRole("listbox", { name: "Projects" });
+    await projects.focus();
+    await expect(projects).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("listbox", { name: "Sessions" })).toBeFocused();
     await expect(page.getByText("1 sessions").first()).toBeVisible();
