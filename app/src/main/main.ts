@@ -29,7 +29,7 @@ import { register as registerSkills } from "../features/skills/main.js";
 import { register as registerUpdates } from "../features/updates/main.js";
 import { register as registerUsage } from "../features/usage/main.js";
 import { openingRect } from "../core/windowPlacement.js";
-import { cachedWhich, claudeExecutable } from "./executables.js";
+import { claudeExecutable, which } from "./executables.js";
 import { CHANNEL, MENU_SEPARATOR, PAGES, type ActionResult, type AppInfo, type MenuItemSpec, type PageName, type WindowCommand, type WindowState } from "./ipc.js";
 
 const DEV_SERVER = "http://localhost:5273";
@@ -204,7 +204,7 @@ const dockFeature = registerDock(context, wiring, {
 });
 const updatesFeature = registerUpdates(context, wiring);
 // Git depends on the project rows, and says so: these are handed over rather than reached for.
-const gitFeature = registerGit(context, wiring, { findProject: projectsFeature.find, rescan: projectsFeature.scan, which: cachedWhich });
+const gitFeature = registerGit(context, wiring, { findProject: projectsFeature.find, rescan: projectsFeature.scan, which });
 registerFiles(wiring);
 registerSkills(wiring);
 registerArtifacts(wiring);
@@ -215,7 +215,7 @@ const settingsFeature = registerSettings(context, wiring, {
     ...dockFeature.slice(),
     pasteHotkeyActive: clipboardFeature.active(),
     usage: usageFeature.state(),
-    gitAvailable: Boolean(cachedWhich("git")),
+    gitAvailable: Boolean(which("git")),
   }),
   applied: (patch) => {
     if (patch.dock) dockFeature.save(patch.dock);
