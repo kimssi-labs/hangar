@@ -209,11 +209,6 @@ export function windowArgument(target: OpenTarget): string {
 }
 
 /**
- * The full command to run. On Windows that is `wt` opening a titled tab in the chosen window when
- * Windows Terminal is present; on Linux it is the detected terminal emulator; and where neither
- * exists the hosted shell is started directly.
- */
-/**
  * The environment a launched session runs in: ours, minus the marks of a session we were started
  * from.
  *
@@ -228,6 +223,11 @@ export function sessionEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return clean;
 }
 
+/**
+ * The full command to run. On Windows that is `wt` opening a titled tab in the chosen window when
+ * Windows Terminal is present; on Linux it is the detected terminal emulator; and where neither
+ * exists the hosted shell is started directly.
+ */
 export function launchCommand(request: LaunchRequest, have: (exe: string) => boolean = () => true): LaunchCommand {
   // "Custom program" is a program like VS Code, not another shell to host claude in. It is opened
   // ON the project — started in the project folder, with that folder as its argument — and what

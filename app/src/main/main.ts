@@ -398,7 +398,6 @@ function registerIpc(): void {
   }));
 }
 
-/** Start-up, once the platform is ready: splash, scan, window, monitor. */
 /**
  * How often the live-session registry is read for a session that changed hands.
  *
@@ -413,6 +412,7 @@ function watchRegistry(): void {
   registryTimer = setInterval(() => context.store.watchRegistry(), REGISTRY_WATCH_MS);
 }
 
+/** Start-up, once the platform is ready: splash, scan, window, monitor. */
 async function start(): Promise<void> {
   followTheme(config.ui().theme);                 // before any window: the splash is painted in it too
   // No application menu, and with it none of Electron's default accelerators — Ctrl+R reloading the

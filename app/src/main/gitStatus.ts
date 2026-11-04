@@ -103,12 +103,6 @@ export function headOf(cwd: string): GitInfo | null {
 }
 
 /**
- * Count the uncommitted files, in the background, and call back when the number is in.
- *
- * One run per directory at a time, and at most one per TTL: a list that refreshes every fifteen
- * seconds must not turn into a git process per project per refresh.
- */
-/**
  * `git status --porcelain` for this directory, cached — and ALWAYS answered.
  *
  * Null means "no answer": not a repository, no git on PATH, a run already in flight, or a folder
@@ -154,6 +148,12 @@ function porcelain(cwd: string, done: (counted: Counted | null) => void): void {
   );
 }
 
+/**
+ * Count the uncommitted files, in the background, and call back when the number is in.
+ *
+ * One run per directory at a time, and at most one per TTL: a list that refreshes every fifteen
+ * seconds must not turn into a git process per project per refresh.
+ */
 export function countChanges(cwd: string, done: (dirty: number) => void): void {
   // Only a real count: a row that cannot be counted shows nothing, never a wrong zero.
   porcelain(cwd, (counted) => { if (counted) done(counted.dirty); });
