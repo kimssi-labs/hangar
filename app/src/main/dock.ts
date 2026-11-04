@@ -292,17 +292,13 @@ export function displayOrigin(display: Electron.Display): string {
 /**
  * Monitor the config points at, falling back to the primary one and saying which is missing.
  *
- * Keys are tried most specific first: the stable key, then an id from an older config, then the
- * device name, then just the position. A saved dock that silently moves to the primary display is
- * the confusing kind of wrong.
+ * The stable key first, then just the position. A saved dock that silently moves to the primary
+ * display is the confusing kind of wrong.
  */
 export function pickDisplay(device: string | null): { display: Electron.Display; missing: string | null } {
   const displays = screen.getAllDisplays();
   const wanted = device
-    ? displays.find((d) => displayKey(d) === device)
-      ?? displays.find((d) => String(d.id) === device)          // configs written before the key
-      ?? displays.find((d) => d.label && d.label === device)
-      ?? displays.find((d) => displayOrigin(d) === device)
+    ? displays.find((d) => displayKey(d) === device) ?? displays.find((d) => displayOrigin(d) === device)
     : undefined;
   if (wanted) return { display: wanted, missing: null };
   return { display: screen.getPrimaryDisplay(), missing: device };
@@ -335,12 +331,20 @@ export function dockReady(docked: boolean, device: string | null, missing: strin
   return docked || refusesToDock(device, missing) === null;
 }
 
+/** A Win32 RECT: four edges, where Electron's Rectangle has a corner and a size. */
+interface Rect { left: number; top: number; right: number; bottom: number }
+
+const fromRect = (rc: Rect): Rectangle => ({ x: rc.left, y: rc.top, width: rc.right - rc.left, height: rc.bottom - rc.top });
+const toRect = (r: Rectangle): Rect => ({ left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height });
+const sameRect = (a: Rectangle, b: Rectangle): boolean =>
+  a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+
 interface AppBarData {
   cbSize: number;
   hWnd: number;
   uCallbackMessage: number;
   uEdge: number;
-  rc: { left: number; top: number; right: number; bottom: number };
+  rc: Rect;
   lParam: number;
 }
 
@@ -443,23 +447,21 @@ const loadWin32 = nativeBinding<Win32Api>("AppBar", (koffi) => {
       void SetWindowPos(hwnd, 0, rect.x, rect.y, rect.width, rect.height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING),
     frames: (hwnd) => {
       // koffi fills the structs that are passed in, the same way SHAppBarMessage's is filled.
-      const box = (rc: { left: number; top: number; right: number; bottom: number }): Rectangle =>
-        ({ x: rc.left, y: rc.top, width: rc.right - rc.left, height: rc.bottom - rc.top });
       const outer = { left: 0, top: 0, right: 0, bottom: 0 };
       if (!GetWindowRect(hwnd, outer)) return null;
       const painted = { left: 0, top: 0, right: 0, bottom: 0 };
       // Non-zero means DWM has no answer — before the window is composited, for one. The outer
       // rectangle is then the best guess, and the corrections below become no-ops.
       if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, painted, 16) !== 0) {
-        return { outer: box(outer), painted: box(outer), client: box(outer) };
+        return { outer: fromRect(outer), painted: fromRect(outer), client: fromRect(outer) };
       }
       // GetClientRect answers with a size only; its origin has to be asked for separately.
       const size = { left: 0, top: 0, right: 0, bottom: 0 };
       const origin = { x: 0, y: 0 };
       const client = GetClientRect(hwnd, size) && ClientToScreen(hwnd, origin)
         ? { x: origin.x, y: origin.y, width: size.right, height: size.bottom }
-        : box(painted);
-      return { outer: box(outer), painted: box(painted), client };
+        : fromRect(painted);
+      return { outer: fromRect(outer), painted: fromRect(painted), client };
     },
     monitorAt: (point) => {
       const handle = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
@@ -470,9 +472,7 @@ const loadWin32 = nativeBinding<Win32Api>("AppBar", (koffi) => {
         rcWork: { left: 0, top: 0, right: 0, bottom: 0 },
         dwFlags: 0,
       };
-      if (!GetMonitorInfoW(handle, info)) return null;
-      const rc = info.rcMonitor;
-      return { x: rc.left, y: rc.top, width: rc.right - rc.left, height: rc.bottom - rc.top };
+      return GetMonitorInfoW(handle, info) ? fromRect(info.rcMonitor) : null;
     },
     appWindow: (hwnd) => {
       const style = Number(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
@@ -483,9 +483,7 @@ const loadWin32 = nativeBinding<Win32Api>("AppBar", (koffi) => {
       hWnd: hwnd,
       uCallbackMessage: APPBAR_CALLBACK_MESSAGE,
       uEdge: edge,
-      rc: rect
-        ? { left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height }
-        : { left: 0, top: 0, right: 0, bottom: 0 },
+      rc: rect ? toRect(rect) : { left: 0, top: 0, right: 0, bottom: 0 },
       lParam: 0,
     }),
   };
@@ -597,8 +595,7 @@ export class Dock {
       const native = this.nativeRect();
       const current = native ?? this.window.getBounds();
       const want = native ? this.reserved : screen.screenToDipRect(null, this.reserved);
-      if (current.x === want.x && current.y === want.y
-        && current.width === want.width && current.height === want.height) return;
+      if (sameRect(current, want)) return;
       if (Date.now() > this.assertUntil) {
         const edge = this.current?.edge;
         // Still spanning its whole edge? Then only the thickness changed, and that is a size.
@@ -792,7 +789,7 @@ export class Dock {
     this.lift = band.lift;
     let note: string | null = null;
     if (process.platform === "win32") note = (await this.reserveWindows(band.band, config.edge, display)) ?? note;
-    else note = (await this.reserveX11(band.dip, config.edge, display.bounds)) ?? note;
+    else note = (await this.reserveX11(band.dip, config.edge)) ?? note;
 
     // Set the bounds AFTER reserving: SETPOS can slide the band away from the taskbar, and the
     // window has to land where the reservation actually is, not where it was asked for.
@@ -852,7 +849,7 @@ export class Dock {
     this.lift = band.lift;
     this.fixSize(band.dip);
     if (process.platform === "win32") await this.reserveWindows(band.band, config.edge, display, false);
-    else await this.reserveX11(band.dip, config.edge, display.bounds);
+    else await this.reserveX11(band.dip, config.edge);
     // Physical against physical where Windows can be asked, for the same reason `reassert` does it:
     // Electron's idea of the window's rectangle no longer is the window's rectangle.
     const native = this.reserved ? this.nativeRect() : null;
@@ -861,7 +858,7 @@ export class Dock {
         : band.dip;
     const now = native ?? this.window.getBounds();
     // Only if the shell put the reservation somewhere else — otherwise nothing moves at all.
-    if (want.x !== now.x || want.y !== now.y || want.width !== now.width || want.height !== now.height) {
+    if (!sameRect(want, now)) {
       this.place(this.reserved ?? band.band);
     }
   }
@@ -935,8 +932,8 @@ export class Dock {
    * with its own DIP reading — the size the window is pinned to has to be THAT one: pinned to the
    * band as asked for, the shell's next move grew the window back off the grid by the difference.
    */
-  private plan(band: Rectangle, edge: DockEdge, display: Electron.Display): { window: Rectangle; band: Rectangle; dip: Rectangle; lift: number } {
-    if (process.platform !== "win32") return { window: band, band, dip: band, lift: 0 };
+  private plan(band: Rectangle, edge: DockEdge, display: Electron.Display): { band: Rectangle; dip: Rectangle; lift: number } {
+    if (process.platform !== "win32") return { band, dip: band, lift: 0 };
     const monitor = monitorRect(display);
     // The band is what is reserved and what is seen; the window that shows it sits `lift` rows above
     // — except against the top of the screen, where the window draws where it is (measured), and
@@ -945,7 +942,7 @@ export class Dock {
     const step = gridStep(display.scaleFactor);
     const snapped = snapToGrid(withinMonitor(screen.dipToScreenRect(null, band), monitor), edge, monitor, step);
     const lift = liftFor(snapped.y, monitor.y, step, display.scaleFactor);
-    return { window: windowFor(snapped, lift), band: snapped, dip: this.dipOf(snapped, display), lift };
+    return { band: snapped, dip: this.dipOf(snapped, display), lift };
   }
 
   /**
@@ -997,10 +994,7 @@ export class Dock {
       if (ask) {
         const query = api.make(hwnd, ABE[edge], physical);
         await withShell(() => api.SHAppBarMessageAsync(ABM.queryPos, query));
-        const offered = {
-          x: query.rc.left, y: query.rc.top,
-          width: query.rc.right - query.rc.left, height: query.rc.bottom - query.rc.top,
-        };
+        const offered = fromRect(query.rc);
         // Anchored to the work area the shell knows, which is not quite the one Electron reports,
         // then back onto the grid — the move can have taken it off.
         const monitor = monitorRect(display);
@@ -1020,7 +1014,7 @@ export class Dock {
   }
 
   /** X11 struts: the same reservation, expressed the way a Linux window manager reads it. */
-  private async reserveX11(band: Rectangle, edge: DockEdge, screenBounds: Rectangle): Promise<string | null> {
+  private async reserveX11(band: Rectangle, edge: DockEdge): Promise<string | null> {
     if (process.env["WAYLAND_DISPLAY"]) {
       return "Wayland does not let an application reserve screen space — the window is only positioned.";
     }
@@ -1030,7 +1024,6 @@ export class Dock {
     if (edge === "right") { strut[1] = band.width; strut[6] = band.y; strut[7] = band.y + band.height; }
     if (edge === "top") { strut[2] = band.height; strut[8] = band.x; strut[9] = band.x + band.width; }
     if (edge === "bottom") { strut[3] = band.height; strut[10] = band.x; strut[11] = band.x + band.width; }
-    void screenBounds;
     try {
       await run("xprop", ["-id", id, "-f", "_NET_WM_STRUT_PARTIAL", "32c", "-set", "_NET_WM_STRUT_PARTIAL", strut.join(", ")]);
       return null;
