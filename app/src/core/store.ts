@@ -381,21 +381,20 @@ export class Store {
       link = { value, final: value !== null || st.size >= LINK_BYTES };
     }
 
-    // The tail window is the last TAIL_BYTES — and nothing at all while the file is shorter than
-    // that, where the head read is all there is (the window used to be empty there, and still is).
-    const from = st.size - TAIL_BYTES;
+    // The tail window is the last TAIL_BYTES, or the whole file while it is shorter than that. It
+    // used to be empty below TAIL_BYTES, so a session between 64 KB and 512 KB never saw a title
+    // written after its first 64 KB and kept showing its first one.
+    const from = Math.max(0, st.size - TAIL_BYTES);
     let tail = same ? hit.tail : undefined;
-    if (from > 0) {
-      if (!tail || tail.from > from || tail.end > st.size) {
-        const found = scanTitles(readBytes(file, from, TAIL_BYTES), from);
-        tail = { from, ...found };
-      } else if (st.size > tail.end) {
-        const found = scanTitles(readBytes(file, tail.end, st.size - tail.end), tail.end);
-        tail = { from: tail.from, end: found.end, title: found.title ?? tail.title, at: found.title ? found.at : tail.at };
-      }
+    if (!tail || tail.from > from || tail.end > st.size) {
+      const found = scanTitles(readBytes(file, from, st.size - from), from);
+      tail = { from, ...found };
+    } else if (st.size > tail.end) {
+      const found = scanTitles(readBytes(file, tail.end, st.size - tail.end), tail.end);
+      tail = { from: tail.from, end: found.end, title: found.title ?? tail.title, at: found.title ? found.at : tail.at };
     }
     // A title that has scrolled out of the window is no longer seen, as with a fresh window read.
-    const tailTitle = from > 0 && tail && tail.at >= from ? tail.title : null;
+    const tailTitle = tail.at >= from ? tail.title : null;
     const value = { ...head, aiTitle: tailTitle ?? head.aiTitle, carriedFrom: link?.value ?? null };
     this.facts.set(file, { signature: sig, value, size: st.size, ino: st.ino, head, link, tail });
     return value;

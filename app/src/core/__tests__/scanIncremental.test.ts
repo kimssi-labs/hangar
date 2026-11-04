@@ -188,8 +188,10 @@ describe("a growing transcript's facts", () => {
     check(store);
     appendFileSync(file, filler(100 * KB));                        // past the head window
     check(store);
-    appendFileSync(file, line({ type: "ai-title", aiTitle: "중간 제목" }));   // inside 64 KB..512 KB: not seen, as before
+    appendFileSync(file, line({ type: "ai-title", aiTitle: "중간 제목" }));   // between 64 KB and 512 KB
     check(store);
+    // Claude Code rewrites the title as the talk grows; a mid-size session must show the newer one.
+    expect(store.transcriptFacts(file, statSync(file)).aiTitle).toBe("중간 제목");
     appendFileSync(file, filler(500 * KB));                        // the tail window begins
     check(store);
     appendFileSync(file, line({ type: "ai-title", aiTitle: "꼬리 제목" }));
