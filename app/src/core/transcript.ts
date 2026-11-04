@@ -15,6 +15,7 @@
  * transcripts sampled had one. `origin.kind` separates a person typing from the caveats,
  * slash-command echoes, tool results and skill injections that are all also `type: "user"`.
  */
+import { parseJsonl } from "./json.js";
 
 /** Everything one transcript can answer that the history file cannot. */
 export interface TranscriptFacts {
@@ -98,20 +99,6 @@ function titleOf(entry: Entry): string | null {
   return value?.trim() || null;
 }
 
-/** Parsed objects from `text`, silently dropping the lines a byte window cuts in half. */
-function entries(text: string): Entry[] {
-  const out: Entry[] = [];
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      out.push(JSON.parse(line) as Entry);
-    } catch {
-      continue;                       // the cut-off first or last line, or one half-written right now
-    }
-  }
-  return out;
-}
-
 /** The first line of a prompt, which is what a one-line row can show. */
 function firstLine(content: unknown): string | null {
   if (typeof content !== "string") return null;    // tool results and attachments arrive as arrays
@@ -131,8 +118,8 @@ function firstLine(content: unknown): string | null {
  * session can never be mistaken for a stub and hidden.
  */
 export function factsFrom(head: string, tail: string, complete: boolean): TranscriptFacts {
-  const early = entries(head);
-  const late = tail ? entries(tail) : [];
+  const early = parseJsonl<Entry>(head);
+  const late = parseJsonl<Entry>(tail);
 
   let aiTitle: string | null = null;
   for (const entry of [...early, ...late]) {

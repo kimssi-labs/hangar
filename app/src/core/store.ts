@@ -11,7 +11,7 @@ import { access } from "node:fs/promises";
 import { join } from "node:path";
 
 import { ConfigStore, fileSignature } from "./config.js";
-import { readJson, writeJson } from "./json.js";
+import { parseJsonl, readJson, writeJson } from "./json.js";
 import { encodeProjectPath, homePaths, type HomePaths } from "./paths.js";
 import { foldClears, type SessionWithOrigin } from "./sessionChain.js";
 import { type RegistryEntry, SessionLinks } from "./sessionLinks.js";
@@ -173,21 +173,6 @@ interface FolderEntry {
   titles: Map<string, CacheEntry<string | null>>;
 }
 
-/** Objects from the first lines of `text`; a trailing partial line is dropped. */
-function parseLines(text: string, limit: number): unknown[] {
-  const out: unknown[] = [];
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      out.push(JSON.parse(line));
-    } catch {
-      continue;                                   // the cut-off last line, or a half-written one
-    }
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
 /** A transcript's session id is its file name. */
 function idOf(file: string): string {
   return file.slice(file.lastIndexOf(sep()) + 1, -TRANSCRIPT_EXT.length);
@@ -306,14 +291,7 @@ export class Store {
     const titles = grown ? new Map(this.titles!.value) : new Map<string, string>();
     const from = grown ? before!.end : 0;
     const bytes = st ? readBytes(this.paths.history, from, st.size - from) : Buffer.alloc(0);
-    for (const line of bytes.toString("utf8").split("\n")) {
-      if (!line.trim()) continue;
-      let row: { sessionId?: string; display?: string };
-      try {
-        row = JSON.parse(line) as typeof row;
-      } catch {
-        continue;                                 // a partially written line; read again next time
-      }
+    for (const row of parseJsonl<{ sessionId?: string; display?: string }>(bytes.toString("utf8"))) {
       if (!row.sessionId || !row.display || titles.has(row.sessionId)) continue;
       titles.set(row.sessionId, row.display.trim().split("\n")[0] ?? "");
     }
@@ -334,8 +312,7 @@ export class Store {
     const hit = this.cwds.get(file);
     if (hit) return hit.value;
     let cwd: string | null = null;
-    for (const entry of parseLines(readHead(file, HEAD_BYTES), HEAD_LINES)) {
-      const row = entry as { cwd?: string };
+    for (const row of parseJsonl<{ cwd?: string }>(readHead(file, HEAD_BYTES), HEAD_LINES)) {
       if (row.cwd) { cwd = row.cwd; break; }
     }
     this.cwds.set(file, { signature: "", value: cwd });
