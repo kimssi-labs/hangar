@@ -20,7 +20,7 @@ import { shouldPrompt, UPDATE_SNOOZE_MS } from "@core/updates";
 import { UsageGauges, useUsage } from "../features/usage/ui";
 import { MachineGauges, useMetrics } from "../features/metrics/ui";
 import { usePasteResults } from "../features/clipboard/ui";
-import type { MetricSample, ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
+import type { ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
 import { SIDE_PANE_TABS } from "@core/constants";
 
 import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
@@ -52,12 +52,6 @@ const ASIDE_MIN = 160;
 const ASIDE_MAX = 640;
 
 type Toast = { text: string; tone: "ok" | "bad" } | null;
-
-/**
- * What the session lists are handed for a row's graph. The rows read their own series from the
- * metrics store (Lists.tsx), so a sample re-renders a row's readings rather than the list.
- */
-const noRowSamples = (): MetricSample[] => [];
 
 /**
  * The window, wrapped in the language it is read in.
@@ -580,7 +574,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       selected={sessionIndex}
       editing={editing}
       editRef={editRef}
-      samples={noRowSamples}
       onRename={(value, explicit) => void commitRename(value, explicit)}
       onCancelEdit={() => setEditing(null)}
       onSelect={setSessionIndex}
@@ -590,7 +583,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   ) : project ? (
     <SessionPreview
       project={project}
-      samples={noRowSamples}
       onEnter={() => enterSessions(project.dir)}
       onContextMenu={(item, index) => void sessionMenu(project.dir, item, index)}
     />

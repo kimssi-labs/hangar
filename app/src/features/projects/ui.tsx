@@ -9,7 +9,7 @@
  */
 import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 
-import type { LaunchConfig, MetricSample, PermissionMode, ProjectInfo, SessionInfo, ShellChoice } from "@core/types";
+import type { LaunchConfig, PermissionMode, ProjectInfo, SessionInfo, ShellChoice } from "@core/types";
 import { placeWorktrees, type Placed } from "@core/worktree";
 
 import { api, MENU_SEPARATOR, type MenuItemSpec } from "../../renderer/api";
@@ -345,15 +345,13 @@ export function ProjectPane({
 
 /** The sessions screen: one project's sessions, with the selected row and the rename box. */
 export function SessionList({
-  sessions, selected, editing, editRef, samples, onRename, onCancelEdit, onSelect, onOpen, onContextMenu,
+  sessions, selected, editing, editRef, onRename, onCancelEdit, onSelect, onOpen, onContextMenu,
 }: {
   sessions: SessionInfo[];
   selected: number;
   /** The id of the session being renamed, if any. */
   editing: string | null;
   editRef: EditRef;
-  /** The graph behind a row; empty when nothing is being measured. */
-  samples(sessionId: string): MetricSample[];
   onRename(value: string, explicit: boolean): void;
   onCancelEdit(): void;
   onSelect(index: number): void;
@@ -370,7 +368,6 @@ export function SessionList({
             key={item.id}
             session={item}
             selected={index === selected}
-            samples={samples(item.id)}
             onSelect={() => onSelect(index)}
             onOpen={onOpen}
             onContextMenu={() => onContextMenu(item, index)}
@@ -382,9 +379,8 @@ export function SessionList({
 }
 
 /** The projects screen's glimpse of the selected project: its first sessions, and a way to the rest. */
-export function SessionPreview({ project, samples, onEnter, onContextMenu }: {
+export function SessionPreview({ project, onEnter, onContextMenu }: {
   project: ProjectInfo;
-  samples(sessionId: string): MetricSample[];
   /** Any click lands on the sessions screen; the preview is a doorway, not a list to select from. */
   onEnter(): void;
   onContextMenu(item: SessionInfo, index: number): void;
@@ -398,7 +394,6 @@ export function SessionPreview({ project, samples, onEnter, onContextMenu }: {
           key={item.id}
           session={item}
           selected={false}
-          samples={samples(item.id)}
           onSelect={onEnter}
           onOpen={onEnter}
           onContextMenu={() => onContextMenu(item, index)}
