@@ -14,13 +14,13 @@
  * Earlier versions offered a Stop hook instead (core/usageHook.ts says what became of it); one an
  * older version installed is taken back out at start-up.
  */
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { net } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
-import { readJson } from "../../core/json.js";
+import { readJson, writeJson } from "../../core/json.js";
 import { homePaths } from "../../core/paths.js";
 import { readStatus, readStatusUpdatedAt } from "../../core/status.js";
 import { accessTokenFrom, backoffFor, cacheFromEndpoint, type EndpointFailure, failureFor, loginState, OAUTH_BETA, shouldAsk, USAGE_ENDPOINT, USER_AGENT } from "../../core/usageEndpoint.js";
@@ -148,11 +148,7 @@ async function refreshFromEndpoint(landed: () => void, live: boolean, manual = f
     lastFailure = null;
     const cache = cacheFromEndpoint(await response.json(), Date.now());
     if (!cache) return;
-    mkdirSync(dirname(paths.hangarUsage), { recursive: true });
-    // Write then rename, so a read never catches a half-written file.
-    const tmp = `${paths.hangarUsage}.tmp`;
-    writeFileSync(tmp, JSON.stringify(cache), "utf8");
-    renameSync(tmp, paths.hangarUsage);
+    writeJson(paths.hangarUsage, cache);
     landed();
   } catch (error) {
     console.error("[hangar] usage endpoint:", (error as Error).message);

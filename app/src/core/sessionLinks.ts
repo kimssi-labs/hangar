@@ -12,10 +12,7 @@
  * row from then on — see sessionChain.ts. Nothing is inferred: a clear that happened while the app
  * was not running is simply not recorded, and falls back to the timestamp rule.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-
-import { readJson } from "./json.js";
+import { readJson, writeJson } from "./json.js";
 
 /** One entry of Claude Code's live-session registry. */
 export interface RegistryEntry {
@@ -96,8 +93,7 @@ export class SessionLinks {
     if (!result.chains.length) return;
     this.chains = [...this.chains, ...result.chains].slice(-MAX_CHAINS);
     try {
-      mkdirSync(dirname(this.file), { recursive: true });
-      writeFileSync(this.file, JSON.stringify({ chains: this.chains }), "utf8");
+      writeJson(this.file, { chains: this.chains });
     } catch {
       // A cache we could not write is a fold we lose on the next start, not a reason to fail a scan.
     }

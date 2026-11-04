@@ -4,14 +4,14 @@
  * The terminal version of this app wrote the same file and the same section names, so an existing
  * setup keeps its dock, status-line and launch choices when it moves to the desktop app.
  */
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { statSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, SIDE_PANE_TABS, STACK_BELOW, THEME_MODES } from "./constants.js";
 import { AUTO_DEFAULTS, AUTO_MODES, type AutoConfig } from "./gitAuto.js";
 import { MERGE_STRATEGIES, SYNC_DEFAULTS } from "./gitSync.js";
 import { LANGUAGES, type Language } from "./i18n.js";
-import { readJson } from "./json.js";
+import { readJson, writeJson } from "./json.js";
 import { homePaths } from "./paths.js";
 import type { DockConfig, DockEdge, GitConfig, LaunchConfig, LayoutMode, PermissionMode, ShellChoice, SidePaneTab, StatusConfig, ThemeMode, UiConfig, UpdateConfig } from "./types.js";
 import { ARTIFACT_SCOPES, type ArtifactScope } from "./artifactOrigins.js";
@@ -61,10 +61,10 @@ function readJsonCached(file: string): Json {
   return value;
 }
 
-function writeJson(file: string, value: unknown): void {
+/** A settings file is one a person may open, so it is written indented. */
+function writeSettings(file: string, value: unknown): void {
   parsed.delete(file);
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  writeJson(file, value, 2);
 }
 
 function asRecord(value: unknown): Json {
@@ -119,7 +119,7 @@ export class ConfigStore {
   saveSection(name: string, value: Json): void {
     const config = this.all();
     config[name] = value;
-    writeJson(this.file, config);
+    writeSettings(this.file, config);
   }
 
   // -- dock -------------------------------------------------------------------------------------
@@ -335,7 +335,7 @@ export class ConfigStore {
   }
 
   saveAliases(aliases: Record<string, string>): void {
-    writeJson(homePaths(dirname(dirname(this.file))).aliases, aliases);
+    writeSettings(homePaths(dirname(dirname(this.file))).aliases, aliases);
   }
 }
 
