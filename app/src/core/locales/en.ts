@@ -29,7 +29,6 @@ export const en = {
   "menu.newSession": "New session",
   "menu.newSessionWindow": "New session in a new window",
   "menu.worktreeAdd": "New worktree…",
-  "menu.worktreeForce": "Remove it anyway, losing that work?",
   "menu.worktreeRemove": "Remove this worktree…",
   "menu.pin": "Pin to top",
   "menu.rename": "Rename…",
@@ -53,8 +52,6 @@ export const en = {
   "state.waiting": "waiting",
   "state.idle": "idle",
   "state.closed": "closed",
-  "list.running": "running",
-  "list.idle": "idle",
 
   // -- the detail panel -------------------------------------------------------------------------------
   "detail.folderName": "Folder name",
@@ -162,7 +159,6 @@ export const en = {
   "dialog.deleteFile": "Delete {name}?",
   "dialog.deleteFolder": "Delete the folder {name}?",
   "dialog.deleteFile.detail": "It goes to the recycle bin and can be put back from there.",
-  "files.title": "Files",
   "files.reading": "Reading the folder…",
   "files.unreadable": "That folder could not be read.",
   "files.empty": "This folder is empty.",
@@ -337,7 +333,6 @@ export const en = {
   "since.months": "{count} mo ago",
   "since.years": "{count} y ago",
   "since.absolute": "{when}",
-  // -- the keyboard overlay -------------------------------------------------------------------------------
   // -- the app's own dialogs -----------------------------------------------------------------
   "dialog.cancel": "Cancel",
   "dialog.delete": "Delete",
