@@ -89,9 +89,11 @@ function openSplash(): void {
     const theme = resolveTheme(config.ui().theme);
     // A slow first paint still gets a window, with whatever it has by then.
     const showAnyway = setTimeout(() => { if (splash && !splash.isDestroyed()) reveal(splash); }, SPLASH_SHOW_CAP_MS);
-    // When it painted and when it was shown, kept where a test (or a debugger) can read them: the
-    // order is the whole point, and it is over before anything outside the process can look.
-    const timeline = { painted: 0, shown: 0 };
+    // When it was made, painted and shown, kept where a test (or a debugger) can read them: the
+    // order is the whole point, and it is over before anything outside the process can look. On a
+    // slow machine the cap above shows it before its paint is reported, which is the fallback, not
+    // the bug (shown the moment it was made); `capMs` lets a reader tell the two apart.
+    const timeline = { created: Date.now(), painted: 0, shown: 0, capMs: SPLASH_SHOW_CAP_MS };
     (globalThis as { hangarSplash?: typeof timeline }).hangarSplash = timeline;
     splash.once("show", () => { timeline.shown = Date.now(); });
     splash.once("ready-to-show", () => {

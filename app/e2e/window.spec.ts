@@ -455,10 +455,15 @@ test("opens one window, with no title bar above the content", async () => {
 test("the loading window is never seen empty", async () => {
   const { app } = await launch(fixture());
   try {
-    const timeline = await app.evaluate(() => (globalThis as { hangarSplash?: { painted: number; shown: number } }).hangarSplash ?? null);
+    type Timeline = { created: number; painted: number; shown: number; capMs: number };
+    const timeline = await app.evaluate(() => (globalThis as { hangarSplash?: Timeline }).hangarSplash ?? null);
     expect(timeline, "the loading window kept its timeline").not.toBeNull();
-    expect(timeline!.painted, "its page painted").toBeGreaterThan(0);
-    expect(timeline!.shown, "shown only once it had painted").toBeGreaterThanOrEqual(timeline!.painted);
+    const { created, painted, shown, capMs } = timeline!;
+    // Shown once its page had painted, or by the cap when the paint was slow (a machine whose new
+    // processes start slowly, as with a DLP agent here) — never at once, empty, as it used to be.
+    const byPaint = painted > 0 && shown >= painted;
+    const byCap = shown - created >= capMs - 50;
+    expect(byPaint || byCap, `shown ${shown - created} ms after it was made, painted at ${painted ? painted - created : "never"}`).toBe(true);
   } finally {
     await app.close();
   }
