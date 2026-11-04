@@ -38,27 +38,25 @@ export function useUsage(): Usage {
  * The usage card's body: on or off.
  *
  * On shows every window Claude Code reports, off shows none and stops the app asking for them at
- * all. The config still holds a list of windows, so a machine that ticked some of them under an
- * older version keeps exactly those: "on" is any non-empty choice, and choosing it again leaves
- * that choice alone rather than widening it. Under the two, only what explains a blank gauge:
- * still reading, no login, a login that ran out, or the endpoint refusing for the moment.
+ * all. Under the two, only what explains a blank gauge: still reading, no login, a login that ran
+ * out, or the endpoint refusing for the moment.
  */
 export function UsageSettings({ status, onChange, usage }: { status: StatusConfig; onChange(status: StatusConfig): void; usage: UsageState }) {
   const t = useText();
-  const on = status.windows === null || status.windows.length > 0;
+  const on = status.enabled;
   return (
     <>
       <Choice
         label={t("settings.usage.on")}
         note={t("settings.usage.on.note")}
         selected={on}
-        onSelect={() => { if (!on) onChange({ ...status, windows: null }); }}
+        onSelect={() => { if (!on) onChange({ enabled: true }); }}
       />
       <Choice
         label={t("settings.usage.off")}
         note={t("settings.usage.off.note")}
         selected={!on}
-        onSelect={() => { if (on) onChange({ ...status, windows: [] }); }}
+        onSelect={() => { if (on) onChange({ enabled: false }); }}
       />
       {on && !usage.updatedAt && usage.login === "fresh" && !usage.endpointFailure ? (
         <div className="text-[11px] text-bone-500">{t("settings.usage.loading")}</div>

@@ -50,12 +50,11 @@ export function readStatusUpdatedAt(home?: string): number | null {
   return seconds ? seconds * 1000 : null;
 }
 
+/** The windows to draw: every one the cache holds, or none while the gauges are switched off. */
 export function readStatus(
   home?: string,
-  config: StatusConfig = { windows: null },
+  config: StatusConfig = { enabled: true },
   now = Date.now(),
 ): StatusSnapshot {
-  const all = rateWindows(readJson<Record<string, unknown>>(homePaths(home).hangarUsage, {}), now);
-  const chosen = config.windows;
-  return { windows: chosen === null ? all : all.filter((w) => chosen.includes(w.key)) };
+  return { windows: config.enabled ? rateWindows(readJson<Record<string, unknown>>(homePaths(home).hangarUsage, {}), now) : [] };
 }

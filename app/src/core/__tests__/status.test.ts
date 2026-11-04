@@ -50,14 +50,14 @@ describe("readStatus", () => {
       five_hour: { used_percentage: 10, resets_at: NOW / 1000 + 60 },
       seven_day: { used_percentage: 40, resets_at: NOW / 1000 + 6000 },
     }));
-    expect(readStatus(home, { windows: null }, NOW).windows.map((w) => w.key))
+    expect(readStatus(home, { enabled: true }, NOW).windows.map((w) => w.key))
       .toEqual(["five_hour", "seven_day"]);
 
     // Caches from the segments that were removed are not sources any more.
     writeFileSync(join(home, "cache", "mcp-status.json"), JSON.stringify({ servers: { wiki: { ok: true } } }));
     writeFileSync(join(home, "cache", "outlook-status.json"), JSON.stringify({ servers: { web: { ok: true } } }));
     writeFileSync(join(home, ".ponytail-active"), "full");
-    expect(Object.keys(readStatus(home, { windows: null }, NOW))).toEqual(["windows"]);
+    expect(Object.keys(readStatus(home, { enabled: true }, NOW))).toEqual(["windows"]);
   });
 
   it("reads the app's own file, model-scoped window and all", () => {
@@ -73,7 +73,7 @@ describe("readStatus", () => {
       weekly_scoped: { utilization: 16, resets_at: NOW / 1000 + 86400, model: "Fable" },
       updated_at: NOW / 1000 - 300, source: "endpoint",
     }));
-    const windows = readStatus(home, { windows: null }, NOW).windows;
+    const windows = readStatus(home, { enabled: true }, NOW).windows;
     expect(windows.map((w) => [w.key, w.usedPercent])).toEqual([["five_hour", 30], ["seven_day", 20], ["weekly_scoped", 16]]);
     expect(windows[2]?.label).toBe("1w Fable");
     expect(readStatusUpdatedAt(home)).toBe((NOW / 1000 - 300) * 1000);
@@ -82,19 +82,17 @@ describe("readStatus", () => {
     writeFileSync(join(home, "cache", "rate-limits.json"), JSON.stringify({
       five_hour: { used_percentage: 99, resets_at: NOW / 1000 + 3600 }, updated_at: NOW / 1000,
     }));
-    expect(readStatus(home, { windows: null }, NOW).windows[0]?.usedPercent).toBe(30);
+    expect(readStatus(home, { enabled: true }, NOW).windows[0]?.usedPercent).toBe(30);
   });
 
-  it("draws only the windows that were chosen", () => {
+  it("draws nothing while the gauges are switched off", () => {
     const home = join(mkdtempSync(join(tmpdir(), "cp-status-")), ".claude");
     mkdirSync(join(home, "cache"), { recursive: true });
     writeFileSync(join(home, "cache", "hangar-usage.json"), JSON.stringify({
       five_hour: { used_percentage: 10, resets_at: NOW / 1000 + 60 },
       seven_day: { used_percentage: 40, resets_at: NOW / 1000 + 6000 },
     }));
-    expect(readStatus(home, { windows: ["seven_day"] }, NOW).windows.map((w) => w.key)).toEqual(["seven_day"]);
-    // Unticking every one is how the gauges are turned off.
-    expect(readStatus(home, { windows: [] }, NOW).windows).toEqual([]);
+    expect(readStatus(home, { enabled: false }, NOW).windows).toEqual([]);
   });
 });
 

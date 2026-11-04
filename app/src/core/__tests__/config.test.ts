@@ -31,7 +31,7 @@ describe("ConfigStore", () => {
 
   it("keeps every section in one file", () => {
     config.saveDock({ enabled: true, device: "\\\\.\\DISPLAY1", edge: "left", percent: 30 });
-    config.saveStatus({ windows: ["five_hour"] });
+    config.saveStatus({ enabled: true });
     config.saveLaunch({ shell: "cmd", permission: "bypass", terminal: "", customShell: "", pasteHotkey: "", autoClipPath: true });
     config.saveUi({ project: "C--Users-Terry", cursor: 4, theme: "dark", language: "system", monitor: true,
       files: true, keepIcons: true, skills: true, alwaysOnTop: false, updateSnoozeUntil: 0, artifacts: true, sidePane: "files", paneOpen: [], artifactScope: "all", layout: "auto", stackBelow: 520, window: null, navWidth: 0, asideWidth: 0, stackTop: 0, stackPane: 0 });
@@ -85,8 +85,19 @@ describe("ConfigStore", () => {
     writeFileSync(join(home, "config", "manager.json"), "not json at all");
     expect(config.dock().edge).toBe("top");
     expect(config.launch()).toEqual({ shell: "auto", permission: "default", terminal: "", customShell: "", pasteHotkey: DEFAULT_PASTE_HOTKEY, autoClipPath: true });
-    expect(config.status()).toEqual({ windows: null });
+    expect(config.status()).toEqual({ enabled: true });
     expect(config.ui()).toEqual({ project: null, cursor: 0, theme: "system", language: "system", monitor: true, files: true, keepIcons: true, skills: true, alwaysOnTop: false, updateSnoozeUntil: 0, artifacts: true, sidePane: "files", paneOpen: [], artifactScope: "all", layout: "auto", stackBelow: 520, window: null, navWidth: 0, asideWidth: 0, stackTop: 0, stackPane: 0 });
+  });
+
+  it("reads an older file's list of usage windows as the switch it became", () => {
+    config.saveSection("status", { windows: [] });
+    expect(config.status()).toEqual({ enabled: false });
+    config.saveSection("status", { windows: ["five_hour"] });       // a few ticked: on, all of them now
+    expect(config.status()).toEqual({ enabled: true });
+    config.saveSection("status", { windows: null });
+    expect(config.status()).toEqual({ enabled: true });
+    config.saveStatus({ enabled: false });
+    expect(config.status()).toEqual({ enabled: false });
   });
 
   it("rejects a launch setting it does not recognise", () => {

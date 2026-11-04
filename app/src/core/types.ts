@@ -199,11 +199,6 @@ export interface UpdateConfig {
 }
 
 export interface StatusConfig {
-  /**
-   * Which rate-limit windows to show, by key, or null for every one Claude Code reports.
-   *
-   * An empty list is "none": the gauges disappear. One list rather than a switch and a list —
-   * unticking the last window is the same wish as turning the segment off.
-   */
-  windows: string[] | null;
+  /** Whether the usage gauges are shown — every window Claude Code reports — and asked for at all. */
+  enabled: boolean;
 }
