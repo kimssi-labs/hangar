@@ -16,7 +16,7 @@ A session manager for [Claude Code](https://claude.com/claude-code) on Windows a
 - Dock the window as a reserved band on a screen edge, keeping your desktop icons.
 - Side by side or stacked layout, with resizable panes.
 - Always-on-top pin.
-- Git status on project rows, update from the base branch, and worktrees named by their branch.
+- Git on project rows: the branch beside the name (`app [main]`), update from the base branch, and worktrees under their repository.
 - Works from the keyboard: Tab between areas, arrow keys inside lists.
 - Updates itself, with a prompt when a new version is out.
 - English and Korean.
