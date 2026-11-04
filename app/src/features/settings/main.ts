@@ -12,7 +12,7 @@ import type { SettingsPayload } from "../../main/ipc.js";
 import { settingsContract, type SettingsPatch } from "./contract.js";
 
 /** The parts of the payload that are other features' to answer. */
-export type FeatureSlices = Pick<SettingsPayload, "dock" | "dockDevices" | "dockFloor" | "minPercent" | "pasteHotkeyActive" | "usage" | "gitAvailable">;
+export type FeatureSlices = Pick<SettingsPayload, "dock" | "dockFloor" | "minPercent" | "pasteHotkeyActive" | "usage" | "gitAvailable">;
 
 /** What this feature needs from the rest of main. */
 export interface SettingsDeps {
