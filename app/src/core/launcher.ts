@@ -67,8 +67,6 @@ export interface LaunchCommand {
   exe: string;
   args: string[];
   cwd: string;
-  /** True when the command opens its own window and does not need a detached console. */
-  ownsWindow: boolean;
 }
 
 /** `claude` plus the flags this session should start with. */
@@ -105,7 +103,7 @@ export function cmdQuote(value: string): string {
  * Windows always ends at cmd.exe, which cannot be absent. Auto starts at the top of the chain.
  */
 export function shellChain(shell: ShellChoice, platform: NodeJS.Platform): string[] {
-  if (platform !== "win32") return shell === "bash" || shell === "auto" ? ["bash", "sh"] : ["bash", "sh"];
+  if (platform !== "win32") return ["bash", "sh"];
   const windows = ["pwsh.exe", "powershell.exe", "cmd.exe"];
   switch (shell) {
     case "pwsh": return windows;
@@ -237,7 +235,7 @@ export function launchCommand(request: LaunchRequest, have: (exe: string) => boo
   // An empty path is a half-finished setting and falls through to Auto, so a session still opens.
   const custom = request.config.shell === "custom" ? request.config.customShell.trim() : "";
   if (custom) {
-    return { exe: custom, args: [request.cwd], cwd: request.cwd, ownsWindow: true, shell: custom, fellBack: false };
+    return { exe: custom, args: [request.cwd], cwd: request.cwd, shell: custom, fellBack: false };
   }
   const argv = claudeArgv(request);
   const hosted = hostedCommand(argv, request.config.shell, request.platform, have);
@@ -253,7 +251,6 @@ export function launchCommand(request: LaunchRequest, have: (exe: string) => boo
       args: ["-w", windowArgument(request.target), "nt",
         ...(title ? ["--title", title] : []), "-d", request.cwd, hosted.exe, ...hosted.args],
       cwd: request.cwd,
-      ownsWindow: true,
       shell: hosted.exe,
       fellBack: hosted.fellBack,
     };
@@ -266,7 +263,6 @@ export function launchCommand(request: LaunchRequest, have: (exe: string) => boo
       exe: term.exe,
       args: [...dirArgs, "-e", hosted.exe, ...hosted.args],
       cwd: request.cwd,
-      ownsWindow: true,
       shell: hosted.exe,
       fellBack: hosted.fellBack,
     };
@@ -275,7 +271,6 @@ export function launchCommand(request: LaunchRequest, have: (exe: string) => boo
     exe: hosted.exe,
     args: hosted.args,
     cwd: request.cwd,
-    ownsWindow: false,
     shell: hosted.exe,
     fellBack: hosted.fellBack,
   };

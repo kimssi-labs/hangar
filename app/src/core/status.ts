@@ -17,9 +17,6 @@ import { readJson } from "./json.js";
 import { homePaths } from "./paths.js";
 import type { RateWindow, StatusConfig, StatusSnapshot } from "./types.js";
 
-export { RATE_WINDOWS } from "./constants.js";
-
-
 interface RateBucket { used_percentage?: number; utilization?: number; resets_at?: number; model?: unknown }
 
 /** Windows present in the cache, normalised; a window whose reset already passed reads 0 %. */

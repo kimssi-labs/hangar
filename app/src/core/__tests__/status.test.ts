@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { rateWindows, readStatus, readStatusUpdatedAt } from "../status.js";
-import { MetricsHistory, processTree, sumTree, SYSTEM_SERIES } from "../metrics.js";
+import { MetricsHistory, processTree, SYSTEM_SERIES } from "../metrics.js";
 import type { MetricsSnapshot } from "../types.js";
 
 const NOW = 1_800_000_000_000;
@@ -100,20 +100,19 @@ describe("readStatus", () => {
 
 describe("metrics", () => {
   const rows = [
-    { pid: 1, parentPid: 0, cpu: 1, memoryBytes: 100 },
-    { pid: 2, parentPid: 1, cpu: 2, memoryBytes: 200 },
-    { pid: 3, parentPid: 2, cpu: 4, memoryBytes: 400 },
-    { pid: 9, parentPid: 0, cpu: 8, memoryBytes: 800 },
+    { pid: 1, parentPid: 0 },
+    { pid: 2, parentPid: 1 },
+    { pid: 3, parentPid: 2 },
+    { pid: 9, parentPid: 0 },
   ];
 
-  it("sums a session's whole process tree", () => {
+  it("walks a session's whole process tree", () => {
     expect(processTree(rows, 1).map((r) => r.pid)).toEqual([1, 2, 3]);
-    expect(sumTree(processTree(rows, 1))).toEqual({ cpu: 7, memoryBytes: 700 });
     expect(processTree(rows, 404)).toEqual([]);
   });
 
   it("survives a cycle in the process table", () => {
-    const cyclic = [{ pid: 1, parentPid: 2, cpu: 1, memoryBytes: 1 }, { pid: 2, parentPid: 1, cpu: 1, memoryBytes: 1 }];
+    const cyclic = [{ pid: 1, parentPid: 2 }, { pid: 2, parentPid: 1 }];
     expect(processTree(cyclic, 1).map((r) => r.pid)).toEqual([1, 2]);
   });
 

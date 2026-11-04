@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The process table and per-pid readings, as the test decides them; `walks` counts table walks.
 const machine = vi.hoisted(() => ({
-  rows: [] as { pid: number; parentPid: number; cpu: number; memoryBytes: number }[],
+  rows: [] as { pid: number; parentPid: number }[],
   dead: new Set<number>(),
   walks: 0,
 }));
@@ -16,7 +16,7 @@ vi.mock("../nativeMetrics.js", () => ({
 
 import { resetSampler, sample, TREE_REFRESH_MS } from "../sampler.js";
 
-const row = (pid: number, parentPid: number) => ({ pid, parentPid, cpu: 0, memoryBytes: 0 });
+const row = (pid: number, parentPid: number) => ({ pid, parentPid });
 
 beforeEach(() => {
   resetSampler();

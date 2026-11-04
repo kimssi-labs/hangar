@@ -127,8 +127,3 @@ export function classify(code: number, output: string): SyncOutcome {
 function firstLine(text: string): string {
   return text.split("\n").map((line) => line.trim()).filter(Boolean).slice(-1)[0] ?? "";
 }
-
-/** What the menu entry is called, so it names the branch it will pull from. */
-export function syncLabel(base: string): string {
-  return base ? `Update from ${base}` : "Update from the base branch";
-}

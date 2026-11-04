@@ -99,12 +99,6 @@ static class Program {
 
   static string Quote(string s) { return "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""; }
 
-  // Where the time goes, when HANGAR_FOCUS_TRACE is set: one "stage=ms" per stage, in the output.
-  static readonly Stopwatch Clock = Stopwatch.StartNew();
-  static readonly StringBuilder Marks = new StringBuilder();
-  static readonly bool Tracing = Environment.GetEnvironmentVariable("HANGAR_FOCUS_TRACE") != null;
-  static void Mark(string stage) { if (Tracing) Marks.Append(stage).Append('=').Append(Clock.ElapsedMilliseconds).Append(' '); }
-
   // The tab row, found breadth-first and shallow: the terminal's own text lives in the same tree, thousands of
   // elements deep, and a depth-first search from the window reads through it before reaching the tabs.
   static AutomationElement TabRow(AutomationElement root) {
@@ -137,7 +131,6 @@ static class Program {
   static int Main(string[] args) {
     uint pid = uint.Parse(args[0]);
     var stdout = new StreamWriter(Console.OpenStandardOutput());
-    Mark("start");
     // 1. The console title (what a Windows Terminal tab is named) and the console's own window.
     string title = ""; IntPtr consoleWindow = IntPtr.Zero;
     FreeConsole();                                  // ours, so that the session's can be attached
@@ -146,7 +139,6 @@ static class Program {
       consoleWindow = GetConsoleWindow();
       FreeConsole();
     }
-    Mark("title");
     // 2. The window to raise: a plain console's own, else one of the first ancestor's visible windows.
     // One Windows Terminal process owns every window it has, so with a title to go by the window is
     // the one whose tab row has that tab; the tab is selected there, while the window is still in
@@ -178,14 +170,11 @@ static class Program {
         p = ParentOf(p);
       }
     }
-    Mark("window");
     if (target == IntPtr.Zero) { stdout.Write("{\"found\":false}"); stdout.Flush(); return 0; }
     // 3. Raise it.
     if (IsIconic(target)) ShowWindow(target, SW_RESTORE);
     SetForegroundWindow(target);
-    Mark("raise");
-    stdout.Write("{\"found\":true,\"owner\":" + Quote(owner) + ",\"tab\":" + (tab ? "true" : "false")
-      + (Tracing ? ",\"marks\":" + Quote(Marks.ToString().Trim()) : "") + "}");
+    stdout.Write("{\"found\":true,\"owner\":" + Quote(owner) + ",\"tab\":" + (tab ? "true" : "false") + "}");
     stdout.Flush();
     return 0;
   }

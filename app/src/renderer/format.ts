@@ -51,17 +51,12 @@ export function resetLabel(resetsAt: number, now = Date.now()): string {
   return `${resetRemaining(resetsAt, now)} left · ${formatClock(resetsAt)}`;
 }
 
-/** "3 minutes ago" — for a list where the exact second never matters. */
-export function formatSince(ms: number, now = Date.now()): string {
-  const { key, vars } = sinceParts(ms, now);
-  return key === "since.absolute" ? formatTime(ms) : EN_SINCE[key](vars.count ?? 0);
-}
-
 /**
- * The same reckoning, as a message and its number.
+ * "3 minutes ago", as a message and its number — for a list where the exact second never matters.
  *
- * Split out so a translated screen can say it in its own language: "3분 전" is not "3" pasted into
- * an English sentence, and a component that has the translator can put the pieces together itself.
+ * A message rather than a sentence, so a translated screen can say it in its own language: "3분 전"
+ * is not "3" pasted into an English sentence, and the component holding the translator puts the
+ * pieces together itself.
  */
 export function sinceParts(ms: number, now = Date.now()): {
   key: "since.now" | "since.minutes" | "since.hours" | "since.days" | "since.absolute";
@@ -93,15 +88,6 @@ export function agoParts(ms: number, now = Date.now()): {
   if (days < 365) return { key: "since.months", vars: { count: Math.max(1, Math.round(days / 30)) } };
   return { key: "since.years", vars: { count: Math.max(1, Math.round(days / 365)) } };
 }
-
-/** English, for the callers that have no translator to hand — tests, and anything outside the tree. */
-const EN_SINCE = {
-  "since.now": () => "just now",
-  "since.minutes": (n: number) => `${n} min ago`,
-  "since.hours": (n: number) => `${n} h ago`,
-  "since.days": (n: number) => `${n} d ago`,
-  "since.absolute": () => "",
-} as const;
 
 export function formatPercent(value: number): string {
   return `${Math.round(value)}%`;

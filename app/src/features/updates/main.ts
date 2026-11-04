@@ -6,7 +6,7 @@
  */
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
-import type { UpdateConfig } from "../../core/updates.js";
+import type { UpdateConfig } from "../../core/types.js";
 import { UpdateService } from "../../main/updater.js";
 import { updatesContract } from "./contract.js";
 

@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { ConfigStore, DEFAULT_PASTE_HOTKEY, DOCK_PERCENT, percentFloor } from "../config.js";
+import { ConfigStore, percentFloor } from "../config.js";
+import { DEFAULT_PASTE_HOTKEY, DOCK_PERCENT } from "../constants.js";
 
 function makeHome(): string {
   const home = join(mkdtempSync(join(tmpdir(), "cp-config-")), ".claude");

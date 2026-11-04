@@ -13,8 +13,9 @@ import { app } from "electron";
 
 import {
   CHECK_INTERVAL_MS, FIRST_CHECK_DELAY_MS, initialState, mayInstallOnQuit, shouldCheck,
-  type UpdateConfig, type UpdateState,
+  type UpdateState,
 } from "../core/updates.js";
+import type { UpdateConfig } from "../core/types.js";
 import { updateLogger } from "./updateLog.js";
 
 type Updater = {
