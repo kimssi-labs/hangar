@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { FOCUS_SOURCE, focusSession, helperExecutable, helperName, parseOutcome } from "../liveSession.js";
+import { helperExecutable, helperName } from "../helpers.js";
+import { FOCUS_HELPER, FOCUS_SOURCE, focusSession, parseOutcome } from "../liveSession.js";
 
 describe("parseOutcome", () => {
   it("reads the helper's last line", () => {
@@ -23,8 +24,8 @@ describe("parseOutcome", () => {
 
 describe("the helper's source", () => {
   it("is named by its hash, so a changed source is a new build", () => {
-    expect(helperName()).toMatch(/^hangar-focus-[0-9a-f]{12}\.exe$/);
-    expect(helperName(`${FOCUS_SOURCE} `)).not.toBe(helperName());
+    expect(helperName(FOCUS_SOURCE, "focus")).toMatch(/^hangar-focus-[0-9a-f]{12}\.exe$/);
+    expect(helperName(`${FOCUS_SOURCE} `, "focus")).not.toBe(helperName(FOCUS_SOURCE, "focus"));
   });
 
   it("stays within the C# 5 the framework compiler speaks: no interpolated strings, no ?., no => members", () => {
@@ -50,7 +51,7 @@ describe("the helper's source", () => {
 describe.runIf(process.platform === "win32")("the compiled helper", () => {
   it("builds and runs", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hangar-focus-test-"));
-    const exe = await helperExecutable(dir);
+    const exe = await helperExecutable(dir, FOCUS_HELPER);
     expect(exe, "compiled").toBeTruthy();
     const outcome = await focusSession(process.pid, dir);
     expect(outcome.error).toBeUndefined();

@@ -10,8 +10,8 @@
  */
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { app, dialog, shell } from "electron";
+import { dirname } from "node:path";
+import { dialog, shell } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
@@ -21,7 +21,8 @@ import type { ProjectInfo } from "../../core/types.js";
 import { linkWorktrees } from "../../core/worktree.js";
 import { cachedWhich, claudeExecutable, detectLinuxTerminal, haveExecutable } from "../../main/executables.js";
 import { headOf, isLinkedWorktree, mainCheckoutOf } from "../../main/gitStatus.js";
-import { focusSession, helperExecutable, stopSession } from "../../main/liveSession.js";
+import { helperExecutable, helpersDir } from "../../main/helpers.js";
+import { FOCUS_HELPER, focusSession, stopSession } from "../../main/liveSession.js";
 import type { ActionResult, AddProjectResult } from "../../main/ipc.js";
 import type { SessionTarget } from "../../main/sampler.js";
 import { projectsContract, type OpenSessionResult, type ScanAnswer } from "./contract.js";
@@ -48,9 +49,8 @@ export interface ProjectsFeature {
 
 export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): ProjectsFeature {
   let projects: ProjectInfo[] = [];
-  const helpersDir = (): string => join(app.getPath("userData"), "helpers");
   // Built once per version, a few seconds of compiler time: off the start-up path, before anyone asks.
-  if (process.platform === "win32") setTimeout(() => void helperExecutable(helpersDir()), HELPER_WARMUP_MS).unref();
+  if (process.platform === "win32") setTimeout(() => void helperExecutable(helpersDir(), FOCUS_HELPER), HELPER_WARMUP_MS).unref();
 
   const find = (dir: string): ProjectInfo | undefined => projects.find((p) => p.dir === dir);
   /** Resolved real paths, per folder — dropped whenever the store reads everything again. */

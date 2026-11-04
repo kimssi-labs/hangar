@@ -17,7 +17,7 @@ import { rmSync } from "node:fs";
 import { type Box, type DeskIcon, movedByUser, placeAround } from "../core/deskIcons.js";
 import { readJson, writeJson } from "../core/json.js";
 import type { DockEdge } from "../core/types.js";
-import { helperExecutable, type HelperSpec } from "./liveSession.js";
+import { helperExecutable, type HelperSpec } from "./helpers.js";
 
 /** How long Explorer is given to finish re-flowing after a reservation changes (measured: < 2.5 s). */
 const SETTLE_MS = 1500;
