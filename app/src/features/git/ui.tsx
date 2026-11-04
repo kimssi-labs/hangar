@@ -190,11 +190,11 @@ export function GitSettings({ git, available, onChange, onInstall }: {
       </label>
       {MERGE_STRATEGIES.map((strategy) => (
         <Choice
-          key={strategy.key}
-          label={strategy.label}
-          note={strategy.note}
-          selected={git.strategy === strategy.key}
-          onSelect={() => set({ strategy: strategy.key })}
+          key={strategy}
+          label={t(`settings.git.strategy.${strategy}` as const)}
+          note={t(`settings.git.strategy.${strategy}.note` as const)}
+          selected={git.strategy === strategy}
+          onSelect={() => set({ strategy })}
         />
       ))}
       <div className="text-[11px] text-bone-500">{t("settings.git.runNote")}</div>
@@ -202,11 +202,11 @@ export function GitSettings({ git, available, onChange, onInstall }: {
       <div className="text-[11px] text-bone-500 pt-2">{t("settings.git.auto")}</div>
       {AUTO_MODES.map((mode) => (
         <Choice
-          key={mode.key}
-          label={mode.label}
-          note={mode.note}
-          selected={git.auto.mode === mode.key}
-          onSelect={() => set({ auto: { ...git.auto, mode: mode.key } })}
+          key={mode}
+          label={t(`settings.git.auto.${mode}` as const)}
+          note={t(`settings.git.auto.${mode}.note` as const)}
+          selected={git.auto.mode === mode}
+          onSelect={() => set({ auto: { ...git.auto, mode } })}
         />
       ))}
       {git.auto.mode === "off" ? null : (

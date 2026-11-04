@@ -105,6 +105,13 @@ describe("ConfigStore", () => {
     expect(config.launch()).toMatchObject({ shell: "auto", permission: "default" });
   });
 
+  it("keeps a git strategy and mode it knows, and rejects one it does not", () => {
+    config.saveSection("git", { strategy: "ff-only", auto: { mode: "safe" } });
+    expect(config.git()).toMatchObject({ strategy: "ff-only", auto: { mode: "safe" } });
+    config.saveSection("git", { strategy: "squash", auto: { mode: "always" } });
+    expect(config.git()).toMatchObject({ strategy: "rebase", auto: { mode: "off" } });
+  });
+
   it("stores project aliases next to the settings", () => {
     config.saveAliases({ "C:/src/demo": "Demo" });
     expect(config.aliases()).toEqual({ "C:/src/demo": "Demo" });
