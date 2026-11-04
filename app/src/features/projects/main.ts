@@ -102,21 +102,6 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
     return projects;
   }
 
-  /** The native box, for a caller that did not ask in the window's own dialog. */
-  async function confirm(message: string, detail: string): Promise<boolean> {
-    const window = ctx.window();
-    if (!window) return false;
-    const { response } = await dialog.showMessageBox(window, {
-      type: "warning",
-      buttons: ["Delete", "Cancel"],
-      defaultId: 1,
-      cancelId: 1,
-      message,
-      detail,
-    });
-    return response === 0;
-  }
-
   /**
    * The list for the page — or only its signature, when it is the one the page already holds.
    *
@@ -219,33 +204,21 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
       return { ok: true };
     },
 
-    deleteSession: async (request): Promise<ActionResult> => {
+    // The window asks first, in its own dialog; nothing reaches these without that answer.
+    deleteSession: (request): ActionResult => {
       const project = find(request.projectDir);
       const session = project?.sessions.find((s) => s.id === request.sessionId);
       if (!session) return { ok: false, message: "Session not found." };
       if (session.live) return { ok: false, message: "That session is running." };
-      // The window asks in its own dialog, which matches the app; the native box is the fallback for
-      // a caller that did not.
-      if (!request.confirmed
-        && !await confirm(`Delete session “${session.title}”?`, "The transcript is removed from disk.")) {
-        return { ok: false };
-      }
       ctx.store.deleteSession(session);
       scan();
       return { ok: true, message: "Session deleted." };
     },
 
-    deleteProject: async (request): Promise<ActionResult> => {
+    deleteProject: (request): ActionResult => {
       const project = find(request.projectDir);
       if (!project) return { ok: false, message: "Project not found." };
       if (project.liveCount) return { ok: false, message: "A session in this project is running." };
-      const extra = project.hasMemory ? " Its memory/ folder goes with it." : "";
-      if (!request.confirmed && !await confirm(
-        `Delete “${project.name}” and its ${project.sessions.length} session(s)?`,
-        `Only Claude Code's history is deleted; your code is untouched.${extra}`,
-      )) {
-        return { ok: false };
-      }
       ctx.store.deleteProject(project);
       scan();
       return { ok: true, message: "Project deleted." };
