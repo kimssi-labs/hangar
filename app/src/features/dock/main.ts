@@ -63,6 +63,12 @@ export interface DockFeature {
    * the restore AFTER the maximise has a window shape to come back to.
    */
   undockForMaximize(): Promise<void>;
+  /**
+   * Minimise from the caption button. A docked band gives its edge back first and minimises while
+   * the shell is at it, rather than after the minimise has finished animating: the space comes back
+   * at once instead of most of a second later (reported). Restoring docks it again, as before.
+   */
+  minimize(): void;
   /** Remember this band for the current arrangement of monitors, without applying it. */
   save(config: DockConfig): void;
   slice(): DockSlice;
@@ -239,7 +245,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
       // the setting stays, and the band comes back with the window. Both on the next turn of the
       // loop, as every native call that starts from a window event must (see chrome.ts).
       window.on("minimize", () => {
-        if (!dock?.isDocked) return;
+        if (!dock?.isDocked || parked) return;             // the caption button already gave it back
         parked = true;
         setImmediate(() => { void dock?.release(); });
       });
@@ -316,6 +322,15 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
 
     isDocked: () => dock?.isDocked === true,
     undockForMaximize: async () => { if (dock?.isDocked) await undock(); },
+    minimize() {
+      const window = ctx.window();
+      if (!window || window.isDestroyed()) return;
+      if (dock?.isDocked && !parked) {
+        parked = true;
+        void dock.release();
+      }
+      window.minimize();
+    },
     // With the arrangement key: without it the per-arrangement entry keeps the old edge and size
     // and wins on the next read, so changing the dock in Settings looked like it did nothing.
     save: (wanted) => {

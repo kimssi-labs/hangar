@@ -240,14 +240,14 @@ export class IconKeeper {
    * Before the reservation changes: take the arrangement, or forget icons the user has moved.
    * Never throws — the icons are a courtesy, and a failure here must not stand in the way of docking.
    */
-  async before(): Promise<void> {
+  async before(look = true): Promise<void> {
     if (this.timer) {
       // Explorer may still be moving icons from the last change; what it shows now proves nothing.
       clearTimeout(this.timer);
       this.timer = null;
       return;
     }
-    if (!this.kept && !this.enabled()) return;
+    if (!look || (!this.kept && !this.enabled())) return;
     // Not waited for: docking does not stand still for a compiler. A first dock before the helper is
     // built goes without, which is what `after` then finds — nothing kept, nothing to put back.
     const read = await this.run("read", "", false);

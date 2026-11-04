@@ -1310,3 +1310,28 @@ test("a remembered window too big for the screen opens fitted inside it", async 
     await app.close();
   }
 });
+
+/**
+ * The caption button's minimise gives the edge back first, without waiting for the minimise to
+ * finish (reported: the space came back most of a second late), and restoring docks it again.
+ */
+test("minimising a band from its button gives the edge back at once, and restoring re-docks it", async () => {
+  const { app, page } = await launch(fixture({ theme: "dark" }));
+  try {
+    test.skip(process.platform !== "win32", "an appbar is Windows' own");
+    const primary = (await monitors(page)).find((d) => d.primary)!;
+    await page.evaluate((device) => window.hangar.applyDock({ enabled: true, device, edge: "right", percent: 15 }), primary.id);
+    await page.waitForTimeout(1700);
+    const docked = await workAreaOf(app, primary.id);
+    const started = Date.now();
+    await page.getByRole("button", { name: "Minimise" }).click();
+    await expect.poll(async () => (await workAreaOf(app, primary.id)).width, { timeout: 5000 }).toBeGreaterThan(docked.width);
+    console.log(`edge back ${Date.now() - started} ms after the click`);
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.restore());
+    await expect.poll(async () => (await workAreaOf(app, primary.id)).width, { timeout: 8000, message: "docked again" }).toBe(docked.width);
+  } finally {
+    await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
+    await app.close();
+  }
+});
