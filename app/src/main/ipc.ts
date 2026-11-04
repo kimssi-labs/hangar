@@ -40,8 +40,6 @@ export interface SettingsPayload {
  */
 export const PAGES = {
   git: "https://git-scm.com/downloads",
-  claudeCode: "https://claude.com/claude-code",
-  releases: "https://github.com/kimssi-labs/hangar/releases",
 } as const;
 export type PageName = keyof typeof PAGES;
 

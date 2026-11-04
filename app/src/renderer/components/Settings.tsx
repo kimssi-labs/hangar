@@ -19,7 +19,7 @@ import { MonitorSettings } from "../../features/metrics/ui";
 import { LaunchSettings, PermissionSettings } from "../../features/projects/ui";
 import { UpdatesSettings, type Updates } from "../../features/updates/ui";
 import { UsageSettings } from "../../features/usage/ui";
-import type { DisplayInfo, SettingsPayload } from "../api";
+import type { DisplayInfo, PageName, SettingsPayload } from "../api";
 import { useText } from "../useText";
 import { Card, Choice } from "./SettingsCard";
 import { Truncated } from "./Truncated";
@@ -44,7 +44,7 @@ export interface SettingsViewProps {
   /** What the machine's language is, so "System" can say which one that is. */
   locale: string;
   /** Open one of the app's known pages in a browser. */
-  onOpenPage: (page: "git" | "claudeCode" | "releases") => void;
+  onOpenPage: (page: PageName) => void;
   /** The updater, as the updates feature keeps it. */
   updates: Updates;
   onClose: () => void;
