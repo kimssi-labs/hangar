@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { nextIndex, resolveAction, SHORTCUTS, type Screen } from "@core/keymap";
+import { listAction, nextIndex, PAGE_ROWS } from "@core/keymap";
 import type { Language } from "@core/i18n";
 import { gitMenuItems, isGitAction, runGitAction, useDirtyPatch, useGit } from "../features/git/ui";
 import {
@@ -23,7 +23,7 @@ import { usePasteResults } from "../features/clipboard/ui";
 import type { ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
 import { SIDE_PANE_TABS } from "@core/constants";
 
-import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
+import { api, MENU_SEPARATOR, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
 import { chosenMonitor } from "../features/dock/contract";
 import { DockButton, DockGrip, useDock } from "../features/dock/ui";
 import { ProjectDetail, ProjectTitle, SessionDetail } from "./components/Lists";
@@ -33,6 +33,7 @@ import { TitleBar } from "./components/TitleBar";
 import { Splitter } from "./components/Splitter";
 import { Truncated } from "./components/Truncated";
 import { WindowControls } from "./components/WindowControls";
+import { projectRowId, sessionRowId } from "./components/Lists";
 import { FilesPane, useFiles } from "../features/files/ui";
 import { SkillsPane, useSkills } from "../features/skills/ui";
 import { ArtifactsPane, useArtifacts } from "../features/artifacts/ui";
@@ -42,8 +43,11 @@ import { hasFileColumn, STACK_MIN, stackedTopHeight, useLayoutMode } from "./use
 import { useTheme } from "./useTheme";
 import { TextProvider, useText } from "./useText";
 
-const PAGE_SIZE = 10;
+type Screen = "projects" | "sessions" | "settings";
+
 const REFRESH_MS = 15_000;
+/** The project menu's entry for the clipboard feature: an image on the clipboard, saved as a file. */
+const PASTE_IMAGE = "pasteImage";
 /** Room enough for a path, never so much that the lists it frames disappear. */
 const NAV_MIN = 180;
 const NAV_MAX = 560;
@@ -52,6 +56,14 @@ const ASIDE_MIN = 160;
 const ASIDE_MAX = 640;
 
 type Toast = { text: string; tone: "ok" | "bad" } | null;
+
+/**
+ * The menu key or Shift+F10 on a list: the browser asks the focused list itself for a menu, and the
+ * answer is the selected row's. A right-click on the list's empty space is not that question.
+ */
+function isMenuKey(event: React.MouseEvent): boolean {
+  return event.target === event.currentTarget && event.button !== 2;
+}
 
 /**
  * The window, wrapped in the language it is read in.
@@ -87,7 +99,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const [openProject, setOpenProject] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
+  /** A search box has the focus — the one field a band has outside settings and dialogs. */
+  const [searching, setSearching] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   /** The dialog on screen, and the promise waiting on its answer. */
   const [dialog, setDialog] = useState<{ ask: Ask; settle: (result: AskResult) => void } | null>(null);
@@ -97,7 +110,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const updates = useUpdates(info?.version);
   /** The update question has had its answer this run; it is asked once a run at most. */
   const [updateAsked, setUpdateAsked] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("dock");
   // Monitoring off means there is nothing to draw — and nothing being measured, which is the point.
   const monitoring = settings?.ui.monitor ?? true;
   // The graphs' series live in the metrics feature's store, not here: a sample re-renders the
@@ -128,6 +140,12 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const { mode, width: windowWidth, height: windowHeight } = useLayoutMode(settings?.ui.layout ?? "auto", settings?.ui.stackBelow ?? 520);
   const searchRef = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLInputElement>(null);
+  // The two lists and the settings button: where the keyboard is sent when a screen changes.
+  const projectListRef = useRef<HTMLDivElement>(null);
+  const sessionListRef = useRef<HTMLDivElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  /** The pointer is pressing in the session list — the focus it brings there is a click's. */
+  const pointerOnSessions = useRef(false);
 
   const refresh = useCallback(async () => {
     const [scanned] = await Promise.all([scan(), usage.refresh()]);
@@ -181,8 +199,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   // A docked band answers the mouse and leaves the keyboard with whatever the user was typing in
   // (core/keyboardHold.ts). It asks for the keyboard only while this page has a field open.
   useEffect(() => {
-    api.holdKeyboard(Boolean(editing) || screen === "settings" || dialog !== null);
-  }, [editing, screen, dialog]);
+    api.holdKeyboard(Boolean(editing) || screen === "settings" || dialog !== null || searching);
+  }, [editing, screen, dialog, searching]);
 
   // Measure the room the two stacked panes share, rather than guessing it from the window: the
   // header and toolbar above them came to 149 px here, which is more than a divider can spare.
@@ -236,12 +254,16 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const openProjectInfo = projects.find((p) => p.dir === openProject) ?? null;
   const sessions = useMemo(() => filterSessions(openProjectInfo, query), [openProjectInfo, query]);
   const session = sessions[Math.min(sessionIndex, Math.max(0, sessions.length - 1))] ?? null;
+  // The project row drawn as selected, which the project list's keys move from: the selection on
+  // the projects screen, the open project beside its sessions, none on the settings screen.
+  const projectCursor = screen === "projects" ? projectIndex
+    : screen === "sessions" ? filtered.findIndex((p) => p.dir === openProject) : -1;
 
-  // What the keyboard handler reads. Kept in a ref because a key can arrive before React has
+  // What the key handlers read. Kept in a ref because a key can arrive before React has
   // re-rendered with the new state, and acting on the previous screen is how F2 renamed the wrong
   // thing. The ref is written during render, so it is never behind.
-  const latest = useRef({ screen, project, session, sessions, filtered, editing, helpOpen, settingsSection, openProject });
-  latest.current = { screen, project, session, sessions, filtered, editing, helpOpen, settingsSection, openProject };
+  const latest = useRef({ screen, project, projectCursor, session, sessions, filtered, openProject });
+  latest.current = { screen, project, projectCursor, session, sessions, filtered, openProject };
 
   /**
    * Ask in the app's own dialog rather than the system's.
@@ -311,13 +333,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     }
   }, [editing, screen, openProject, projectIndex]);
 
-  /** Delete what is under the cursor — a session on the sessions screen, else the project. */
-  const remove = useCallback(async () => {
-    const now = latest.current;
-    if (now.screen === "sessions" && now.session) await deleteSession(now.openProject as string, now.session, rowUi);
-    else if (now.project) await deleteProject(now.project, rowUi);
-  }, [rowUi]);
-
   /** Select the row for `dir` in a freshly scanned list — through the same placement it is drawn with. */
   const landOn = useCallback((dir: string, scanned: ProjectInfo[]) => {
     setQuery("");
@@ -329,11 +344,17 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const projectMenu = useCallback(async (target: ProjectInfo, index: number) => {
     setProjectIndex(index);
     setScreen("projects");
-    const choice = await api.contextMenu(projectMenuItems(target, gitMenuItems(target, settings?.git.base, t), t));
+    const choice = await api.contextMenu(projectMenuItems(target, [
+      ...gitMenuItems(target, settings?.git.base, t),
+      // The window's own way to the clipboard feature — by mouse, or by the menu key on the list.
+      { id: MENU_SEPARATOR, label: "" },
+      { id: PASTE_IMAGE, label: t("menu.pasteImage") },
+    ], t));
     if (isProjectAction(choice)) await runProjectAction(choice, target, { ...rowUi, enterSessions, startRename: setEditing });
     // Git's entries carry their own dialogs; this file only hands over what they need.
     else if (isGitAction(choice)) await runGitAction(choice, target, { ...rowUi, landOn });
-  }, [rowUi, enterSessions, settings?.git.base, landOn, t]);
+    else if (choice === PASTE_IMAGE) notify(await api.pasteImage());
+  }, [rowUi, enterSessions, settings?.git.base, landOn, notify, t]);
 
   /** The right-click menu of a session row, on either screen it is listed on. */
   const sessionMenu = useCallback(async (projectDir: string, target: SessionInfo, index: number) => {
@@ -390,64 +411,101 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     notify({ ok: result.ok, message: result.message ?? "Docked." });
   }, [settings, displays, notify]);
 
-  // One keyboard handler for the window: the mapping lives in core, this only performs the action.
+  // The keyboard starts in the project list, once the layout the settings ask for is drawn — the
+  // list it lands in is then the one that stays. Not in a band, which leaves the keyboard with the
+  // terminal (core/keyboardHold.ts).
+  const placedFocus = useRef(false);
   useEffect(() => {
-    const handler = (event: KeyboardEvent): void => {
-      const now = latest.current;
-      const typing = Boolean(now.editing) || document.activeElement === searchRef.current;
-      const action = resolveAction(event, now.screen, typing);
-      if (!action) return;
-      if (now.helpOpen && action !== "help" && action !== "back") return;
-      event.preventDefault();
+    if (!settings || placedFocus.current) return;
+    placedFocus.current = true;
+    void api.dockState().then((state) => { if (!state.docked) projectListRef.current?.focus(); });
+  }, [settings]);
 
-      switch (action) {
-        case "moveUp": case "moveDown": case "pageUp": case "pageDown": case "moveFirst": case "moveLast": {
-          if (now.screen === "sessions") setSessionIndex((index) => nextIndex(action, index, now.sessions.length, PAGE_SIZE));
-          else if (now.screen === "projects") setProjectIndex((index) => nextIndex(action, index, now.filtered.length, PAGE_SIZE));
-          break;
-        }
-        case "enter": {
-          if (now.editing) return;                // the input's own handler commits the edit
-          if (now.screen === "projects" && now.project) enterSessions(now.project.dir);
-          else if (now.screen === "sessions") void open("sessionsWindow");
-          break;
-        }
-        case "openNewWindow": void open("newWindow"); break;
-        case "newSession": void startNew(); break;
-        case "pasteImage": void api.pasteImage().then(notify); break;
-        case "rename": {
-          const id = now.screen === "sessions" ? now.session?.id : now.project?.dir;
-          if (id) setEditing(id);
-          break;
-        }
-        case "delete": void remove(); break;
-        case "back": now.helpOpen ? setHelpOpen(false) : back(); break;
-        case "refresh": void refresh(); break;
-        case "settings": void openSettings(); break;
-        case "search": searchRef.current?.focus(); break;
-        case "help": setHelpOpen((open) => !open); break;
-        case "quit": void api.quit(); break;
-        case "nextSection": case "previousSection": {
-          if (now.screen !== "settings") break;
-          const step = action === "nextSection" ? 1 : -1;
-          const current = SETTINGS_SECTIONS.indexOf(now.settingsSection);
-          const index = (current + step + SETTINGS_SECTIONS.length) % SETTINGS_SECTIONS.length;
-          setSettingsSection(SETTINGS_SECTIONS[index] as SettingsSection);
-          break;
-        }
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [screen, filtered, sessions, project, session, editing, helpOpen, settingsSection, open, startNew, back, remove, refresh, openSettings, enterSessions]);
-
+  /** Settings closed by its own Back button or Escape: the keyboard goes back to the button that opened it. */
+  const settingsReturn = useRef(false);
+  const closeSettings = useCallback(() => {
+    settingsReturn.current = true;
+    back();
+  }, [back]);
   useEffect(() => {
-    if (editing) editRef.current?.focus();
+    if (screen === "settings" || !settingsReturn.current) return;
+    settingsReturn.current = false;
+    settingsButtonRef.current?.focus();
+  }, [screen]);
+
+  /**
+   * The project list's keys. A key means something only to the list that has the focus, so a letter
+   * typed into any field of the window is only ever a letter.
+   */
+  const projectKeys = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget) return;           // the rename box inside has its own
+    const action = listAction(event);
+    if (!action) return;
+    event.preventDefault();
+    const now = latest.current;
+    const cursor = Math.max(0, now.projectCursor);
+    const target = now.filtered[cursor];
+    switch (action) {
+      // The session list takes it from here: the focus arriving there is what enters the project.
+      // Behind the settings screen there is no session list to arrive at, so it enters directly.
+      case "open":
+        if (!target) break;
+        if (sessionListRef.current) sessionListRef.current.focus();
+        else enterSessions(target.dir);
+        break;
+      case "back": back(); break;
+      case "rename": case "delete":
+        if (!target) break;
+        // On that row of the projects screen, the way its menu does it.
+        setProjectIndex(cursor);
+        setScreen("projects");
+        if (action === "rename") setEditing(target.dir);
+        else void deleteProject(target, rowUi);
+        break;
+      default:
+        setProjectIndex(nextIndex(action, cursor, now.filtered.length, PAGE_ROWS));
+        setScreen("projects");
+    }
+  }, [back, rowUi, enterSessions]);
+
+  /** The session list's keys, on the sessions screen: the same keys, meaning the same things. */
+  const sessionKeys = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget) return;
+    const action = listAction(event);
+    const now = latest.current;
+    if (!action || now.screen !== "sessions") return;
+    event.preventDefault();
+    switch (action) {
+      case "open": void open("sessionsWindow"); break;
+      case "back": back(); projectListRef.current?.focus(); break;
+      case "rename": if (now.session) setEditing(now.session.id); break;
+      case "delete": if (now.session && now.openProject) void deleteSession(now.openProject, now.session, rowUi); break;
+      default: setSessionIndex((index) => nextIndex(action, index, now.sessions.length, PAGE_ROWS));
+    }
+  }, [open, back, rowUi]);
+
+  // The rename box takes the keyboard, and gives it back to the list it came from when Enter or
+  // Escape closes it — not after a blur: that was a click somewhere, which keeps the focus it took.
+  const editReturn = useRef<HTMLElement | null>(null);
+  const refocusAfterEdit = useRef(false);
+  useEffect(() => {
+    if (editing) {
+      editReturn.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      editRef.current?.focus();
+    } else if (refocusAfterEdit.current) {
+      refocusAfterEdit.current = false;
+      editReturn.current?.focus();
+    }
   }, [editing]);
+  const cancelEdit = useCallback(() => {
+    refocusAfterEdit.current = true;
+    setEditing(null);
+  }, []);
 
   const commitRename = useCallback(async (value: string, explicit = false) => {
     const now = latest.current;
     const title = value.trim();
+    if (explicit) refocusAfterEdit.current = true;
     setEditing(null);
     // An empty name takes the name off again, which is how the generated title is got back. Only
     // when it was typed and entered, though: blurring a field someone happened to clear, or clicked
@@ -560,7 +618,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       editing={editing}
       editRef={editRef}
       onRename={(value, explicit) => void commitRename(value, explicit)}
-      onCancelEdit={() => setEditing(null)}
+      onCancelEdit={cancelEdit}
       isSelected={(item, index) => screen !== "settings" && (screen === "projects" ? index === projectIndex : item.dir === openProject)}
       onSelect={(index) => { setProjectIndex(index); setScreen("projects"); }}
       onOpen={enterSessions}
@@ -575,7 +633,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       editing={editing}
       editRef={editRef}
       onRename={(value, explicit) => void commitRename(value, explicit)}
-      onCancelEdit={() => setEditing(null)}
+      onCancelEdit={cancelEdit}
       onSelect={setSessionIndex}
       onOpen={() => void open("sessionsWindow")}
       onContextMenu={(item, index) => void sessionMenu(openProject as string, item, index)}
@@ -588,60 +646,109 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     />
   ) : null;
 
+  // The two lists, each one stop for Tab wherever the shape draws it. The keys and the menu key go
+  // to the list; the selected row is the one `aria-activedescendant` names; the rows stay plain rows.
+  const currentProject = filtered[projectCursor];
+  const projectBox = {
+    ref: projectListRef,
+    role: "listbox",
+    tabIndex: 0,
+    "aria-label": t("app.projects"),
+    "aria-activedescendant": currentProject ? projectRowId(currentProject.dir) : undefined,
+    onKeyDown: projectKeys,
+    onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
+      const now = latest.current;
+      const target = now.filtered[now.projectCursor];
+      if (!isMenuKey(event) || !target) return;
+      event.preventDefault();
+      void projectMenu(target, now.projectCursor);
+    },
+  };
+  const sessionBox = {
+    ref: sessionListRef,
+    role: "listbox",
+    tabIndex: screen === "sessions" || project ? 0 : -1,
+    "aria-label": t("detail.sessions"),
+    "aria-activedescendant": screen === "sessions" && session ? sessionRowId(session.id) : undefined,
+    onKeyDown: sessionKeys,
+    // A click enters the sessions itself, and a right-click on a preview row only opens its menu, so
+    // a focus the pointer brought is not the doorway the keyboard's is (onFocus below).
+    onPointerDown: () => { pointerOnSessions.current = true; },
+    onPointerUp: () => { pointerOnSessions.current = false; },
+    onFocus: (event: React.FocusEvent<HTMLElement>) => {
+      const byPointer = pointerOnSessions.current;
+      pointerOnSessions.current = false;
+      const now = latest.current;
+      // Reaching the projects screen's preview from the keyboard is a click on it: into the sessions.
+      if (event.target === event.currentTarget && !byPointer && now.screen === "projects" && now.project) enterSessions(now.project.dir);
+    },
+    onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
+      const now = latest.current;
+      if (!isMenuKey(event) || now.screen !== "sessions" || !now.session || !now.openProject) return;
+      event.preventDefault();
+      void sessionMenu(now.openProject, now.session, now.sessions.indexOf(now.session));
+    },
+  };
+
+  // A search box takes the keyboard even in a band. There the click does not focus the window, so
+  // no focus event comes until the window takes the keyboard: the press asks for it, and the focus
+  // that follows (or a Tab into the box, anywhere) keeps it until the box is left.
+  const searchBox = (target: EventTarget): boolean =>
+    target === searchRef.current || (target instanceof HTMLInputElement && target.type === "search");
+
+  const prompting = !dialog && settings !== null && shouldPrompt(updates.state, {
+    now: Date.now(), snoozedUntil: settings.ui.updateSnoozeUntil, asked: updateAsked,
+  });
+  // While a question is on screen, nothing behind it takes a click, a key or the focus.
+  const behind = dialog || prompting ? { inert: "" } : {};
+
   return (
-    <div className="relative h-full flex flex-col bg-ink-900 overflow-hidden">
+    <div
+      className="relative h-full flex flex-col bg-ink-900 overflow-hidden"
+      onFocus={(event) => { if (searchBox(event.target)) setSearching(true); }}
+      onBlur={(event) => { if (searchBox(event.target)) setSearching(false); }}
+      onPointerDown={(event) => { if (searchBox(event.target)) setSearching(true); }}
+    >
       {/* Docked, the frame does not resize; this is the one side that does. */}
       {dock.docked ? <DockGrip edge={dock.edge} onDrag={dock.drag} /> : null}
-      <TitleBar
-        version={info?.version ?? "—"}
-        draggable={!dock.docked}
-        controls={
-          <WindowControls
-            maximized={windowState.maximized}
-            onMinimize={() => void api.windowCommand("minimize")}
-            onMaximize={() => void api.windowCommand("maximize")}
-            onClose={() => void api.windowCommand("close")}
-            onTop={windowState.onTop}
-            onPin={() => void api.windowCommand("pin")}
-            slot={<DockButton docked={dock.docked} edge={dock.edge} ready={dock.ready} onToggle={() => void dock.toggle()} />}
-          />
-        }
-      />
-
-      <div className="flex-1 min-h-0 flex">
-        {column ? null : (
-          <>
-            <nav
-              className={`${navWidth ? "" : band ? "w-56" : "w-72"} shrink-0 border-r border-ink-600 flex flex-col`}
-              style={navWidth ? { width: navWidth } : undefined}
-            >
-              {projectPane}
-            </nav>
-            <Splitter
-              width={navWidth || (band ? 224 : 288)}
-              side="left"
-              min={NAV_MIN}
-              max={NAV_MAX}
-              onDrag={(width) => setNavFraction(windowWidth ? width / windowWidth : 0)}
-              onCommit={(width) => void api.saveUi({ navWidth: windowWidth ? width / windowWidth : 0 })}
+      <div className="contents" {...behind}>
+        <TitleBar
+          version={info?.version ?? "—"}
+          draggable={!dock.docked}
+          controls={
+            <WindowControls
+              maximized={windowState.maximized}
+              onMinimize={() => void api.windowCommand("minimize")}
+              onMaximize={() => void api.windowCommand("maximize")}
+              onClose={() => void api.windowCommand("close")}
+              onTop={windowState.onTop}
+              onPin={() => void api.windowCommand("pin")}
+              slot={<DockButton docked={dock.docked} edge={dock.edge} ready={dock.ready} onToggle={() => void dock.toggle()} />}
             />
-          </>
-        )}
+          }
+        />
+      </div>
 
-        <main className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-h-0 flex" {...behind}>
+        {/* One grid, so the project list can be drawn on the left yet written after the top bar:
+            Tab walks the markup, and the order a person expects is the bar, then the lists. */}
+        <main
+          className="flex-1 min-w-0 grid grid-rows-[auto_minmax(0,1fr)_auto] [&>*]:min-w-0 [&>*]:min-h-0"
+          style={{ gridTemplateColumns: column ? "minmax(0,1fr)" : "auto auto minmax(0,1fr)" }}
+        >
           {screen === "settings" && settings ? (
-            <SettingsView
-              settings={settings}
-              displays={displays}
-              focused={settingsSection}
-              onFocus={setSettingsSection}
-              onChange={(next) => void applySettings(next)}
-              onApplyDock={(enabled) => void applyDock(enabled)}
-              onOpenPage={(page) => void api.openPage(page)}
-              locale={info?.locale ?? "en"}
-              updates={updates}
-              onClose={back}
-            />
+            <div className="row-span-2 flex flex-col">
+              <SettingsView
+                settings={settings}
+                displays={displays}
+                onChange={(next) => void applySettings(next)}
+                onApplyDock={(enabled) => void applyDock(enabled)}
+                onOpenPage={(page) => void api.openPage(page)}
+                locale={info?.locale ?? "en"}
+                updates={updates}
+                onClose={closeSettings}
+              />
+            </div>
           ) : (
             <>
               <div className={`flex items-center border-b border-ink-600 ${tight ? "pl-2 py-1" : "pl-4 py-2"}`}>
@@ -658,9 +765,11 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 <span className="chip">{screen === "sessions"
                   ? t("app.sessions.count", { count: sessions.length })
                   : t("app.projects.count", { count: filtered.length })}</span>
-                <ProjectSearch query={query} onQuery={setQuery} searchRef={searchRef} onAdd={() => void addProject()} />
-                {/* The key belongs in the tooltip: on the face of a button it is width spent on
-                    something only worth learning once. */}
+                <ProjectSearch query={query} onQuery={setQuery} searchRef={searchRef} onAdd={() => void addProject()}
+                  onDown={() => {
+                    if (screen === "sessions") setSessionIndex(0); else setProjectIndex(0);
+                    (screen === "sessions" ? sessionListRef : projectListRef).current?.focus();
+                  }} />
                 <button
                   type="button"
                   className="btn shrink-0"
@@ -676,19 +785,46 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                   className={`flex shrink-0 items-center justify-end gap-2 ${tight ? "pr-2" : "pr-4"}`}
                   style={asidePx ? { width: asidePx + HEADER_DIVIDER_PX } : undefined}
                 >
-                <button type="button" className="btn" title={t("app.settings.title")} onClick={() => void openSettings()} aria-label={t("app.settings")}>
+                <button ref={settingsButtonRef} type="button" className="btn" title={t("app.settings.title")} onClick={() => void openSettings()} aria-label={t("app.settings")}>
                   {tight ? "\u2699" : t("app.settings")}
                 </button>
                 </div>
               </div>
-
+            </>
+          )}
+          {column ? null : (
+            <>
+              {/* The list scrolls here, where it takes the focus, so the pane inside it is not a
+                  scroller Chromium would make a Tab stop of its own. */}
+              <nav
+                {...projectBox}
+                className={`${navWidth ? "" : band ? "w-56" : "w-72"} col-start-1 row-span-full shrink-0 border-r border-ink-600 overflow-auto`}
+                style={navWidth ? { width: navWidth } : undefined}
+              >
+                {projectPane}
+              </nav>
+              <div className="col-start-2 row-span-full flex">
+                <Splitter
+                  width={navWidth || (band ? 224 : 288)}
+                  side="left"
+                  min={NAV_MIN}
+                  max={NAV_MAX}
+                  onDrag={(width) => setNavFraction(windowWidth ? width / windowWidth : 0)}
+                  onCommit={(width) => void api.saveUi({ navWidth: windowWidth ? width / windowWidth : 0 })}
+                />
+              </div>
+            </>
+          )}
+          {screen === "settings" && settings ? null : (
+            <>
               <div className="flex-1 min-h-0 flex">
                 {column ? (
                   // Stacked: the project list, that project's sessions, and the graphs, one under
                   // the other — a tall narrow window has no room for panes side by side.
                   <div ref={stackRef} className="flex-1 min-w-0 flex flex-col">
                     <div
-                      className={`${topHeight ? "" : "flex-1"} min-h-0 flex flex-col border-b border-ink-600`}
+                      {...projectBox}
+                      className={`${topHeight ? "" : "flex-1"} min-h-0 overflow-auto border-b border-ink-600`}
                       style={topHeight ? { height: topHeight } : undefined}
                     >
                       {projectPane}
@@ -701,7 +837,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                       onDrag={(height) => setStackFraction(stackHeight ? height / stackHeight : 0)}
                       onCommit={(height) => void api.saveUi({ stackTop: stackHeight ? height / stackHeight : 0 })}
                     />
-                    <div data-testid="stack-sessions" className="flex-1 min-h-0 overflow-auto p-1 space-y-0.5">
+                    <div {...sessionBox} data-testid="stack-sessions" className="flex-1 min-h-0 overflow-auto p-1 space-y-0.5">
                       {sessionRows}
                     </div>
                     {/* Too narrow for a column of its own: what changed, under the sessions. */}
@@ -722,7 +858,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                     ) : null}
                   </div>
                 ) : (
-                <div className={`flex-1 min-w-0 overflow-auto space-y-0.5 ${tight ? "p-1" : "p-2"}`}>
+                <div {...sessionBox} className={`flex-1 min-w-0 overflow-auto space-y-0.5 ${tight ? "p-1" : "p-2"}`}>
                   {sessionRows}
                 </div>
                 )}
@@ -830,32 +966,12 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       </div>
 
       {dialog ? <Modal ask={dialog.ask} onDone={dialog.settle} /> : null}
-      {!dialog && settings && shouldPrompt(updates.state, {
-        now: Date.now(), snoozedUntil: settings.ui.updateSnoozeUntil, asked: updateAsked,
-      }) ? (
-        <UpdatePrompt state={updates.state} onAnswer={answerUpdate} />
-      ) : null}
+      {prompting ? <UpdatePrompt state={updates.state} onAnswer={answerUpdate} /> : null}
 
       {toast ? (
         <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-sm shadow-lg ${
           toast.tone === "ok" ? "bg-ink-700 text-bone-100" : "bg-bad/90 text-ink-900"}`}>
           {toast.text}
-        </div>
-      ) : null}
-
-      {helpOpen ? (
-        <div className="absolute inset-0 bg-ink-900/80 flex items-center justify-center" onClick={() => setHelpOpen(false)}>
-          <div className="card p-5 w-[30rem]" onClick={(event) => event.stopPropagation()}>
-            <h2 className="text-sm font-medium text-bone-100 mb-3">{t("keys.title")}</h2>
-            <div className="space-y-1">
-              {SHORTCUTS.map((shortcut) => (
-                <div key={shortcut.keys} className="flex justify-between text-xs">
-                  <span className="text-bone-400">{shortcut.description}</span>
-                  <kbd className="chip">{shortcut.keys}</kbd>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       ) : null}
     </div>

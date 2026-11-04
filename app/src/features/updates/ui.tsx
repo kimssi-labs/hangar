@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { actionLabel, describe as describeUpdate, initialState, type UpdateState } from "@core/updates";
 
 import { api } from "../../renderer/api";
+import { useReturnFocus } from "../../renderer/components/Modal";
 import { Choice } from "../../renderer/components/SettingsCard";
 import { Truncated } from "../../renderer/components/Truncated";
 import { useText } from "../../renderer/useText";
@@ -83,6 +84,7 @@ export function UpdatePrompt({ state, onAnswer }: {
 }) {
   const t = useText();
   const [snooze, setSnooze] = useState(false);
+  useReturnFocus();
   const key = state.phase === "ready" ? "update.prompt.ready" : state.phase === "downloading" ? "update.prompt.downloading" : "update.prompt.available";
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -112,7 +114,9 @@ export function UpdatePrompt({ state, onAnswer }: {
             {t("update.prompt.snooze")}
           </label>
           <div className="flex-1" />
-          <button type="button" className="btn btn-accent" ref={(node) => node?.focus()} onClick={() => onAnswer(true, false)}>
+          {/* Focused on mount only: focused on every render, a Tab to No was undone by the next
+              repaint of the window behind, and Enter then restarted into the update. */}
+          <button type="button" className="btn btn-accent" autoFocus onClick={() => onAnswer(true, false)}>
             {t("update.prompt.yes")}
           </button>
           <button type="button" className="btn" onClick={() => onAnswer(false, snooze)}>{t("update.prompt.no")}</button>

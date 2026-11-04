@@ -89,7 +89,7 @@ test("the theme choice applies at once and survives a restart", async () => {
   const first = await launch(home);
   try {
     await expect(first.page.getByText("workspace", { exact: false }).first()).toBeVisible();
-    await first.page.keyboard.press("s");
+    await first.page.getByRole("button", { name: "Settings" }).click();
     await expect(first.page.getByText("Appearance").first()).toBeVisible();
     await first.page.getByText("Dark", { exact: true }).first().click();
 
@@ -171,6 +171,7 @@ test("stacked: entering a project shows its sessions, even with a tall remembere
   try {
     await resize(app, page, 1080, 762);
     await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
+    await expect(page.getByRole("listbox", { name: "Projects" })).toBeFocused();
 
     await page.keyboard.press("Enter");                       // into the project's sessions
     const session = page.getByText("프롬프트").first();
@@ -274,14 +275,17 @@ test("neither thin shape makes the page scroll", async () => {
     await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
     await expect(page.getByPlaceholder("Search projects", { exact: false })).toBeVisible();
 
-    // ...and the sessions screen inside it, too.
+    // ...and the sessions screen inside it, too. The stack draws the list anew, so it is given the
+    // keyboard again first.
+    await page.getByRole("listbox", { name: "Projects" }).focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByText("프롬프트").first()).toBeVisible();
+    await expect(page.getByRole("listbox", { name: "Sessions" })).toBeFocused();
+    await expect(page.getByText("1 sessions").first()).toBeVisible();
     expect(await overflow(page)).toEqual({ x: 0, y: 0 });
 
-    // Settings has to fit in the narrow shape as well — it is reachable by keyboard from here.
+    // Settings has to fit in the narrow shape as well.
     await page.keyboard.press("Escape");
-    await page.keyboard.press("s");
+    await page.getByRole("button", { name: "Settings" }).click();
     await expect(page.getByText("Appearance").first()).toBeVisible();
     expect(await overflow(page)).toEqual({ x: 0, y: 0 });
   } finally {
@@ -388,7 +392,7 @@ test("a choice in any settings section is still there after a restart", async ()
   const { app, page } = await launch(home);
   try {
     await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
-    await page.keyboard.press("s");
+    await page.getByRole("button", { name: "Settings" }).click();
 
     // One choice from each of the sections added late, plus one that always worked as a control.
     await page.getByText("Merge", { exact: true }).click();

@@ -34,7 +34,6 @@ const api = {
     ipcRenderer.on(CHANNEL.windowStatePush, handler);
     return () => ipcRenderer.removeListener(CHANNEL.windowStatePush, handler);
   },
-  quit: (): Promise<void> => ipcRenderer.invoke(CHANNEL.quit),
 };
 
 export type HangarApi = typeof api;

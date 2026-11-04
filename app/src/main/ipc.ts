@@ -11,7 +11,6 @@ export const CHANNEL = {
   openPage: "app:open-page",
   toast: "app:toast",                // main -> renderer, when something finished on its own
   appInfo: "app:info",
-  quit: "app:quit",
 } as const;
 
 export type Channel = (typeof CHANNEL)[keyof typeof CHANNEL];

@@ -402,8 +402,6 @@ function registerIpc(): void {
       ? "Wayland does not let an application reserve screen space."
       : null,
   }));
-
-  ipcMain.handle(CHANNEL.quit, () => app.quit());
 }
 
 /** Start-up, once the platform is ready: splash, scan, window, monitor. */
@@ -423,6 +421,10 @@ function watchRegistry(): void {
 
 async function start(): Promise<void> {
   followTheme(config.ui().theme);                 // before any window: the splash is painted in it too
+  // No application menu, and with it none of Electron's default accelerators — Ctrl+R reloading the
+  // page, Ctrl+W closing the window — behind a frameless window that shows no menu. Text fields keep
+  // their own Ctrl+C/V/X/A/Z: Chromium handles those itself on Windows and Linux.
+  Menu.setApplicationMenu(null);
   openSplash();
   // Alone on the machine for its first frame: the app's renderer is a much heavier start.
   await splashReady(SPLASH_PAINT_CAP_MS);
@@ -522,8 +524,8 @@ function armExitWatchdog(): void {
 let leaving: Promise<void> | null = null;
 
 /**
- * The one way out on Windows, whichever door was used: the window's close button, Quit in the menu
- * (`app.quit()`, turned into a window close by `before-quit` below), an update installing itself.
+ * The one way out on Windows, whichever door was used: the window's close button, an `app.quit()`
+ * (turned into a window close by `before-quit` below), an update installing itself.
  *
  * Own cleanup first — the sampler finishes the sample in flight (MetricsFeature.stop says why),
  * capped so a stuck sampler cannot hold us — then `app.exit(0)` rather than the quit rounds:

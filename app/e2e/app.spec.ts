@@ -1,5 +1,6 @@
 /**
- * End-to-end: the built app, driven the way a person drives it — with the keyboard.
+ * End-to-end: the built app, driven the way a person drives it — the keyboard in the list that has
+ * the focus, the mouse everywhere else.
  *
  * Every run gets its own CLAUDE_HOME fixture, so the test sees a known set of projects and can
  * assert on what a rename actually wrote to disk.
@@ -71,6 +72,8 @@ test("shows the fixture's project and its sessions, and moves with the keyboard"
   const { app, page } = await launch(home);
   try {
     await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
+    // The keyboard starts in the project list, so its keys work without a click first.
+    await expect(page.getByRole("listbox", { name: "Projects" })).toBeFocused();
 
     // Enter opens the project's sessions — the same key the terminal version used.
     await page.keyboard.press("Enter");
@@ -93,6 +96,7 @@ test("F2 renames a session the way /rename does", async () => {
   try {
     // Wait for the list before typing: keys sent before the first scan lands have nothing to act on.
     await expect(page.getByText("프롬프트 1").first()).toBeVisible();
+    await expect(page.getByRole("listbox", { name: "Projects" })).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.getByText("2 sessions").first()).toBeVisible();            // the sessions screen is up
     await page.keyboard.press("F2");
@@ -126,7 +130,7 @@ test("settings save to config/manager.json and survive a restart", async () => {
   const first = await launch(home);
   try {
     await expect(first.page.getByText("workspace", { exact: false }).first()).toBeVisible();
-    await first.page.keyboard.press("s");
+    await first.page.getByRole("button", { name: "Settings" }).click();
     await expect(first.page.getByText("Permissions").first()).toBeVisible();
     await first.page.getByText("Bypass permissions").first().click();
     await expect.poll(() => {
@@ -143,26 +147,11 @@ test("settings save to config/manager.json and survive a restart", async () => {
   const second = await launch(home);
   try {
     await expect(second.page.getByText("workspace", { exact: false }).first()).toBeVisible();
-    await second.page.keyboard.press("s");
+    await second.page.getByRole("button", { name: "Settings" }).click();
     // The choice is still the one that was made, read back from the file.
     await expect(second.page.locator("text=Bypass permissions").first()).toBeVisible();
   } finally {
     await second.app.close();
-  }
-});
-
-test("the help overlay lists the shortcuts", async () => {
-  const { home } = fixture();
-  const { app, page } = await launch(home);
-  try {
-    await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
-    await page.keyboard.press("?");
-    await expect(page.getByText("Keyboard").first()).toBeVisible();
-    await expect(page.getByText("Rename (alias for a project)")).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(page.getByText("Keyboard")).toHaveCount(0);
-  } finally {
-    await app.close();
   }
 });
 

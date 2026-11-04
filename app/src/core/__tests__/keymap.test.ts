@@ -1,50 +1,32 @@
 import { describe, expect, it } from "vitest";
 
-import { nextIndex, resolveAction, SHORTCUTS } from "../keymap.js";
+import { listAction, nextIndex } from "../keymap.js";
 
-describe("resolveAction", () => {
-  it("keeps the terminal keys doing the terminal things", () => {
-    expect(resolveAction({ key: "ArrowDown" }, "projects")).toBe("moveDown");
-    expect(resolveAction({ key: "Enter" }, "projects")).toBe("enter");
-    // T is gone: as its own program, "open here" and Enter do the same thing.
-    expect(resolveAction({ key: "t" }, "sessions")).toBe(null);
-    expect(resolveAction({ key: "O" }, "sessions")).toBe("openNewWindow");
-    expect(resolveAction({ key: "F2" }, "sessions")).toBe("rename");
-    expect(resolveAction({ key: "Delete" }, "projects")).toBe("delete");
-    expect(resolveAction({ key: "F5" }, "projects")).toBe("refresh");
-    expect(resolveAction({ key: "s" }, "projects")).toBe("settings");
+describe("listAction", () => {
+  it("moves with the arrows, a page at a time, and to either end", () => {
+    expect(listAction({ key: "ArrowUp" })).toBe("moveUp");
+    expect(listAction({ key: "ArrowDown" })).toBe("moveDown");
+    expect(listAction({ key: "PageDown" })).toBe("pageDown");
+    expect(listAction({ key: "Home" })).toBe("moveFirst");
+    expect(listAction({ key: "End" })).toBe("moveLast");
   });
 
-  it("uses the arrow keys for depth the way the list does", () => {
-    expect(resolveAction({ key: "ArrowRight" }, "projects")).toBe("enter");
-    expect(resolveAction({ key: "ArrowRight" }, "sessions")).toBeNull();   // right never launches
-    expect(resolveAction({ key: "ArrowLeft" }, "sessions")).toBe("back");
-    expect(resolveAction({ key: "Escape" }, "sessions")).toBe("back");
+  it("opens, goes back, renames and deletes from the list that has the focus", () => {
+    expect(listAction({ key: "Enter" })).toBe("open");
+    expect(listAction({ key: "Escape" })).toBe("back");
+    expect(listAction({ key: "F2" })).toBe("rename");
+    expect(listAction({ key: "Delete" })).toBe("delete");
   });
 
-  it("moves between settings sections with Tab", () => {
-    expect(resolveAction({ key: "Tab" }, "settings")).toBe("nextSection");
-    expect(resolveAction({ key: "Tab", shiftKey: true }, "settings")).toBe("previousSection");
+  it("has no letter shortcuts left: a letter is only ever a letter", () => {
+    for (const key of ["o", "n", "v", "s", "/", "?", "F5"]) expect(listAction({ key })).toBeNull();
   });
 
-  it("ignores letters while a text field has focus", () => {
-    expect(resolveAction({ key: "o" }, "sessions", true)).toBeNull();
-    expect(resolveAction({ key: "Delete" }, "sessions", true)).toBeNull();
-    expect(resolveAction({ key: "Enter" }, "sessions", true)).toBe("enter");
-    expect(resolveAction({ key: "Escape" }, "sessions", true)).toBe("back");
-  });
-
-  it("reserves the modifiers for the one shortcut that needs them", () => {
-    expect(resolveAction({ key: "q", ctrlKey: true }, "projects")).toBe("quit");
-    expect(resolveAction({ key: "s", ctrlKey: true }, "projects")).toBeNull();
-    expect(resolveAction({ key: "t", altKey: true }, "projects")).toBeNull();
-  });
-
-  it("documents every action it can produce", () => {
-    const documented = new Set(SHORTCUTS.flatMap((s) => [s.action]));
-    for (const action of ["enter", "openNewWindow", "rename", "delete", "refresh", "settings", "quit"]) {
-      expect(documented.has(action as never)).toBe(true);
-    }
+  it("leaves a modified key to the system — Shift+F10 becomes the browser's contextmenu event", () => {
+    expect(listAction({ key: "F10", shiftKey: true })).toBeNull();
+    expect(listAction({ key: "ContextMenu" })).toBeNull();
+    expect(listAction({ key: "q", ctrlKey: true })).toBeNull();
+    expect(listAction({ key: "Enter", altKey: true })).toBeNull();
   });
 });
 
@@ -60,13 +42,5 @@ describe("nextIndex", () => {
 
   it("stays at zero for an empty list", () => {
     expect(nextIndex("moveDown", 0, 0, 10)).toBe(0);
-  });
-});
-
-describe("newSession", () => {
-  it("is N on both list screens, and never while typing", () => {
-    expect(resolveAction({ key: "n" }, "projects")).toBe("newSession");
-    expect(resolveAction({ key: "N" }, "sessions")).toBe("newSession");
-    expect(resolveAction({ key: "n" }, "projects", true)).toBeNull();
   });
 });

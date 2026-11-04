@@ -1,10 +1,10 @@
 /**
  * Settings, as cards.
  *
- * The terminal version showed everything at once and moved between cards with Tab; that survives —
- * the focused card is the one Tab lands on, and every choice is one Space or Enter away. Each card's
- * body is its feature's, from that feature's `ui.tsx`; this file owns the order of the cards, the
- * draft they all edit, and the three cards that are the window's own.
+ * Everything at once, walked with Tab like any page: the card with the keyboard in it wears the ring,
+ * and every choice is one Space or Enter away. Each card's body is its feature's, from that
+ * feature's `ui.tsx`; this file owns the order of the cards, the draft they all edit, and the three
+ * cards that are the window's own.
  */
 import { useEffect, useRef, useState } from "react";
 
@@ -41,8 +41,6 @@ const LAYOUTS: { key: LayoutMode; label: string; note: string }[] = [
 export interface SettingsViewProps {
   settings: SettingsPayload;
   displays: DisplayInfo[];
-  focused: SettingsSection;
-  onFocus: (section: SettingsSection) => void;
   onChange: (next: SettingsPayload) => void;
   onApplyDock: (enabled: boolean) => void;
   /** What the machine's language is, so "System" can say which one that is. */
@@ -54,7 +52,7 @@ export interface SettingsViewProps {
   onClose: () => void;
 }
 
-export function SettingsView({ settings, displays, focused, onFocus, onChange, onApplyDock, onOpenPage, locale, updates, onClose }: SettingsViewProps) {
+export function SettingsView({ settings, displays, onChange, onApplyDock, onOpenPage, locale, updates, onClose }: SettingsViewProps) {
   const t = useText();
   const [draft, setDraft] = useState(settings);
   // What we last sent, so a push that is only the echo of our own save does not reset the draft
@@ -77,11 +75,12 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
     update({ ...draft, [key]: value });
 
   return (
-    <div className="flex-1 overflow-auto p-4 space-y-3" onKeyDown={(event) => event.key === "Escape" && onClose()}>
+    // Focusable itself, so a click on a card's empty space keeps the keyboard here, where Esc closes.
+    <div tabIndex={-1} className="flex-1 overflow-auto p-4 space-y-3 outline-none" onKeyDown={(event) => event.key === "Escape" && onClose()}>
       {/* Esc still closes the screen; a button is for the times the keyboard is not where the hand
-          is, and for anyone who never learns that Esc goes back. */}
+          is, and for anyone who never learns that Esc goes back. The keyboard starts on it. */}
       <div className="flex items-center gap-2 min-w-0">
-        <button type="button" className="btn shrink-0" title={t("settings.back.title")} onClick={onClose} aria-label={t("settings.back")}>
+        <button type="button" autoFocus className="btn shrink-0" title={t("settings.back.title")} onClick={onClose} aria-label={t("settings.back")}>
           ← {t("settings.back")}
         </button>
         <Truncated as="span" className="text-[11px] text-bone-500">
@@ -89,7 +88,7 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
         </Truncated>
       </div>
 
-      <Card title={t("settings.appearance")} section="appearance" focused={focused} onFocus={onFocus} hint={t("settings.tabHint")}>
+      <Card title={t("settings.appearance")}>
         {THEMES.map((theme) => (
           <Choice
             key={theme.key}
@@ -101,7 +100,7 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
         ))}
       </Card>
 
-      <Card title={t("settings.language")} section="language" focused={focused} onFocus={onFocus} hint={t("settings.language.hint")}>
+      <Card title={t("settings.language")} hint={t("settings.language.hint")}>
         {LANGUAGES.map((language) => (
           <Choice
             key={language.key}
@@ -118,7 +117,7 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
         <div className="text-[11px] text-bone-500">{t("settings.language.note")}</div>
       </Card>
 
-      <Card title={t("settings.layout")} section="layout" focused={focused} onFocus={onFocus} hint={t("settings.layout.hint")} body="space-y-3">
+      <Card title={t("settings.layout")} hint={t("settings.layout.hint")} body="space-y-3">
         <div className="space-y-1">
           {LAYOUTS.map((option) => (
             <Choice
@@ -132,11 +131,11 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
         </div>
       </Card>
 
-      <Card title={t("settings.monitor")} section="monitor" focused={focused} onFocus={onFocus} hint={t("settings.monitor.hint")}>
+      <Card title={t("settings.monitor")} hint={t("settings.monitor.hint")}>
         <MonitorSettings on={draft.ui.monitor} onChange={(monitor) => section("ui")({ ...draft.ui, monitor })} />
       </Card>
 
-      <Card title={t("settings.dock")} section="dock" focused={focused} onFocus={onFocus} hint={t("settings.tabHint")} body="space-y-3">
+      <Card title={t("settings.dock")} body="space-y-3">
         <DockSettings
           dock={draft.dock}
           floor={draft.dockFloor}
@@ -148,11 +147,11 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
         <KeepIconsSetting on={draft.ui.keepIcons} onChange={(keepIcons) => section("ui")({ ...draft.ui, keepIcons })} />
       </Card>
 
-      <Card title={t("settings.usage")} section="usage" focused={focused} onFocus={onFocus} hint={t("settings.usage.hint")} body="space-y-2">
+      <Card title={t("settings.usage")} hint={t("settings.usage.hint")} body="space-y-2">
         <UsageSettings status={draft.status} onChange={section("status")} usage={settings.usage} />
       </Card>
 
-      <Card title={t("settings.files")} section="files" focused={focused} onFocus={onFocus} hint={t("settings.files.hint")}>
+      <Card title={t("settings.files")} hint={t("settings.files.hint")}>
         <FilesSettings on={draft.ui.files} onChange={(files) => section("ui")({ ...draft.ui, files })} />
         <PaneToggle label={t("settings.pane.skills")} note={t("settings.pane.skills.note")} on={draft.ui.skills}
           onChange={(skills) => section("ui")({ ...draft.ui, skills })} />
@@ -160,11 +159,11 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
           onChange={(artifacts) => section("ui")({ ...draft.ui, artifacts })} />
       </Card>
 
-      <Card title={t("settings.git")} section="git" focused={focused} onFocus={onFocus} hint={t("settings.git.hint")}>
+      <Card title={t("settings.git")} hint={t("settings.git.hint")}>
         <GitSettings git={draft.git} available={settings.gitAvailable} onChange={section("git")} onInstall={() => onOpenPage("git")} />
       </Card>
 
-      <Card title={t("settings.updates")} section="updates" focused={focused} onFocus={onFocus} hint={t("settings.updates.hint")} body="space-y-2">
+      <Card title={t("settings.updates")} hint={t("settings.updates.hint")} body="space-y-2">
         <UpdatesSettings
           automatic={draft.updates.automatic}
           onChange={(automatic) => section("updates")({ ...draft.updates, automatic })}
@@ -172,12 +171,12 @@ export function SettingsView({ settings, displays, focused, onFocus, onChange, o
         />
       </Card>
 
-      <Card title={t("settings.launch")} section="launch" focused={focused} onFocus={onFocus} hint={t("settings.tabHint")}>
+      <Card title={t("settings.launch")}>
         <LaunchSettings launch={draft.launch} onChange={section("launch")} />
         <PasteSettings launch={draft.launch} hotkeyActive={draft.pasteHotkeyActive} onChange={section("launch")} />
       </Card>
 
-      <Card title={t("settings.permissions")} section="permissions" focused={focused} onFocus={onFocus} hint={t("settings.tabHint")}>
+      <Card title={t("settings.permissions")}>
         <PermissionSettings launch={draft.launch} onChange={section("launch")} />
       </Card>
     </div>

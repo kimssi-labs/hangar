@@ -78,6 +78,10 @@
     .row-live .row-usage { @apply w-full pl-5; }
   }
   .row-selected { @apply bg-ink-700 ring-1 ring-accent/40; }
+  /* A list is one Tab stop: a ring round all of it says little, so the keyboard's mark goes on the
+     row its keys move — the selected one. */
+  [role="listbox"]:focus-visible { @apply ring-0; }
+  [role="listbox"]:focus-visible [aria-selected="true"] { @apply ring-2 ring-accent/70; }
   .card { @apply bg-ink-800 border border-ink-600 rounded-xl; }
   .chip { @apply text-[11px] px-1.5 py-0.5 rounded-md bg-ink-700 text-bone-400; }
   /* Git's counts (the worktrees under a repository, the files uncommitted) as one small pill in

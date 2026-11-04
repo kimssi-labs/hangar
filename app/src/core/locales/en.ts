@@ -7,16 +7,16 @@
  */
 export const en = {
   // -- chrome ------------------------------------------------------------------------------------
-  "app.search": "Search projects  ( / )",
+  "app.search": "Search projects",
   "app.addProject": "Add a project",
   "app.addProject.title": "Add a project folder…",
   "app.projects": "Projects",
   "app.projects.count": "{count} projects",
   "app.sessions.count": "{count} sessions",
   "app.new": "New",
-  "app.new.title": "Start a new session in this project (N)",
+  "app.new.title": "Start a new session in this project",
   "app.settings": "Settings",
-  "app.settings.title": "Settings (S)",
+  "app.settings.title": "Settings",
   "app.noMatch": "No project matches.",
   "app.running": "{count} running",
   "app.running.none": "idle",
@@ -39,6 +39,7 @@ export const en = {
   "menu.syncDefault": "Update from the base branch",
   "menu.resume": "Resume",
   "menu.resumeWindow": "Resume in a new window",
+  "menu.pasteImage": "Save the clipboard image, copy its path",
 
   // -- lists -----------------------------------------------------------------------------------------
   "list.sessions": "{count} sessions",
@@ -94,7 +95,6 @@ export const en = {
   "settings.saved": "Settings are saved as you change them.",
   "settings.back": "Back",
   "settings.back.title": "Back (Esc)",
-  "settings.tabHint": "Tab moves between cards",
 
   "settings.appearance": "Appearance",
   "settings.appearance.system": "System",
@@ -361,5 +361,4 @@ export const en = {
   "dialog.worktreeForce": "Remove it anyway, losing that work?",
   "detail.worktrees": "Worktrees",
   "detail.worktreeHere": "this one",
-  "keys.title": "Keyboard",
 } as const;

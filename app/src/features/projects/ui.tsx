@@ -269,11 +269,13 @@ export function RenameInput({ defaultValue, inputRef, onCommit, onCancel }: {
  * The project search box and the add button — in the window's top bar, beside the project count,
  * so the list below spends its height on rows.
  */
-export function ProjectSearch({ query, onQuery, searchRef, onAdd }: {
+export function ProjectSearch({ query, onQuery, searchRef, onAdd, onDown }: {
   query: string;
   onQuery(query: string): void;
   searchRef: EditRef;
   onAdd(): void;
+  /** ↓ in the box: on to the first row of the list it filters. */
+  onDown(): void;
 }) {
   const t = useText();
   return (
@@ -282,8 +284,12 @@ export function ProjectSearch({ query, onQuery, searchRef, onAdd }: {
         ref={searchRef}
         value={query}
         onChange={(event) => onQuery(event.target.value)}
-        onKeyDown={(event) => { if (event.key === "Escape") { onQuery(""); searchRef.current?.blur(); } }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") { onQuery(""); searchRef.current?.blur(); }
+          if (event.key === "ArrowDown") { event.preventDefault(); onDown(); }
+        }}
         placeholder={t("app.search")}
+        aria-label={t("app.search")}
         className="flex-1 min-w-0 bg-ink-800 border border-ink-600 rounded-lg px-3 py-1 text-sm placeholder:text-bone-500 focus:border-accent/60"
       />
       {/* A folder that has never had a session has no other way into this list. */}

@@ -159,7 +159,7 @@ test("turning the folder off in settings stops it being drawn at all", async () 
   const { app, page } = await launch(fixture("vertical").home, 1400, 900);
   try {
     await expect(page.getByTestId("files-column")).toBeVisible();
-    await page.keyboard.press("s");
+    await page.getByRole("button", { name: "Settings" }).click();
     await page.getByText("Files tab: hide", { exact: true }).click();
     await page.keyboard.press("Escape");
     // The pane stays for the other tabs; the folder's tab is gone, and with it the tree.
@@ -167,7 +167,7 @@ test("turning the folder off in settings stops it being drawn at all", async () 
     await expect(page.getByText("src", { exact: true })).toHaveCount(0);
 
     // With every tab off there is no pane at all.
-    await page.keyboard.press("s");
+    await page.getByRole("button", { name: "Settings" }).click();
     await page.getByLabel("Skills tab").uncheck();
     await page.getByLabel("Artifacts tab").uncheck();
     await page.keyboard.press("Escape");
@@ -180,8 +180,9 @@ test("turning the folder off in settings stops it being drawn at all", async () 
 
 /**
  * The folder is read only while it is on screen. With the Skills tab in front, the refresh the
- * fifteen-second tick runs (F5 runs the same one) must not read it; turning back to Files reads it
- * at once, so a file made in the meantime is there without waiting for the next tick.
+ * fifteen-second tick runs (coming back to the window runs the same one) must not read it; turning
+ * back to Files reads it at once, so a file made in the meantime is there without waiting for the
+ * next tick.
  */
 test("the folder is not read while another tab is in front, and is read at once on coming back", async () => {
   const { home, workspace } = fixture("vertical");
@@ -201,7 +202,7 @@ test("the folder is not read while another tab is in front, and is read at once 
       handlers.set("files:list", (...args: unknown[]) => { counter.folderReads += 1; return original(...args); });
     });
     writeFileSync(join(workspace, "fresh.txt"), "new");
-    await page.keyboard.press("F5");
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
     await page.waitForTimeout(1500);
     const reads = (): Promise<number> => app.evaluate(() => (globalThis as unknown as { folderReads: number }).folderReads);
     expect(await reads(), "no folder read while Skills is in front").toBe(0);
