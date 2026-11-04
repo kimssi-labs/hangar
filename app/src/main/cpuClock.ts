@@ -21,6 +21,8 @@
  */
 import os from "node:os";
 
+import { nativeBinding } from "./native.js";
+
 /** PDH's "give me a double" format. */
 const PDH_FMT_DOUBLE = 0x00000200;
 /** The counter is English-named on every locale when added with the English API. */
@@ -31,59 +33,48 @@ interface Pdh {
   read: () => number | null;
 }
 
-let pdh: Pdh | null | undefined;
 let query: number | null = null;
 let counter: number | null = null;
-let baseMhz: number | null | undefined;
 
-function loadPdh(): Pdh | null {
-  if (pdh !== undefined) return pdh;
-  if (process.platform !== "win32") return (pdh = null);
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const koffi = require("koffi") as typeof import("koffi");
-    const lib = koffi.load("pdh.dll");
-    // The value union is 8-byte aligned, so the status word is followed by four bytes of padding.
-    const VALUE = koffi.struct("PDH_FMT_COUNTERVALUE", {
-      status: "uint32",
-      padding: "uint32",
-      value: "double",
-    });
-    const PdhOpenQueryW = lib.func("__stdcall", "PdhOpenQueryW", "long",
-      ["void *", "uintptr", koffi.out(koffi.pointer("uintptr"))]);
-    const PdhAddEnglishCounterW = lib.func("__stdcall", "PdhAddEnglishCounterW", "long",
-      ["uintptr", "str16", "uintptr", koffi.out(koffi.pointer("uintptr"))]);
-    const PdhCollectQueryData = lib.func("__stdcall", "PdhCollectQueryData", "long", ["uintptr"]);
-    const PdhGetFormattedCounterValue = lib.func("__stdcall", "PdhGetFormattedCounterValue", "long",
-      ["uintptr", "uint32", koffi.out(koffi.pointer("uint32")), koffi.out(koffi.pointer(VALUE))]);
+const loadPdh = nativeBinding<Pdh>("live clock", (koffi) => {
+  const lib = koffi.load("pdh.dll");
+  // The value union is 8-byte aligned, so the status word is followed by four bytes of padding.
+  const VALUE = koffi.struct("PDH_FMT_COUNTERVALUE", {
+    status: "uint32",
+    padding: "uint32",
+    value: "double",
+  });
+  const PdhOpenQueryW = lib.func("__stdcall", "PdhOpenQueryW", "long",
+    ["void *", "uintptr", koffi.out(koffi.pointer("uintptr"))]);
+  const PdhAddEnglishCounterW = lib.func("__stdcall", "PdhAddEnglishCounterW", "long",
+    ["uintptr", "str16", "uintptr", koffi.out(koffi.pointer("uintptr"))]);
+  const PdhCollectQueryData = lib.func("__stdcall", "PdhCollectQueryData", "long", ["uintptr"]);
+  const PdhGetFormattedCounterValue = lib.func("__stdcall", "PdhGetFormattedCounterValue", "long",
+    ["uintptr", "uint32", koffi.out(koffi.pointer("uint32")), koffi.out(koffi.pointer(VALUE))]);
 
-    return (pdh = {
-      open: () => {
-        const out: number[] = [0];
-        if (PdhOpenQueryW(null, 0, out) !== 0) return null;
-        const handle = out[0] as number;
-        const counterOut: number[] = [0];
-        if (PdhAddEnglishCounterW(handle, PERFORMANCE_COUNTER, 0, counterOut) !== 0) return null;
-        counter = counterOut[0] as number;
-        // A rate counter needs one collection to have something to rate against.
-        PdhCollectQueryData(handle);
-        return handle;
-      },
-      read: () => {
-        if (query === null || counter === null) return null;
-        if (PdhCollectQueryData(query) !== 0) return null;
-        const type: number[] = [0];
-        const out = [{ status: 0, padding: 0, value: 0 }];
-        if (PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, type, out) !== 0) return null;
-        const reading = out[0]?.value;
-        return typeof reading === "number" && Number.isFinite(reading) ? reading : null;
-      },
-    });
-  } catch (error) {
-    console.error("[hangar] live clock unavailable:", (error as Error).message);
-    return (pdh = null);
-  }
-}
+  return {
+    open: () => {
+      const out: number[] = [0];
+      if (PdhOpenQueryW(null, 0, out) !== 0) return null;
+      const handle = out[0] as number;
+      const counterOut: number[] = [0];
+      if (PdhAddEnglishCounterW(handle, PERFORMANCE_COUNTER, 0, counterOut) !== 0) return null;
+      counter = counterOut[0] as number;
+      // A rate counter needs one collection to have something to rate against.
+      PdhCollectQueryData(handle);
+      return handle;
+    },
+    read: () => {
+      if (query === null || counter === null) return null;
+      if (PdhCollectQueryData(query) !== 0) return null;
+      const type: number[] = [0];
+      const out = [{ status: 0, padding: 0, value: 0 }];
+      if (PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, type, out) !== 0) return null;
+      const reading = out[0]?.value;
+      return typeof reading === "number" && Number.isFinite(reading) ? reading : null;
+    },
+  };
+});
 
 /** POWER_INFORMATION_LEVEL for CallNtPowerInformation: one PROCESSOR_POWER_INFORMATION per processor. */
 const PROCESSOR_INFORMATION = 11;
@@ -92,27 +83,18 @@ const PROCESSOR_INFORMATION = 11;
  * The processor's base clock in MHz, read once through powrprof — or null where it cannot be read.
  * Enough room is passed for every logical processor; only the first entry is used.
  */
-function baseClockMhz(): number | null {
-  if (baseMhz !== undefined) return baseMhz;
-  if (process.platform !== "win32") return (baseMhz = null);
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const koffi = require("koffi") as typeof import("koffi");
-    const INFO = koffi.struct("PROCESSOR_POWER_INFORMATION", {
-      Number: "uint32", MaxMhz: "uint32", CurrentMhz: "uint32", MhzLimit: "uint32", MaxIdleState: "uint32", CurrentIdleState: "uint32",
-    });
-    const CallNtPowerInformation = koffi.load("powrprof.dll").func("__stdcall", "CallNtPowerInformation", "long",
-      ["int", "void *", "uint32", koffi.out(koffi.pointer(INFO)), "uint32"]);
-    const count = Math.max(1, os.cpus().length);
-    const out = Array.from({ length: count }, () => ({ Number: 0, MaxMhz: 0, CurrentMhz: 0, MhzLimit: 0, MaxIdleState: 0, CurrentIdleState: 0 }));
-    if (CallNtPowerInformation(PROCESSOR_INFORMATION, null, 0, out, count * koffi.sizeof(INFO)) !== 0) return (baseMhz = null);
-    const mhz = out[0]?.MaxMhz ?? 0;
-    return (baseMhz = mhz > 0 ? mhz : null);
-  } catch (error) {
-    console.error("[hangar] base clock unavailable:", (error as Error).message);
-    return (baseMhz = null);
-  }
-}
+const baseClockMhz = nativeBinding<number | null>("base clock", (koffi) => {
+  const INFO = koffi.struct("PROCESSOR_POWER_INFORMATION", {
+    Number: "uint32", MaxMhz: "uint32", CurrentMhz: "uint32", MhzLimit: "uint32", MaxIdleState: "uint32", CurrentIdleState: "uint32",
+  });
+  const CallNtPowerInformation = koffi.load("powrprof.dll").func("__stdcall", "CallNtPowerInformation", "long",
+    ["int", "void *", "uint32", koffi.out(koffi.pointer(INFO)), "uint32"]);
+  const count = Math.max(1, os.cpus().length);
+  const out = Array.from({ length: count }, () => ({ Number: 0, MaxMhz: 0, CurrentMhz: 0, MhzLimit: 0, MaxIdleState: 0, CurrentIdleState: 0 }));
+  if (CallNtPowerInformation(PROCESSOR_INFORMATION, null, 0, out, count * koffi.sizeof(INFO)) !== 0) return null;
+  const mhz = out[0]?.MaxMhz ?? 0;
+  return mhz > 0 ? mhz : null;
+});
 
 /**
  * The live clock in GHz, or null while it cannot be known.

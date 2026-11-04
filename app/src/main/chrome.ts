@@ -29,6 +29,7 @@ import { nativeTheme, type BrowserWindow, type Rectangle } from "electron";
 
 import { SURFACE } from "../core/constants.js";
 import type { ThemeMode } from "../core/types.js";
+import { nativeBinding } from "./native.js";
 
 /** DwmSetWindowAttribute: the corner preference, and its values. */
 export const DWMWA_WINDOW_CORNER_PREFERENCE = 33;
@@ -149,27 +150,15 @@ export interface FrameSetter {
   set(hwnd: number, attribute: number, value: number): void;
 }
 
-let frameSetter: FrameSetter | null | undefined;
-
-/** Bound lazily and never off Windows, so a missing native dependency costs the look, not the app. */
-function loadFrameSetter(): FrameSetter | null {
-  if (frameSetter !== undefined) return frameSetter;
-  if (process.platform !== "win32") return (frameSetter = null);
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const koffi = require("koffi") as typeof import("koffi");
-    // The convention goes in koffi's FIRST argument (see dock.ts for the trap).
-    const DwmSetWindowAttribute = koffi.load("dwmapi.dll").func("__stdcall", "DwmSetWindowAttribute", "int32", [
-      "intptr", "uint32", koffi.pointer("uint32"), "uint32",
-    ]);
-    // A DWORD by pointer; koffi wants that as a one-element array.
-    frameSetter = { set: (hwnd, attribute, value) => void DwmSetWindowAttribute(hwnd, attribute, [value], 4) };
-  } catch (error) {
-    console.error("[hangar] window frame attributes unavailable:", (error as Error).message);
-    frameSetter = null;
-  }
-  return frameSetter;
-}
+/** A missing native dependency costs the look, not the app. */
+const loadFrameSetter = nativeBinding<FrameSetter>("window frame attributes", (koffi) => {
+  // The convention goes in koffi's FIRST argument (see dock.ts for the trap).
+  const DwmSetWindowAttribute = koffi.load("dwmapi.dll").func("__stdcall", "DwmSetWindowAttribute", "int32", [
+    "intptr", "uint32", koffi.pointer("uint32"), "uint32",
+  ]);
+  // A DWORD by pointer; koffi wants that as a one-element array.
+  return { set: (hwnd, attribute, value) => void DwmSetWindowAttribute(hwnd, attribute, [value], 4) };
+});
 
 /** The window handle as the number Win32 wants. */
 export function nativeHandle(window: BrowserWindow): number {

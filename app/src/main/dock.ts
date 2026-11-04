@@ -13,6 +13,7 @@ import { screen } from "electron";
 import { DOCK_PERCENT } from "../core/constants.js";
 import type { DockConfig, DockEdge } from "../core/types.js";
 import { nativeBusy, nativeHandle, type WindowChrome, withNative, withShell } from "./chrome.js";
+import { nativeBinding } from "./native.js";
 
 const run = promisify(execFile);
 
@@ -201,7 +202,7 @@ export function liftFor(top: number, origin: number, step: number, scale: number
  */
 export function monitorRect(display: Electron.Display): Rectangle {
   const converted = screen.dipToScreenRect(null, display.bounds);
-  const api = process.platform === "win32" ? loadWin32() : null;
+  const api = loadWin32();
   if (!api) return converted;
   const middle = {
     x: Math.round(converted.x + converted.width / 2),
@@ -383,124 +384,112 @@ interface Win32Api {
   appWindow: (hwnd: number) => void;
 }
 
-let win32: Win32Api | null = null;
-
 /**
- * Bind the two shell calls an AppBar needs. Loaded lazily and never on Linux, so a missing native
- * dependency degrades to "no docking" instead of stopping the app from starting.
+ * Bind the shell calls an AppBar needs, so a missing native dependency degrades to "no docking"
+ * instead of stopping the app from starting. Worth its line in the log: without this binding the
+ * window still moves, but nothing is reserved, and "other windows cover the band" is exactly the
+ * symptom that follows.
  */
-function loadWin32(): Win32Api | null {
-  if (win32) return win32;
-  if (process.platform !== "win32") return null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const koffi = require("koffi") as typeof import("koffi");
-    const shell32 = koffi.load("shell32.dll");
-    const user32 = koffi.load("user32.dll");
-    const dwmapi = koffi.load("dwmapi.dll");
-    const RECT = koffi.struct("RECT", { left: "long", top: "long", right: "long", bottom: "long" });
-    // hWnd as an integer, not a pointer type: the value IS the handle, and koffi marshals intptr
-    // straight through — which also keeps the struct layout right on both 32- and 64-bit.
-    const APPBARDATA = koffi.struct("APPBARDATA", {
-      cbSize: "uint32", hWnd: "intptr", uCallbackMessage: "uint32", uEdge: "uint32", rc: RECT, lParam: "intptr",
-    });
-    // The convention belongs in koffi's FIRST argument; written inside a prototype string it is
-    // rejected with "Unknown or invalid type name '__stdcall'" and the whole binding is lost.
-    const SHAppBarMessage = shell32.func("__stdcall", "SHAppBarMessage", "uintptr_t", [
-      "uint32_t", koffi.inout(koffi.pointer(APPBARDATA)),
-    ]);
-    const SetWindowPos = user32.func("__stdcall", "SetWindowPos", "bool", [
-      "intptr", "intptr", "int", "int", "int", "int", "uint32",
-    ]);
-    const GetWindowRect = user32.func("__stdcall", "GetWindowRect", "bool", [
-      "intptr", koffi.out(koffi.pointer(RECT)),
-    ]);
-    const POINT = koffi.struct("POINT", { x: "long", y: "long" });
-    const GetClientRect = user32.func("__stdcall", "GetClientRect", "bool", [
-      "intptr", koffi.out(koffi.pointer(RECT)),
-    ]);
-    const ClientToScreen = user32.func("__stdcall", "ClientToScreen", "bool", [
-      "intptr", koffi.inout(koffi.pointer(POINT)),
-    ]);
-    const DwmGetWindowAttribute = dwmapi.func("__stdcall", "DwmGetWindowAttribute", "int32", [
-      "intptr", "uint32", koffi.out(koffi.pointer(RECT)), "uint32",
-    ]);
-    const MONITORINFO = koffi.struct("MONITORINFO", {
-      cbSize: "uint32", rcMonitor: RECT, rcWork: RECT, dwFlags: "uint32",
-    });
-    // A POINT is passed by value here; koffi marshals the struct into the two words the ABI expects.
-    const MonitorFromPoint = user32.func("__stdcall", "MonitorFromPoint", "intptr", [POINT, "uint32"]);
-    const GetMonitorInfoW = user32.func("__stdcall", "GetMonitorInfoW", "bool", [
-      "intptr", koffi.inout(koffi.pointer(MONITORINFO)),
-    ]);
-    const GetWindowLongPtrW = user32.func("__stdcall", "GetWindowLongPtrW", "intptr", ["intptr", "int"]);
-    const SetWindowLongPtrW = user32.func("__stdcall", "SetWindowLongPtrW", "intptr", ["intptr", "int", "intptr"]);
-    win32 = {
-      SHAppBarMessage: (message, data) => Number(SHAppBarMessage(message, data)),
-      SHAppBarMessageAsync: (message, data) => new Promise((resolve, reject) => {
-        SHAppBarMessage.async(message, data, (error: Error | null, result: number | bigint) => {
-          if (error) reject(error);
-          else resolve(Number(result));               // koffi fills `data` before calling back
-        });
-      }),
-      setWindowPos: (hwnd, rect) =>
-        void SetWindowPos(hwnd, 0, rect.x, rect.y, rect.width, rect.height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING),
-      frames: (hwnd) => {
-        // koffi fills the structs that are passed in, the same way SHAppBarMessage's is filled.
-        const box = (rc: { left: number; top: number; right: number; bottom: number }): Rectangle =>
-          ({ x: rc.left, y: rc.top, width: rc.right - rc.left, height: rc.bottom - rc.top });
-        const outer = { left: 0, top: 0, right: 0, bottom: 0 };
-        if (!GetWindowRect(hwnd, outer)) return null;
-        const painted = { left: 0, top: 0, right: 0, bottom: 0 };
-        // Non-zero means DWM has no answer — before the window is composited, for one. The outer
-        // rectangle is then the best guess, and the corrections below become no-ops.
-        if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, painted, 16) !== 0) {
-          return { outer: box(outer), painted: box(outer), client: box(outer) };
-        }
-        // GetClientRect answers with a size only; its origin has to be asked for separately.
-        const size = { left: 0, top: 0, right: 0, bottom: 0 };
-        const origin = { x: 0, y: 0 };
-        const client = GetClientRect(hwnd, size) && ClientToScreen(hwnd, origin)
-          ? { x: origin.x, y: origin.y, width: size.right, height: size.bottom }
-          : box(painted);
-        return { outer: box(outer), painted: box(painted), client };
-      },
-      monitorAt: (point) => {
-        const handle = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
-        if (!handle) return null;
-        const info = {
-          cbSize: koffi.sizeof(MONITORINFO),
-          rcMonitor: { left: 0, top: 0, right: 0, bottom: 0 },
-          rcWork: { left: 0, top: 0, right: 0, bottom: 0 },
-          dwFlags: 0,
-        };
-        if (!GetMonitorInfoW(handle, info)) return null;
-        const rc = info.rcMonitor;
-        return { x: rc.left, y: rc.top, width: rc.right - rc.left, height: rc.bottom - rc.top };
-      },
-      appWindow: (hwnd) => {
-        const style = Number(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
-        if (!(style & WS_EX_APPWINDOW)) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_APPWINDOW);
-      },
-      make: (hwnd, edge, rect) => ({
-        cbSize: koffi.sizeof(APPBARDATA),
-        hWnd: hwnd,
-        uCallbackMessage: APPBAR_CALLBACK_MESSAGE,
-        uEdge: edge,
-        rc: rect
-          ? { left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height }
-          : { left: 0, top: 0, right: 0, bottom: 0 },
-        lParam: 0,
-      }),
-    };
-    return win32;
-  } catch (error) {
-    // Worth saying out loud: without this binding the window still moves, but nothing is reserved,
-    // and "other windows cover the band" is exactly the symptom that follows.
-    console.error("[hangar] AppBar unavailable:", (error as Error).message);
-    return null;
-  }
-}
+const loadWin32 = nativeBinding<Win32Api>("AppBar", (koffi) => {
+  const shell32 = koffi.load("shell32.dll");
+  const user32 = koffi.load("user32.dll");
+  const dwmapi = koffi.load("dwmapi.dll");
+  const RECT = koffi.struct("RECT", { left: "long", top: "long", right: "long", bottom: "long" });
+  // hWnd as an integer, not a pointer type: the value IS the handle, and koffi marshals intptr
+  // straight through — which also keeps the struct layout right on both 32- and 64-bit.
+  const APPBARDATA = koffi.struct("APPBARDATA", {
+    cbSize: "uint32", hWnd: "intptr", uCallbackMessage: "uint32", uEdge: "uint32", rc: RECT, lParam: "intptr",
+  });
+  // The convention belongs in koffi's FIRST argument; written inside a prototype string it is
+  // rejected with "Unknown or invalid type name '__stdcall'" and the whole binding is lost.
+  const SHAppBarMessage = shell32.func("__stdcall", "SHAppBarMessage", "uintptr_t", [
+    "uint32_t", koffi.inout(koffi.pointer(APPBARDATA)),
+  ]);
+  const SetWindowPos = user32.func("__stdcall", "SetWindowPos", "bool", [
+    "intptr", "intptr", "int", "int", "int", "int", "uint32",
+  ]);
+  const GetWindowRect = user32.func("__stdcall", "GetWindowRect", "bool", [
+    "intptr", koffi.out(koffi.pointer(RECT)),
+  ]);
+  const POINT = koffi.struct("POINT", { x: "long", y: "long" });
+  const GetClientRect = user32.func("__stdcall", "GetClientRect", "bool", [
+    "intptr", koffi.out(koffi.pointer(RECT)),
+  ]);
+  const ClientToScreen = user32.func("__stdcall", "ClientToScreen", "bool", [
+    "intptr", koffi.inout(koffi.pointer(POINT)),
+  ]);
+  const DwmGetWindowAttribute = dwmapi.func("__stdcall", "DwmGetWindowAttribute", "int32", [
+    "intptr", "uint32", koffi.out(koffi.pointer(RECT)), "uint32",
+  ]);
+  const MONITORINFO = koffi.struct("MONITORINFO", {
+    cbSize: "uint32", rcMonitor: RECT, rcWork: RECT, dwFlags: "uint32",
+  });
+  // A POINT is passed by value here; koffi marshals the struct into the two words the ABI expects.
+  const MonitorFromPoint = user32.func("__stdcall", "MonitorFromPoint", "intptr", [POINT, "uint32"]);
+  const GetMonitorInfoW = user32.func("__stdcall", "GetMonitorInfoW", "bool", [
+    "intptr", koffi.inout(koffi.pointer(MONITORINFO)),
+  ]);
+  const GetWindowLongPtrW = user32.func("__stdcall", "GetWindowLongPtrW", "intptr", ["intptr", "int"]);
+  const SetWindowLongPtrW = user32.func("__stdcall", "SetWindowLongPtrW", "intptr", ["intptr", "int", "intptr"]);
+  return {
+    SHAppBarMessage: (message, data) => Number(SHAppBarMessage(message, data)),
+    SHAppBarMessageAsync: (message, data) => new Promise((resolve, reject) => {
+      SHAppBarMessage.async(message, data, (error: Error | null, result: number | bigint) => {
+        if (error) reject(error);
+        else resolve(Number(result));               // koffi fills `data` before calling back
+      });
+    }),
+    setWindowPos: (hwnd, rect) =>
+      void SetWindowPos(hwnd, 0, rect.x, rect.y, rect.width, rect.height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING),
+    frames: (hwnd) => {
+      // koffi fills the structs that are passed in, the same way SHAppBarMessage's is filled.
+      const box = (rc: { left: number; top: number; right: number; bottom: number }): Rectangle =>
+        ({ x: rc.left, y: rc.top, width: rc.right - rc.left, height: rc.bottom - rc.top });
+      const outer = { left: 0, top: 0, right: 0, bottom: 0 };
+      if (!GetWindowRect(hwnd, outer)) return null;
+      const painted = { left: 0, top: 0, right: 0, bottom: 0 };
+      // Non-zero means DWM has no answer — before the window is composited, for one. The outer
+      // rectangle is then the best guess, and the corrections below become no-ops.
+      if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, painted, 16) !== 0) {
+        return { outer: box(outer), painted: box(outer), client: box(outer) };
+      }
+      // GetClientRect answers with a size only; its origin has to be asked for separately.
+      const size = { left: 0, top: 0, right: 0, bottom: 0 };
+      const origin = { x: 0, y: 0 };
+      const client = GetClientRect(hwnd, size) && ClientToScreen(hwnd, origin)
+        ? { x: origin.x, y: origin.y, width: size.right, height: size.bottom }
+        : box(painted);
+      return { outer: box(outer), painted: box(painted), client };
+    },
+    monitorAt: (point) => {
+      const handle = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
+      if (!handle) return null;
+      const info = {
+        cbSize: koffi.sizeof(MONITORINFO),
+        rcMonitor: { left: 0, top: 0, right: 0, bottom: 0 },
+        rcWork: { left: 0, top: 0, right: 0, bottom: 0 },
+        dwFlags: 0,
+      };
+      if (!GetMonitorInfoW(handle, info)) return null;
+      const rc = info.rcMonitor;
+      return { x: rc.left, y: rc.top, width: rc.right - rc.left, height: rc.bottom - rc.top };
+    },
+    appWindow: (hwnd) => {
+      const style = Number(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+      if (!(style & WS_EX_APPWINDOW)) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_APPWINDOW);
+    },
+    make: (hwnd, edge, rect) => ({
+      cbSize: koffi.sizeof(APPBARDATA),
+      hWnd: hwnd,
+      uCallbackMessage: APPBAR_CALLBACK_MESSAGE,
+      uEdge: edge,
+      rc: rect
+        ? { left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height }
+        : { left: 0, top: 0, right: 0, bottom: 0 },
+      lParam: 0,
+    }),
+  };
+});
 
 /**
  * Keep the window's taskbar button while it takes no keyboard.
@@ -664,7 +653,7 @@ export class Dock {
 
   /** Put the WINDOW exactly on `rect` (physical), without anyone second-guessing it. */
   private placeWindow(rect: Rectangle): void {
-    const api = process.platform === "win32" ? loadWin32() : null;
+    const api = loadWin32();
     if (!api) {
       this.window.setBounds(rect);
       return;

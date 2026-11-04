@@ -13,6 +13,7 @@ import { readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { clipsToPrune, HTML_FORMAT, IMAGE_READ_TRIES, isTerminalHost, shouldAddPath } from "../core/clipboardRules.js";
 import { foregroundExecutable } from "./foreground.js";
+import { nativeBinding } from "./native.js";
 
 /** Cheap enough to run often; a person notices a screenshot taking a second to be ready. */
 const POLL_MS = 600;
@@ -36,7 +37,6 @@ const OBJECT_DESCRIPTOR = "Object Descriptor";
 
 let timer: NodeJS.Timeout | null = null;
 let lastHandled = 0;
-let sequenceNumber: SequenceNumber | null | undefined;
 let clip: Clip | null = null;
 /** The copy whose image read back empty, and how many times; see IMAGE_READ_TRIES. */
 let emptyRead = { sequence: 0, count: 0 };
@@ -47,19 +47,8 @@ let emptyRead = { sequence: 0, count: 0 };
  * Reading the formats every poll would be far more expensive, and reading the image itself would
  * be absurd — this is the cheap way to know nothing has happened.
  */
-function loadSequenceNumber(): SequenceNumber | null {
-  if (sequenceNumber !== undefined) return sequenceNumber;
-  if (process.platform !== "win32") return (sequenceNumber = null);
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const koffi = require("koffi") as typeof import("koffi");
-    const user32 = koffi.load("user32.dll");
-    return (sequenceNumber = user32.func("__stdcall", "GetClipboardSequenceNumber", "uint32", []));
-  } catch (error) {
-    console.error("[hangar] clipboard watch unavailable:", (error as Error).message);
-    return (sequenceNumber = null);
-  }
-}
+const loadSequenceNumber = nativeBinding<SequenceNumber>("clipboard watch", (koffi) =>
+  koffi.load("user32.dll").func("__stdcall", "GetClipboardSequenceNumber", "uint32", []));
 
 export interface ClipboardWatchOptions {
   /** Writes the image to a file and returns its path; the existing save, shared with the shortcut. */
