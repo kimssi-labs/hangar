@@ -10,12 +10,10 @@ import type { MetricSample, MetricsSnapshot } from "./types.js";
 export const HISTORY_LENGTH = 300;
 export const SYSTEM_SERIES = "system";
 
+/** One process of the table: enough to walk a session's tree. Its usage is read per pid (sampler.ts). */
 export interface ProcessRow {
   pid: number;
   parentPid: number;
-  /** Percent of one core, as the OS reports it. */
-  cpu: number;
-  memoryBytes: number;
 }
 
 /** Each pid's direct children. Built once per process table, then shared by every tree walked in it. */
@@ -42,13 +40,6 @@ export function processTree(rows: ProcessRow[], root: number, children = childre
     queue.push(...(children.get(row.pid) ?? []));
   }
   return out;
-}
-
-export function sumTree(rows: ProcessRow[]): { cpu: number; memoryBytes: number } {
-  return rows.reduce(
-    (acc, row) => ({ cpu: acc.cpu + row.cpu, memoryBytes: acc.memoryBytes + row.memoryBytes }),
-    { cpu: 0, memoryBytes: 0 },
-  );
 }
 
 /** Fixed-length history per series; the oldest sample falls off the end. */
@@ -84,12 +75,4 @@ export class MetricsHistory {
     const keep = new Set([SYSTEM_SERIES, ...keys]);
     for (const key of this.series.keys()) if (!keep.has(key)) this.series.delete(key);
   }
-}
-
-export function latest(samples: MetricSample[]): MetricSample | null {
-  return samples.length ? (samples[samples.length - 1] as MetricSample) : null;
-}
-
-export function peakCpu(samples: MetricSample[]): number {
-  return samples.reduce((max, s) => Math.max(max, s.cpu), 0);
 }

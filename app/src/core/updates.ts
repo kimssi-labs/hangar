@@ -4,6 +4,8 @@
  * Everything here is a decision — may we check now, what does the user see — rather than an action.
  * The action is three lines in the main process; the decisions are what get them wrong.
  */
+import type { MessageKey } from "./i18n.js";
+import type { UpdateConfig } from "./types.js";
 
 /** How the update machinery reports itself, in the order a check goes through. */
 export type UpdatePhase =
@@ -29,13 +31,6 @@ export interface UpdateState {
   /** When the last completed check finished, epoch ms. */
   checkedAt: number | null;
 }
-
-export interface UpdateConfig {
-  /** Look for updates on a timer, and download what it finds. */
-  automatic: boolean;
-}
-
-export const UPDATE_DEFAULTS: UpdateConfig = { automatic: true };
 
 /**
  * Whether a downloaded update may install itself when the app quits.
@@ -81,11 +76,7 @@ export const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const MIN_CHECK_GAP_MS = 60_000;
 
 /** The message keys this module names; the dictionaries define what they say. */
-export type UpdateMessageKey =
-  | "update.check" | "update.checking" | "update.download" | "update.downloading" | "update.restart"
-  | "update.state.unsupported" | "update.state.checking" | "update.state.downloading"
-  | "update.state.ready" | "update.state.available" | "update.state.current" | "update.state.idle"
-  | "update.state.failed" | "update.state.failedWith";
+export type UpdateMessageKey = Extract<MessageKey, `update.${string}`>;
 
 export function initialState(current: string, supported: boolean): UpdateState {
   return {

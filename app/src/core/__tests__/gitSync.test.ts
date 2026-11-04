@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  classify, defaultBaseFrom, fetchArgs, reconcileArgs, splitBase, syncLabel,
+  classify, defaultBaseFrom, fetchArgs, reconcileArgs, splitBase,
 } from "../gitSync.js";
 
 describe("resolving the base", () => {
@@ -59,11 +59,6 @@ describe("the commands", () => {
     // --no-rebase explicitly: a user with pull.rebase set would otherwise get a rebase from "merge".
     expect(reconcileArgs("merge", "REF")).toEqual(["merge", "--no-rebase", "REF"]);
     expect(reconcileArgs("ff-only", "REF")).toEqual(["merge", "--ff-only", "REF"]);
-  });
-
-  it("names the branch in the menu entry, and stays sensible without one", () => {
-    expect(syncLabel("origin/main")).toBe("Update from origin/main");
-    expect(syncLabel("")).toBe("Update from the base branch");
   });
 });
 

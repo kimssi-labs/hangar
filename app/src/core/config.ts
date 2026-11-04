@@ -20,7 +20,6 @@ export const SECTION = { dock: "dock", status: "status", launch: "launch", ui: "
 export const DOCK_MONITORS_KEY = "monitors";
 export const DOCK_SETUPS_KEY = "setups";
 export const DOCK_FLOOR_KEY = "floor";
-export { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, SIDE_PANE_TABS, STACK_BELOW, THEME_MODES } from "./constants.js";
 
 type Json = Record<string, unknown>;
 

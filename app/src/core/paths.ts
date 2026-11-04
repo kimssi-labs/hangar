@@ -21,12 +21,10 @@ export function claudeHome(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 export interface HomePaths {
-  root: string;
   projects: string;
   liveSessions: string;
   history: string;
   claudeJson: string;
-  config: string;
   managerConfig: string;
   aliases: string;
   /** The usage figures, this app's own file: written from the usage endpoint and by nothing else. */
@@ -57,13 +55,11 @@ export interface HomePaths {
 
 export function homePaths(root = claudeHome()): HomePaths {
   return {
-    root,
     projects: join(root, "projects"),
     liveSessions: join(root, "sessions"),
     history: join(root, "history.jsonl"),
     // Claude Code's own state file sits NEXT to a default home — and INSIDE a home CLAUDE_CONFIG_DIR moved.
     claudeJson: existsSync(join(root, ".claude.json")) ? join(root, ".claude.json") : join(root, "..", ".claude.json"),
-    config: join(root, "config"),
     managerConfig: join(root, "config", "manager.json"),
     aliases: join(root, "config", "project-aliases.json"),
     hangarUsage: join(root, "cache", "hangar-usage.json"),

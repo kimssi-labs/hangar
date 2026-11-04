@@ -23,15 +23,6 @@ export interface ProcessUsage {
   memoryBytes: number;
 }
 
-export interface MachineReading {
-  /** 0–100 across all cores. */
-  cpu: number;
-  memoryBytes: number;
-  memoryTotalBytes: number;
-  /** Current clock in GHz, or null when the platform does not report one. */
-  cpuGhz: number | null;
-}
-
 // -- Windows ------------------------------------------------------------------------------------
 
 const TH32CS_SNAPPROCESS = 0x00000002;
@@ -95,7 +86,7 @@ const loadWindows = nativeBinding<WinApi>("native metrics", (koffi) => {
         entry.writeUInt32LE(ENTRY_SIZE, 0);             // dwSize, the first field
         let more = Process32FirstW(snapshot, entry);
         while (more) {
-          rows.push({ pid: entry.readUInt32LE(PID_AT), parentPid: entry.readUInt32LE(PARENT_AT), cpu: 0, memoryBytes: 0 });
+          rows.push({ pid: entry.readUInt32LE(PID_AT), parentPid: entry.readUInt32LE(PARENT_AT) });
           entry.writeUInt32LE(ENTRY_SIZE, 0);
           more = Process32NextW(snapshot, entry);
         }
@@ -156,7 +147,7 @@ function linuxTable(): ProcessRow[] {
     if (!/^\d+$/.test(name)) continue;
     try {
       const stat = parseProcStat(readFileSync(`/proc/${name}/stat`, "utf8"));
-      if (stat) rows.push({ pid: Number(name), parentPid: stat.parentPid, cpu: 0, memoryBytes: 0 });
+      if (stat) rows.push({ pid: Number(name), parentPid: stat.parentPid });
     } catch {
       /* the process ended while we were reading it */
     }

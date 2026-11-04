@@ -143,7 +143,6 @@ describe("launch command", () => {
     const command = launchCommand(request({ displayName: "데모", tabTitle: "데모" }));   // a renamed session passes both
     expect(command.exe).toBe(WT_EXE);
     expect(command.args.slice(0, 6)).toEqual(["-w", SESSIONS_WINDOW, "nt", "--title", "데모", "-d"]);   // renamed session
-    expect(command.ownsWindow).toBe(true);
   });
 
   it("targets the current or a new window", () => {
@@ -154,7 +153,6 @@ describe("launch command", () => {
   it("starts the shell itself when Windows Terminal is absent", () => {
     const command = launchCommand(request({ hasWindowsTerminal: false }));
     expect(command.exe).toBe("pwsh.exe");
-    expect(command.ownsWindow).toBe(false);
   });
 
   it("uses the detected terminal emulator on Linux", () => {
@@ -181,7 +179,6 @@ describe("a custom program", () => {
     expect(command.exe).toBe(custom);
     expect(command.args).toEqual(["C:\\proj"]);
     expect(command.cwd).toBe("C:\\proj");
-    expect(command.ownsWindow).toBe(true);
   });
 
   it("falls back to the platform default when no path was given", () => {

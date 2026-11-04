@@ -76,11 +76,6 @@ export interface MetricSample {
   memoryBytes: number;
 }
 
-export interface MetricSeries {
-  key: string;
-  samples: MetricSample[];
-}
-
 export interface MetricsSnapshot {
   at: number;
   system: { cpu: number; memoryBytes: number; memoryTotalBytes: number; cpuGhz: number | null };

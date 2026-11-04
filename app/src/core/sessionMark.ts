@@ -15,8 +15,6 @@ export function sessionMark(live: boolean, status: string | null): SessionMark {
   return status === "busy" ? "working" : "turn";
 }
 
-/** The states a running session reports. Anything else it might say is shown as it comes. */
-export const SESSION_STATES = ["busy", "waiting", "idle"] as const;
 /**
  * What a session that is not running is called.
  *
