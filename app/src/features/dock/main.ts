@@ -10,8 +10,7 @@
  * It borrows the window from the shell and hands back to the shell the one thing that is the
  * shell's: giving an undocked window a window's shape (`placeFloating`).
  */
-import { join } from "node:path";
-import { app, screen, type BrowserWindow } from "electron";
+import { screen, type BrowserWindow } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
@@ -22,6 +21,7 @@ import type { DockConfig } from "../../core/types.js";
 import type { WindowChrome } from "../../main/chrome.js";
 import { bandRect, bandThickness, Dock, displayKey, dockReady, keepTaskbarButton, pickDisplay, setupKey } from "../../main/dock.js";
 import { IconKeeper } from "../../main/deskIcons.js";
+import { helpersDir } from "../../main/helpers.js";
 import type { ActionResult, SettingsPayload } from "../../main/ipc.js";
 import { dockContract, type DisplayInfo, type DockState } from "./contract.js";
 
@@ -38,14 +38,11 @@ export interface DockDeps {
   pushSettings(): void;
   /** Give an undocked window a window's shape and place, wholly on screen. The shell's. */
   placeFloating(): void;
-  /** A line for the page about how start-up went — "saved monitor X is not connected", say. */
-  appNote(text: string): void;
 }
 
 /** The settings-payload fields that are dock's. */
 export interface DockSlice {
   dock: DockConfig;
-  dockDevices: string[];
   dockFloor: number;
   minPercent: number;
 }
@@ -206,7 +203,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
       deps.placeFloating();
       ctx.config.saveDock({ ...current(), enabled: false }, setupKey());
       emitState();
-    applyKeyboardHold();
+      applyKeyboardHold();
       return deps.settingsPayload();
     },
     // The band's own resize grip. The window frame does not resize while docked — that is what
@@ -233,7 +230,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
     attach(window, chrome) {
       dock = new Dock(window, chrome);
       if (process.platform === "win32") {
-        icons = new IconKeeper(join(app.getPath("userData"), "helpers"), ctx.store.paths.hangarDeskIcons, () => ctx.config.ui().keepIcons);
+        icons = new IconKeeper(helpersDir(), ctx.store.paths.hangarDeskIcons, () => ctx.config.ui().keepIcons);
         dock.icons = icons;
       }
       // setMaximizable(false) stops the caption button and the system menu, not the API or every
@@ -300,7 +297,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
         if (!config.enabled) return;
         ctx.config.saveDock({ ...config, enabled: false }, setupKey());
         emitState();
-    applyKeyboardHold();
+        applyKeyboardHold();
         deps.pushSettings();
       };
     },
@@ -309,7 +306,8 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
       const saved = current();
       if (saved.enabled && dock) {
         const placement = await dock.apply(saved);
-        if (placement.note) deps.appNote(placement.note);
+        // "Saved monitor X is not connected", say: a line on screen, like any other.
+        if (placement.note) ctx.notify(placement.note);
       }
       // Not docked after all — off, or refused: a run that ended docked left the icons where the band
       // was. Not awaited: it may wait for the helper's build, and start-up does not.
@@ -317,7 +315,7 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
       // Told even when nothing was applied: the page asked for this state while it was first
       // rendering, which is before any band above could exist.
       emitState();
-    applyKeyboardHold();
+      applyKeyboardHold();
     },
 
     isDocked: () => dock?.isDocked === true,
@@ -344,7 +342,6 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
       const span = bandThickness(display.workArea, config.edge);
       return {
         dock: config,
-        dockDevices: ctx.config.dockDevices(),
         dockFloor: ctx.config.dockFloor(config.edge),
         minPercent: percentFloor(ctx.config.dockFloor(config.edge), span),
       };

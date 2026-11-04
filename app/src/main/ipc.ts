@@ -20,7 +20,6 @@ export interface SettingsPayload {
   status: import("../core/types.js").StatusConfig;
   launch: import("../core/types.js").LaunchConfig;
   ui: import("../core/types.js").UiConfig;
-  dockDevices: string[];
   dockFloor: number;
   minPercent: number;
   /** Whether the system-wide paste shortcut is actually held right now. */
