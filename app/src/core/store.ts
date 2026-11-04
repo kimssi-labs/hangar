@@ -8,7 +8,7 @@
 import { closeSync, mkdirSync, openSync, readSync, readdirSync, rmSync, statSync, unlinkSync, appendFileSync, type Stats } from "node:fs";
 import { createHash } from "node:crypto";
 import { access } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join, win32 } from "node:path";
 
 import { ConfigStore, fileSignature } from "./config.js";
 import { parseJsonl, readJson, writeJson } from "./json.js";
@@ -175,7 +175,7 @@ interface FolderEntry {
 
 /** A transcript's session id is its file name. */
 function idOf(file: string): string {
-  return file.slice(file.lastIndexOf(sep()) + 1, -TRANSCRIPT_EXT.length);
+  return basename(file, TRANSCRIPT_EXT);
 }
 
 export interface StoreOptions {
@@ -603,7 +603,9 @@ export class Store {
       dir: dirName,
       cwd,
       alias,
-      name: alias || (cwd ? baseName(cwd) : dirName),
+      // A transcript's cwd is the machine's own spelling, separators of either kind; a drive root
+      // names itself ("C:").
+      name: alias || (cwd ? win32.basename(cwd) || cwd.replace(/[\\/]+$/, "") : dirName),
       sessions,
       hasMemory: folder.hasMemory,
       exists: cwd ? this.folderExists(cwd) : false,
@@ -624,7 +626,7 @@ export class Store {
    * reads plus the transcript line it appends — so the new name also shows up in `/resume`.
    */
   renameSession(session: SessionInfo, title: string): void {
-    const dir = session.file.slice(0, session.file.lastIndexOf(sep()));
+    const dir = dirname(session.file);
     writeJson(join(dir, session.id, CUSTOM_TITLE_FILE), { customTitle: title });
     const line = JSON.stringify({ type: CUSTOM_TITLE_TYPE, customTitle: title, sessionId: session.id });
     // Only the last byte decides whether a newline is owed — not a read of the whole transcript.
@@ -637,7 +639,7 @@ export class Store {
     const last = readBytes(session.file, Math.max(0, size - 1), 1);
     appendFileSync(session.file, `${!last.length || last[0] === NEWLINE ? "" : "\n"}${line}\n`, "utf8");
     // The sidecar may have changed without the folder's mtime moving; the next scan looks again.
-    this.folderCache.delete(dir.slice(dir.lastIndexOf(sep()) + 1));
+    this.folderCache.delete(basename(dir));
   }
 
   /** Display alias for a project; an empty name clears it. */
@@ -670,7 +672,7 @@ export class Store {
    * older ones to reappear as rows of their own, which is not what "delete this session" means.
    */
   deleteSession(session: SessionInfo): void {
-    const dir = session.file.slice(0, session.file.lastIndexOf(sep()));
+    const dir = dirname(session.file);
     for (const id of [...session.folded, session.id]) {
       try { unlinkSync(join(dir, `${id}${TRANSCRIPT_EXT}`)); } catch { /* already gone */ }
       rmSync(join(dir, id), { recursive: true, force: true });
@@ -680,16 +682,6 @@ export class Store {
   deleteProject(project: ProjectInfo): void {
     rmSync(join(this.paths.projects, project.dir), { recursive: true, force: true });
   }
-}
-
-function sep(): string {
-  return process.platform === "win32" ? "\\" : "/";
-}
-
-function baseName(path: string): string {
-  const trimmed = path.replace(/[\\/]+$/, "");
-  const cut = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
-  return cut >= 0 ? trimmed.slice(cut + 1) || trimmed : trimmed;
 }
 
 /** A pid that no longer exists is not live; signal 0 asks without touching the process. */
