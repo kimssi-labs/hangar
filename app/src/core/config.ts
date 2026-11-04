@@ -4,7 +4,7 @@
  * The terminal version of this app wrote the same file and the same section names, so an existing
  * setup keeps its dock, status-line and launch choices when it moves to the desktop app.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, SIDE_PANE_TABS, STACK_BELOW, THEME_MODES } from "./constants.js";
@@ -32,6 +32,49 @@ function readJson(file: string): Json {
   } catch {
     return {};                                   // absent or hand-edited into nonsense: use defaults
   }
+}
+
+/** How long a just-written file's mtime is not trusted: two writes in one clock tick share it. */
+const SETTLE_MS = 2_000;
+
+/**
+ * A cheap "has this file changed" answer: size and mtime, `-` when it is not there, and null when
+ * the file was written so recently that a second write in the same clock tick would not show.
+ */
+export function fileSignature(file: string): string | null {
+  try {
+    const st = statSync(file, { throwIfNoEntry: false });
+    if (!st) return "-";
+    if (Date.now() - st.mtimeMs < SETTLE_MS) return null;
+    return `${st.size}:${st.mtimeMs}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parsed settings files, by path, against their signature.
+ *
+ * The scan alone asked for these four times every fifteen seconds, each a read and a parse. Module
+ * level, not per instance: main and the store each hold a ConfigStore on the same file, and a write
+ * through either must be seen by both. Handed out as copies, because callers edit what they get.
+ */
+const parsed = new Map<string, { signature: string; value: Json }>();
+
+function readJsonCached(file: string): Json {
+  const signature = fileSignature(file);
+  const hit = parsed.get(file);
+  if (signature !== null && hit?.signature === signature) return structuredClone(hit.value);
+  const value = readJson(file);
+  if (signature === null) parsed.delete(file);
+  else parsed.set(file, { signature, value: structuredClone(value) });
+  return value;
+}
+
+function writeJson(file: string, value: unknown): void {
+  parsed.delete(file);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
 function asRecord(value: unknown): Json {
@@ -76,7 +119,7 @@ export class ConfigStore {
   }
 
   private all(): Json {
-    return readJson(this.file);
+    return readJsonCached(this.file);
   }
 
   section(name: string): Json {
@@ -86,8 +129,7 @@ export class ConfigStore {
   saveSection(name: string, value: Json): void {
     const config = this.all();
     config[name] = value;
-    mkdirSync(dirname(this.file), { recursive: true });
-    writeFileSync(this.file, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    writeJson(this.file, config);
   }
 
   // -- dock -------------------------------------------------------------------------------------
@@ -298,14 +340,12 @@ export class ConfigStore {
   // -- project aliases ------------------------------------------------------------------------------
   aliases(): Record<string, string> {
     const file = homePaths(dirname(dirname(this.file))).aliases;
-    const raw = readJson(file);
+    const raw = readJsonCached(file);
     return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, String(v)]));
   }
 
   saveAliases(aliases: Record<string, string>): void {
-    const file = homePaths(dirname(dirname(this.file))).aliases;
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, `${JSON.stringify(aliases, null, 2)}\n`, "utf8");
+    writeJson(homePaths(dirname(dirname(this.file))).aliases, aliases);
   }
 }
 

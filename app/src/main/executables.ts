@@ -6,6 +6,7 @@
  * session ran the lookup up to three times.
  */
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 
 import { CLAUDE_EXE, LINUX_TERMINALS } from "../core/launcher.js";
 
@@ -21,6 +22,25 @@ export function which(exe: string): string | null {
   }
 }
 
+/** How long "not on PATH" is believed: installing git or claude while the app is open shows up within it. */
+const MISSING_TTL_MS = 60_000;
+const located = new Map<string, { path: string | null; at: number }>();
+
+/**
+ * `which`, remembered: `where` is a process started synchronously on the thread that draws the
+ * window, and the settings answer alone asked it about git every time it was built.
+ *
+ * A path found is kept while the file is still there; an answer of "missing" for a minute.
+ */
+export function cachedWhich(exe: string): string | null {
+  const known = located.get(exe);
+  if (known?.path && existsSync(known.path)) return known.path;
+  if (known && !known.path && Date.now() - known.at < MISSING_TTL_MS) return null;
+  const path = which(exe);
+  located.set(exe, { path, at: Date.now() });
+  return path;
+}
+
 const presence = new Map<string, boolean>();
 
 /** Whether `exe` is on PATH, remembered for the life of the run. */
@@ -34,7 +54,7 @@ export function haveExecutable(exe: string): boolean {
 
 /** Resolve the claude executable, never the bare name: a shell function of that name would win. */
 export function claudeExecutable(): string | null {
-  return which(CLAUDE_EXE);
+  return cachedWhich(CLAUDE_EXE);
 }
 
 /** The terminal configured, or the first known one this machine has. */

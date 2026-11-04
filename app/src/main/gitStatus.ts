@@ -7,7 +7,7 @@
  * branch immediately and gains the count when it arrives.
  */
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { access, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { randomUUID } from "node:crypto";
@@ -26,10 +26,27 @@ import {
 /** Give up rather than hold anything up; a huge repository is not worth a stalled row. */
 const STATUS_TIMEOUT_MS = 4_000;
 /** A count this old is re-taken. Long enough that scrolling a list costs nothing. */
-const COUNT_TTL_MS = 15_000;
+export const COUNT_TTL_MS = 30_000;
+/**
+ * A folder nobody has asked about for this long loses its cached status.
+ *
+ * An entry past COUNT_TTL_MS is never answered from again, yet it kept every changed path of that
+ * repository in memory for as long as the app ran — one per project ever selected.
+ */
+const COUNT_EVICT_MS = 10 * 60_000;
 
 interface Counted { at: number; dirty: number; statuses: Map<string, FileStatus> }
 const counts = new Map<string, Counted>();
+/** When each folder's status was last asked for, which is what eviction goes by. */
+const asked = new Map<string, number>();
+
+function evictUnasked(now: number): void {
+  for (const [cwd, at] of asked) {
+    if (now - at < COUNT_EVICT_MS) continue;
+    asked.delete(cwd);
+    counts.delete(cwd);
+  }
+}
 /**
  * Who is waiting on the run for a directory — one entry per directory with a run in flight.
  *
@@ -102,13 +119,12 @@ export function headOf(cwd: string): GitInfo | null {
  * file panel waits on this to draw a folder, and a silent return left it reading forever.
  */
 function porcelain(cwd: string, done: (counted: Counted | null) => void): void {
+  const now = Date.now();
+  evictUnasked(now);
+  asked.set(cwd, now);
   const cached = counts.get(cwd);
-  if (cached && Date.now() - cached.at < COUNT_TTL_MS) {
+  if (cached && now - cached.at < COUNT_TTL_MS) {
     done(cached);
-    return;
-  }
-  if (!existsSync(cwd)) {
-    done(cached ?? null);                        // whatever is known, even if it is nothing
     return;
   }
   const queue = waiting.get(cwd);
@@ -117,17 +133,26 @@ function porcelain(cwd: string, done: (counted: Counted | null) => void): void {
     return;
   }
   waiting.set(cwd, [done]);
+  // No existsSync first: on an unreachable share it waited out the SMB timeout on the window's
+  // thread. git fails on a missing folder by itself, asynchronously, and the check moves there.
   execFile(
     "git",
     ["--no-optional-locks", "status", "--porcelain", "--untracked-files=normal"],
     { cwd, timeout: STATUS_TIMEOUT_MS, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
     (error, stdout) => {
-      const callers = waiting.get(cwd) ?? [];
-      waiting.delete(cwd);
-      // Null is "no answer": no git on PATH, not a repository, or it took too long.
-      const counted = error ? null : { at: Date.now(), dirty: countDirty(stdout), statuses: parsePorcelain(stdout) };
-      if (counted) counts.set(cwd, counted);
-      for (const caller of callers) caller(counted);
+      const finish = (counted: Counted | null): void => {
+        const callers = waiting.get(cwd) ?? [];
+        waiting.delete(cwd);
+        if (counted && !error) counts.set(cwd, counted);
+        for (const caller of callers) caller(counted);
+      };
+      if (!error) {
+        finish({ at: Date.now(), dirty: countDirty(stdout), statuses: parsePorcelain(stdout) });
+        return;
+      }
+      // Null is "no answer": no git on PATH, not a repository, or it took too long. A folder that is
+      // not there is answered with whatever is known, even if it is nothing — as it always was.
+      access(cwd, (missing) => finish(missing ? counts.get(cwd) ?? null : null));
     },
   );
 }

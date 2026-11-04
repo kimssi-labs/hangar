@@ -199,6 +199,29 @@ describe("a window's chrome", () => {
     expect(window.accents.at(-1)).toBe(SURFACE.dark);
   });
 
+  it("gives up retrying once a native call stays busy, instead of a timer that never stops", () => {
+    vi.useFakeTimers();
+    try {
+      const { chrome: c, window, corners } = chrome();
+      c.theme("dark");
+      corners.length = 0;
+      native.busy = 1;                              // a call that never returns
+      for (const event of ["show", "restore", "show"]) {
+        c.flush(true);
+        window.emit(event);
+      }
+      vi.advanceTimersByTime(60_000);
+      expect(vi.getTimerCount(), "no retry left spinning").toBe(0);
+      expect(corners).toEqual([]);
+      native.busy = 0;
+      window.emit("show");                          // the next frame event starts over
+      vi.runAllTimers();
+      expect(corners.at(-1)).toBe(DWMWCP_DONOTROUND);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("still colours the border where there is no DWM binding", () => {
     const window = new FakeWindow();
     const c = new WindowChrome(window as unknown as Electron.BrowserWindow, null, () => 1, "win32");
