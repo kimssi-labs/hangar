@@ -14,6 +14,7 @@ import { cpus, freemem, totalmem } from "node:os";
 
 import type { ProcessRow } from "../core/metrics.js";
 import { liveClockGhz } from "./cpuClock.js";
+import { handleCalls, nativeBinding, PROCESS_QUERY_LIMITED_INFORMATION } from "./native.js";
 
 /** Busy time of one process since it started, and what it is holding in memory right now. */
 export interface ProcessUsage {
@@ -34,7 +35,6 @@ export interface MachineReading {
 // -- Windows ------------------------------------------------------------------------------------
 
 const TH32CS_SNAPPROCESS = 0x00000002;
-const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
 const PROCESS_VM_READ = 0x0010;
 const INVALID_HANDLE = -1;
 /** FILETIME counts 100-nanosecond ticks; 10,000 of them make a millisecond. */
@@ -45,101 +45,88 @@ interface WinApi {
   usage: (pid: number) => ProcessUsage | null;
 }
 
-let winApi: WinApi | null | undefined;
+const loadWindows = nativeBinding<WinApi>("native metrics", (koffi) => {
+  const kernel32 = koffi.load("kernel32.dll");
 
-function loadWindows(): WinApi | null {
-  if (winApi !== undefined) return winApi;
-  if (process.platform !== "win32") return (winApi = null);
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const koffi = require("koffi") as typeof import("koffi");
-    const kernel32 = koffi.load("kernel32.dll");
+  const PROCESSENTRY32W = koffi.struct("PROCESSENTRY32W", {
+    dwSize: "uint32", cntUsage: "uint32", th32ProcessID: "uint32", th32DefaultHeapID: "uintptr",
+    th32ModuleID: "uint32", cntThreads: "uint32", th32ParentProcessID: "uint32",
+    pcPriClassBase: "int32", dwFlags: "uint32", szExeFile: koffi.array("uint16", 260),
+  });
+  const FILETIME = koffi.struct("FILETIME", { dwLowDateTime: "uint32", dwHighDateTime: "uint32" });
+  // Only the first three fields are read; the rest keeps the size right for `cb`.
+  const PROCESS_MEMORY_COUNTERS = koffi.struct("PROCESS_MEMORY_COUNTERS", {
+    cb: "uint32", PageFaultCount: "uint32",
+    PeakWorkingSetSize: "uintptr", WorkingSetSize: "uintptr",
+    QuotaPeakPagedPoolUsage: "uintptr", QuotaPagedPoolUsage: "uintptr",
+    QuotaPeakNonPagedPoolUsage: "uintptr", QuotaNonPagedPoolUsage: "uintptr",
+    PagefileUsage: "uintptr", PeakPagefileUsage: "uintptr",
+  });
 
-    const PROCESSENTRY32W = koffi.struct("PROCESSENTRY32W", {
-      dwSize: "uint32", cntUsage: "uint32", th32ProcessID: "uint32", th32DefaultHeapID: "uintptr",
-      th32ModuleID: "uint32", cntThreads: "uint32", th32ParentProcessID: "uint32",
-      pcPriClassBase: "int32", dwFlags: "uint32", szExeFile: koffi.array("uint16", 260),
-    });
-    const FILETIME = koffi.struct("FILETIME", { dwLowDateTime: "uint32", dwHighDateTime: "uint32" });
-    // Only the first three fields are read; the rest keeps the size right for `cb`.
-    const PROCESS_MEMORY_COUNTERS = koffi.struct("PROCESS_MEMORY_COUNTERS", {
-      cb: "uint32", PageFaultCount: "uint32",
-      PeakWorkingSetSize: "uintptr", WorkingSetSize: "uintptr",
-      QuotaPeakPagedPoolUsage: "uintptr", QuotaPagedPoolUsage: "uintptr",
-      QuotaPeakNonPagedPoolUsage: "uintptr", QuotaNonPagedPoolUsage: "uintptr",
-      PagefileUsage: "uintptr", PeakPagefileUsage: "uintptr",
-    });
+  const CreateToolhelp32Snapshot = kernel32.func("__stdcall", "CreateToolhelp32Snapshot", "intptr", ["uint32", "uint32"]);
+  // The entry is handed over as raw memory and only the two pids are read out of it: declared as the
+  // struct, koffi converted every entry both ways, its 260-character name into a 260-number array.
+  const Process32FirstW = kernel32.func("__stdcall", "Process32FirstW", "bool", ["intptr", "void *"]);
+  const Process32NextW = kernel32.func("__stdcall", "Process32NextW", "bool", ["intptr", "void *"]);
+  const ENTRY_SIZE = koffi.sizeof(PROCESSENTRY32W);
+  const PID_AT = koffi.offsetof(PROCESSENTRY32W, "th32ProcessID");
+  const PARENT_AT = koffi.offsetof(PROCESSENTRY32W, "th32ParentProcessID");
+  const entry = Buffer.alloc(ENTRY_SIZE);
+  const { OpenProcess, CloseHandle } = handleCalls(kernel32);
+  const GetProcessTimes = kernel32.func("__stdcall", "GetProcessTimes", "bool", [
+    "intptr", koffi.out(koffi.pointer(FILETIME)), koffi.out(koffi.pointer(FILETIME)),
+    koffi.out(koffi.pointer(FILETIME)), koffi.out(koffi.pointer(FILETIME)),
+  ]);
+  // K32-prefixed: the psapi entry point that lives in kernel32 on every supported Windows.
+  const GetProcessMemoryInfo = kernel32.func("__stdcall", "K32GetProcessMemoryInfo", "bool", [
+    "intptr", koffi.out(koffi.pointer(PROCESS_MEMORY_COUNTERS)), "uint32",
+  ]);
 
-    const CreateToolhelp32Snapshot = kernel32.func("__stdcall", "CreateToolhelp32Snapshot", "intptr", ["uint32", "uint32"]);
-    // The entry is handed over as raw memory and only the two pids are read out of it: declared as the
-    // struct, koffi converted every entry both ways, its 260-character name into a 260-number array.
-    const Process32FirstW = kernel32.func("__stdcall", "Process32FirstW", "bool", ["intptr", "void *"]);
-    const Process32NextW = kernel32.func("__stdcall", "Process32NextW", "bool", ["intptr", "void *"]);
-    const ENTRY_SIZE = koffi.sizeof(PROCESSENTRY32W);
-    const PID_AT = koffi.offsetof(PROCESSENTRY32W, "th32ProcessID");
-    const PARENT_AT = koffi.offsetof(PROCESSENTRY32W, "th32ParentProcessID");
-    const entry = Buffer.alloc(ENTRY_SIZE);
-    const CloseHandle = kernel32.func("__stdcall", "CloseHandle", "bool", ["intptr"]);
-    const OpenProcess = kernel32.func("__stdcall", "OpenProcess", "intptr", ["uint32", "bool", "uint32"]);
-    const GetProcessTimes = kernel32.func("__stdcall", "GetProcessTimes", "bool", [
-      "intptr", koffi.out(koffi.pointer(FILETIME)), koffi.out(koffi.pointer(FILETIME)),
-      koffi.out(koffi.pointer(FILETIME)), koffi.out(koffi.pointer(FILETIME)),
-    ]);
-    // K32-prefixed: the psapi entry point that lives in kernel32 on every supported Windows.
-    const GetProcessMemoryInfo = kernel32.func("__stdcall", "K32GetProcessMemoryInfo", "bool", [
-      "intptr", koffi.out(koffi.pointer(PROCESS_MEMORY_COUNTERS)), "uint32",
-    ]);
+  const blankTime = { dwLowDateTime: 0, dwHighDateTime: 0 };
+  const filetimeMs = (t: { dwLowDateTime: number; dwHighDateTime: number }): number =>
+    (t.dwHighDateTime * 4294967296 + t.dwLowDateTime) / TICKS_PER_MS;
 
-    const blankTime = { dwLowDateTime: 0, dwHighDateTime: 0 };
-    const filetimeMs = (t: { dwLowDateTime: number; dwHighDateTime: number }): number =>
-      (t.dwHighDateTime * 4294967296 + t.dwLowDateTime) / TICKS_PER_MS;
-
-    winApi = {
-      table: () => {
-        const snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (snapshot === INVALID_HANDLE) return [];
-        const rows: ProcessRow[] = [];
-        try {
-          entry.writeUInt32LE(ENTRY_SIZE, 0);             // dwSize, the first field
-          let more = Process32FirstW(snapshot, entry);
-          while (more) {
-            rows.push({ pid: entry.readUInt32LE(PID_AT), parentPid: entry.readUInt32LE(PARENT_AT), cpu: 0, memoryBytes: 0 });
-            entry.writeUInt32LE(ENTRY_SIZE, 0);
-            more = Process32NextW(snapshot, entry);
-          }
-        } finally {
-          CloseHandle(snapshot);
+  return {
+    table: () => {
+      const snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+      if (snapshot === INVALID_HANDLE) return [];
+      const rows: ProcessRow[] = [];
+      try {
+        entry.writeUInt32LE(ENTRY_SIZE, 0);             // dwSize, the first field
+        let more = Process32FirstW(snapshot, entry);
+        while (more) {
+          rows.push({ pid: entry.readUInt32LE(PID_AT), parentPid: entry.readUInt32LE(PARENT_AT), cpu: 0, memoryBytes: 0 });
+          entry.writeUInt32LE(ENTRY_SIZE, 0);
+          more = Process32NextW(snapshot, entry);
         }
-        return rows;
-      },
-      usage: (pid) => {
-        const handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, false, pid);
-        if (!handle || handle === 0) return null;
-        try {
-          const creation = { ...blankTime }, exit = { ...blankTime };
-          const kernel = { ...blankTime }, user = { ...blankTime };
-          if (!GetProcessTimes(handle, creation, exit, kernel, user)) return null;
-          const counters = {
-            cb: koffi.sizeof(PROCESS_MEMORY_COUNTERS), PageFaultCount: 0,
-            PeakWorkingSetSize: 0, WorkingSetSize: 0, QuotaPeakPagedPoolUsage: 0, QuotaPagedPoolUsage: 0,
-            QuotaPeakNonPagedPoolUsage: 0, QuotaNonPagedPoolUsage: 0, PagefileUsage: 0, PeakPagefileUsage: 0,
-          };
-          const gotMemory = GetProcessMemoryInfo(handle, counters, koffi.sizeof(PROCESS_MEMORY_COUNTERS));
-          return {
-            busyMs: filetimeMs(kernel) + filetimeMs(user),
-            memoryBytes: gotMemory ? Number(counters.WorkingSetSize) : 0,
-          };
-        } finally {
-          CloseHandle(handle);
-        }
-      },
-    };
-    return winApi;
-  } catch (error) {
-    console.error("[hangar] native metrics unavailable:", (error as Error).message);
-    return (winApi = null);
-  }
-}
+      } finally {
+        CloseHandle(snapshot);
+      }
+      return rows;
+    },
+    usage: (pid) => {
+      const handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, false, pid);
+      if (!handle) return null;
+      try {
+        const creation = { ...blankTime }, exit = { ...blankTime };
+        const kernel = { ...blankTime }, user = { ...blankTime };
+        if (!GetProcessTimes(handle, creation, exit, kernel, user)) return null;
+        const counters = {
+          cb: koffi.sizeof(PROCESS_MEMORY_COUNTERS), PageFaultCount: 0,
+          PeakWorkingSetSize: 0, WorkingSetSize: 0, QuotaPeakPagedPoolUsage: 0, QuotaPagedPoolUsage: 0,
+          QuotaPeakNonPagedPoolUsage: 0, QuotaNonPagedPoolUsage: 0, PagefileUsage: 0, PeakPagefileUsage: 0,
+        };
+        const gotMemory = GetProcessMemoryInfo(handle, counters, koffi.sizeof(PROCESS_MEMORY_COUNTERS));
+        return {
+          busyMs: filetimeMs(kernel) + filetimeMs(user),
+          memoryBytes: gotMemory ? Number(counters.WorkingSetSize) : 0,
+        };
+      } finally {
+        CloseHandle(handle);
+      }
+    },
+  };
+});
 
 // -- Linux --------------------------------------------------------------------------------------
 

@@ -10,6 +10,8 @@
  * terminal as Ctrl+Alt+V, which is not paste, so nothing happens. So we wait for the user's hand to
  * come off the keys before sending anything.
  */
+import { nativeBinding } from "./native.js";
+
 const VK_SHIFT = 0x10;
 const VK_MENU = 0x12;            // Alt
 const VK_LWIN = 0x5b;
@@ -28,30 +30,18 @@ const POLL_MS = 15;
 type KeyEvent = (vk: number, scan: number, flags: number, extra: number) => void;
 type KeyState = (vk: number) => number;
 
-let sendKey: KeyEvent | null | undefined;
-let keyState: KeyState | null = null;
-
-function loadKeyboard(): KeyEvent | null {
-  if (sendKey !== undefined) return sendKey;
-  if (process.platform !== "win32") return (sendKey = null);
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const koffi = require("koffi") as typeof import("koffi");
-    const user32 = koffi.load("user32.dll");
-    sendKey = user32.func("__stdcall", "keybd_event", "void", ["uint8", "uint8", "uint32", "uintptr"]);
-    keyState = user32.func("__stdcall", "GetAsyncKeyState", "int16", ["int"]);
-    return sendKey;
-  } catch (error) {
-    console.error("[hangar] keyboard unavailable:", (error as Error).message);
-    return (sendKey = null);
-  }
-}
+const loadKeyboard = nativeBinding("keyboard", (koffi) => {
+  const user32 = koffi.load("user32.dll");
+  return {
+    sendKey: user32.func("__stdcall", "keybd_event", "void", ["uint8", "uint8", "uint32", "uintptr"]) as KeyEvent,
+    keyState: user32.func("__stdcall", "GetAsyncKeyState", "int16", ["int"]) as KeyState,
+  };
+});
 
 /** True while any modifier that would corrupt the paste is physically held down. */
-function modifiersHeld(): boolean {
-  if (!keyState) return false;
+function modifiersHeld(keyState: KeyState): boolean {
   // The high bit is "down now"; the low bit is "pressed since last asked", which we do not want.
-  return BLOCKING_MODIFIERS.some((vk) => (keyState!(vk) & 0x8000) !== 0);
+  return BLOCKING_MODIFIERS.some((vk) => (keyState(vk) & 0x8000) !== 0);
 }
 
 /**
@@ -76,9 +66,10 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 /** Send Ctrl+V to the foreground window, once the user's own keys are out of the way. */
 export async function sendPaste(): Promise<boolean> {
-  const key = loadKeyboard();
-  if (!key) return false;
-  await whenModifiersReleased(modifiersHeld, sleep);
+  const keyboard = loadKeyboard();
+  if (!keyboard) return false;
+  const { sendKey: key, keyState } = keyboard;
+  await whenModifiersReleased(() => modifiersHeld(keyState), sleep);
   key(VK_CONTROL, 0, 0, 0);
   key(VK_V, 0, 0, 0);
   key(VK_V, 0, KEYEVENTF_KEYUP, 0);

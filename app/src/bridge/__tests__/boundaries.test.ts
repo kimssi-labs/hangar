@@ -66,15 +66,18 @@ describe("feature boundaries", () => {
   });
 
   /**
-   * The window's frame (main/chrome.ts) is a leaf: it knows the theme and the platform, and nothing
-   * of where a band goes or what a feature does. Dock may ask it; it may not ask dock. This is what
-   * lets the border be changed — or left alone — without a geometry change reaching it.
+   * The window's frame (main/chrome.ts) is a leaf: it knows the theme and the platform (its native
+   * calls bind through main/native.ts, which imports nothing of ours), and nothing of where a band
+   * goes or what a feature does. Dock may ask it; it may not ask dock. This is what lets the border
+   * be changed — or left alone — without a geometry change reaching it.
    */
   it("keeps the window's frame (main/chrome.ts) a leaf below dock and every feature", () => {
     const text = readFileSync(join(SRC, "main", "chrome.ts"), "utf8");
     const specs = [...text.matchAll(IMPORT)].map((m) => m[1]!);
     expect(specs.filter((spec) => /features\/|\/dock\.js$|\/main\.js$/.test(spec))).toEqual([]);
-    expect(specs.filter((spec) => !/^(electron|node:|\.\.\/core\/)/.test(spec))).toEqual([]);
+    expect(specs.filter((spec) => !/^(electron|node:|\.\.\/core\/|\.\/native\.js$)/.test(spec))).toEqual([]);
+    const native = readFileSync(join(SRC, "main", "native.ts"), "utf8");
+    expect([...native.matchAll(IMPORT)].map((m) => m[1]!).filter((spec) => spec.startsWith("."))).toEqual([]);
   });
 
   it("keeps the chart primitives (renderer/components/Chart.tsx) free of every feature", () => {
