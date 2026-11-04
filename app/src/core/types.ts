@@ -167,6 +167,8 @@ export interface UiConfig {
   skills: boolean;
   /** Whether the side pane offers the account's Artifacts; off, nothing is asked of claude.ai. */
   artifacts: boolean;
+  /** The update question is not asked before this time (epoch ms) — its "not for a week" box. */
+  updateSnoozeUntil: number;
   /** Kept above every other window, the pin in the title bar — remembered across runs. */
   alwaysOnTop: boolean;
   /** The side pane's tab last shown. */

@@ -15,7 +15,8 @@ import {
   useProjects,
 } from "../features/projects/ui";
 import { useSettings } from "../features/settings/ui";
-import { useUpdates } from "../features/updates/ui";
+import { UpdatePrompt, useUpdates } from "../features/updates/ui";
+import { shouldPrompt, UPDATE_SNOOZE_MS } from "@core/updates";
 import { UsageGauges, useUsage } from "../features/usage/ui";
 import { MachineGauges, useMetrics } from "../features/metrics/ui";
 import { usePasteResults } from "../features/clipboard/ui";
@@ -94,6 +95,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const { settings, setSettings, load: loadSettings, save: saveSettings } = useSettings();
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
   const updates = useUpdates(info?.version);
+  /** The update question has had its answer this run; it is asked once a run at most. */
+  const [updateAsked, setUpdateAsked] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("dock");
   // The graphs' series and their readings live with the metrics feature; destructured so the
   // markup below reads as it did.
@@ -800,6 +803,21 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       </div>
 
       {dialog ? <Modal ask={dialog.ask} onDone={dialog.settle} /> : null}
+      {!dialog && settings && shouldPrompt(updates.state, {
+        now: Date.now(), snoozedUntil: settings.ui.updateSnoozeUntil, asked: updateAsked,
+      }) ? (
+        <UpdatePrompt
+          state={updates.state}
+          onAnswer={(yes, snooze) => {
+            setUpdateAsked(true);
+            if (snooze) void api.saveUi({ updateSnoozeUntil: Date.now() + UPDATE_SNOOZE_MS });
+            if (yes) {
+              updates.act("now");
+              notify({ ok: true, message: t("update.prompt.started") });
+            }
+          }}
+        />
+      ) : null}
 
       {toast ? (
         <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-sm shadow-lg ${

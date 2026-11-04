@@ -507,3 +507,39 @@ test("every session of the selected project is listed, with nothing to press to 
     await app.close();
   }
 });
+
+/**
+ * A newer version found as the app opens is asked about once: in words that fit what is happening
+ * with it, a yes that updates in place, and a box that keeps the question away for a week.
+ */
+test("the update question appears once, and 'not for a week' is remembered", async () => {
+  const home = fixture();
+  const push = (app: ElectronApplication, phase: string) => app.evaluate(({ BrowserWindow }, p) => {
+    const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))!;
+    win.webContents.send("update:push", { phase: p, current: "2.20.2", latest: "9.9.9", percent: 0, error: null, checkedAt: Date.now() });
+  }, phase);
+  const first = await launch(home);
+  try {
+    await push(first.app, "ready");
+    const dialog = first.page.getByRole("dialog", { name: "A new version of Hangar" });
+    await expect(dialog).toContainText("Hangar 9.9.9 has been downloaded. Restart now to update?");
+    await dialog.getByLabel("Don't show this for a week").check();
+    await dialog.getByRole("button", { name: "No" }).click();
+    await expect(dialog).toHaveCount(0);
+    await push(first.app, "available");                       // asked once a run
+    await first.page.waitForTimeout(500);
+    await expect(dialog).toHaveCount(0);
+    const until = (await first.page.evaluate(() => window.hangar.loadSettings())).ui.updateSnoozeUntil;
+    expect(until - Date.now(), "a week from now").toBeGreaterThan(6 * 24 * 3600 * 1000);
+  } finally {
+    await first.app.close();
+  }
+  const { app, page } = await launch(home);
+  try {
+    await push(app, "available");
+    await page.waitForTimeout(500);
+    await expect(page.getByRole("dialog", { name: "A new version of Hangar" }), "snoozed across a restart").toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});

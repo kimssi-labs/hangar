@@ -448,6 +448,23 @@ test("opens one window, with no title bar above the content", async () => {
 });
 
 /**
+ * The loading window appears with its words already in it. It used to be shown the moment it was
+ * made, and sat as an empty dark panel until its renderer had started and drawn "Starting…"
+ * (reported). Watched from the first moment it is visible: by then its page has painted, with text.
+ */
+test("the loading window is never seen empty", async () => {
+  const { app } = await launch(fixture());
+  try {
+    const timeline = await app.evaluate(() => (globalThis as { hangarSplash?: { painted: number; shown: number } }).hangarSplash ?? null);
+    expect(timeline, "the loading window kept its timeline").not.toBeNull();
+    expect(timeline!.painted, "its page painted").toBeGreaterThan(0);
+    expect(timeline!.shown, "shown only once it had painted").toBeGreaterThanOrEqual(timeline!.painted);
+  } finally {
+    await app.close();
+  }
+});
+
+/**
  * One Hangar. A second launch — the shortcut again, `claude --p` from another terminal — used to open
  * a second window: two bands fighting for one edge, two writers of one settings file. It now hands
  * over to the running one and leaves. The lock is per Claude home, which is also what lets this

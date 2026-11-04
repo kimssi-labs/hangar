@@ -25,6 +25,7 @@ export function register(ctx: MainContext, wire: Wire): UpdatesFeature {
     updateAction: (command) => {
       if (command === "check") return service.check(true);
       if (command === "download") return service.download();
+      if (command === "now") return service.updateNow();
       service.install();
       return service.current();
     },

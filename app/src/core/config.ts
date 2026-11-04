@@ -236,6 +236,7 @@ export class ConfigStore {
       keepIcons: raw["keepIcons"] !== false,      // same: kept unless it was turned off
       skills: raw["skills"] !== false,
       alwaysOnTop: raw["alwaysOnTop"] === true,             // off unless it was switched on
+      updateSnoozeUntil: Number.isFinite(Number(raw["updateSnoozeUntil"])) ? Math.max(0, Number(raw["updateSnoozeUntil"])) : 0,
       artifacts: raw["artifacts"] !== false,
       sidePane: SIDE_PANE_TABS.includes(raw["sidePane"] as SidePaneTab) ? (raw["sidePane"] as SidePaneTab) : "files",
       paneOpen: Array.isArray(raw["paneOpen"])

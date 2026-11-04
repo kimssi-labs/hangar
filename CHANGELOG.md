@@ -3,6 +3,17 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.21.0
+
+- **Hangar asks about a new version as it opens.** A few seconds after start it checks, and when a
+  newer version is out a small dialog says what is happening with it: found, downloading, or
+  downloaded and ready. Yes updates in place, restarting into the new version as soon as it has
+  been downloaded; no closes the dialog, and "Don't show this for a week" keeps it away for seven
+  days, across restarts. It is asked once a run, and not at all with updates set to manual.
+- **The loading window appears with its words.** It used to show as an empty dark panel for a
+  moment before "Starting…" was drawn; it now appears once its first frame is painted, with the
+  current step already in it.
+
 ## v2.20.2
 
 - **The window opens inside the screen.** A size and place remembered on a large monitor were

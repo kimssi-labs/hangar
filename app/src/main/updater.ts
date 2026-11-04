@@ -46,6 +46,8 @@ export class UpdateService {
   private updater: Updater | null = null;
   private timer: NodeJS.Timeout | null = null;
   private config: UpdateConfig;
+  /** "Update now" was answered yes before the download had finished: restart the moment it has. */
+  private installWhenReady = false;
 
   constructor(
     config: UpdateConfig,
@@ -110,6 +112,17 @@ export class UpdateService {
     return this.state;
   }
 
+  /**
+   * The update question's yes: restart into the new version — now if it is downloaded, otherwise as
+   * soon as the download (started here if it had not been) finishes.
+   */
+  async updateNow(): Promise<UpdateState> {
+    this.installWhenReady = true;
+    if (this.state.phase === "ready") this.install();
+    else if (this.state.phase === "available") await this.download();
+    return this.state;
+  }
+
   /** Quit and let the installer run. Does nothing until an update has been downloaded. */
   install(): void {
     if (this.state.phase !== "ready") return;
@@ -150,6 +163,7 @@ export class UpdateService {
       });
       autoUpdater.on("update-downloaded", (info: { version?: string }) => {
         this.set({ phase: "ready", latest: info?.version ?? null, percent: 100 });
+        if (this.installWhenReady) this.install();
       });
       autoUpdater.on("error", (error: Error) => {
         this.set({ phase: "failed", error: message(error), checkedAt: Date.now() });
