@@ -11,7 +11,7 @@
 import { clipboard, type NativeImage } from "electron";
 import { readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { clipsToPrune, isTerminalHost, shouldAddPath } from "../core/clipboardRules.js";
+import { clipsToPrune, HTML_FORMAT, IMAGE_READ_TRIES, isTerminalHost, shouldAddPath } from "../core/clipboardRules.js";
 import { foregroundExecutable } from "./foreground.js";
 
 /** Cheap enough to run often; a person notices a screenshot taking a second to be ready. */
@@ -24,15 +24,22 @@ type SequenceNumber = () => number;
 /** The screenshot last copied: kept so the clipboard can be given the picture back, or the path. */
 interface Clip {
   image: NativeImage;
+  /** The HTML `<img>` a web view copied with the picture, carried through so nothing is lost. */
+  html: string | null;
   file: string;
   /** The clipboard holds the path beside the picture right now. */
   pathShown: boolean;
 }
 
+/** The format an OLE object (an Office chart or shape) puts on the clipboard. */
+const OBJECT_DESCRIPTOR = "Object Descriptor";
+
 let timer: NodeJS.Timeout | null = null;
 let lastHandled = 0;
 let sequenceNumber: SequenceNumber | null | undefined;
 let clip: Clip | null = null;
+/** The copy whose image read back empty, and how many times; see IMAGE_READ_TRIES. */
+let emptyRead = { sequence: 0, count: 0 };
 
 /**
  * Windows' clipboard sequence number: one call, no clipboard opened, changes on every write.
@@ -87,32 +94,50 @@ export function stopClipboardWatch(): void {
   clip = null;
 }
 
+/** Whether an OLE object came with the copy; asked only when an image is there to be taken. */
+function hasOfficeObject(): boolean {
+  try {
+    return clipboard.has(OBJECT_DESCRIPTOR);
+  } catch {
+    return false;
+  }
+}
+
 function tick(sequence: SequenceNumber, options: ClipboardWatchOptions): void {
   const now = sequence();
   if (now !== lastHandled) {
     // Someone has written to the clipboard since we last looked: whatever we were minding is gone.
     clip = null;
-    if (!shouldAddPath({ formats: clipboard.availableFormats(), sequence: now }, lastHandled)) {
+    const formats = clipboard.availableFormats();
+    const officeObject = formats.some((format) => format.startsWith("image/")) && hasOfficeObject();
+    if (!shouldAddPath({ formats, sequence: now, officeObject }, lastHandled)) {
       lastHandled = now;                       // not ours, but we have seen it
       return;
     }
     const image = clipboard.readImage();
+    if (image.isEmpty()) {
+      // Held open by someone else for the moment (clipboard history, sync): look again next tick.
+      // ponytail: one counter for the one copy in flight; a newer copy simply starts it again.
+      if (emptyRead.sequence !== now) emptyRead = { sequence: now, count: 0 };
+      if (++emptyRead.count < IMAGE_READ_TRIES) return;
+    }
     lastHandled = now;
     if (image.isEmpty()) return;
     const file = options.save(image);
     if (!file) return;
-    clip = { image, file, pathShown: false };
+    const html = formats.includes(HTML_FORMAT) ? clipboard.readHTML() || null : null;
+    clip = { image, html, file, pathShown: false };
     prune(options.clipsDir);
   }
   if (!clip) return;
   // The path rides along only while a terminal is in front; anywhere else the picture is on its own.
   const inFront = (options.terminalInFront ?? terminalInFront)();
   if (inFront && !clip.pathShown) {
-    clipboard.write({ text: clip.file, image: clip.image });
+    clipboard.write({ text: clip.file, image: clip.image, ...(clip.html ? { html: clip.html } : {}) });
     clip.pathShown = true;
     lastHandled = sequence();                  // our own write, so we do not react to it
   } else if (!inFront && clip.pathShown) {
-    clipboard.writeImage(clip.image);
+    clipboard.write({ image: clip.image, ...(clip.html ? { html: clip.html } : {}) });
     clip.pathShown = false;
     lastHandled = sequence();
   }

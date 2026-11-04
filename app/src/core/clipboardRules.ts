@@ -33,20 +33,40 @@ export interface ClipboardState {
   formats: string[];
   /** Windows' clipboard sequence number, which changes on every write by anyone. */
   sequence: number;
+  /**
+   * An OLE object came with it (Office charts and shapes offer "Object Descriptor"). Turning that
+   * into a bare picture on a visit to a terminal would make it paste back into Office as a bitmap.
+   */
+  officeObject?: boolean;
 }
 
 /**
- * True when this clipboard holds a bare image that we have not already handled.
+ * True when this clipboard holds an image, with nothing else that matters, not already handled.
  *
- * An image that already comes with text is left alone: either someone else put both there, or we
- * did, and writing again would loop.
+ * An image that comes with text is left alone: either someone else put both there (spreadsheet
+ * cells, a document selection, a file with its thumbnail), or we did, and writing again would loop.
+ * HTML alone does not count as text: a web view (New Teams, browsers, Electron chat apps) copies a
+ * picture together with an HTML `<img>` of it, which Electron reports as text/html — measured on a
+ * Teams copy — and that copy is still just a picture.
  */
 export function shouldAddPath(state: ClipboardState, lastHandled: number): boolean {
-  if (state.sequence === lastHandled) return false;
+  if (state.sequence === lastHandled || state.officeObject) return false;
   const hasImage = state.formats.some((format) => format.startsWith("image/"));
-  const hasText = state.formats.some((format) => format.startsWith("text/"));
+  const hasText = state.formats.some((format) => format.startsWith("text/") && format !== HTML_FORMAT);
   return hasImage && !hasText;
 }
+
+/** How Electron names the clipboard's "HTML Format". */
+export const HTML_FORMAT = "text/html";
+
+/**
+ * How many ticks in a row an image may read back empty before the copy is given up.
+ *
+ * Right after a copy, clipboard history, cloud sync or a clipboard manager may be holding the
+ * clipboard open to read it, and Electron's read gives up after about 25 ms. Looking again on the
+ * next ticks catches the copy instead of losing it.
+ */
+export const IMAGE_READ_TRIES = 3;
 
 /**
  * The saved screenshots to delete, oldest first.
