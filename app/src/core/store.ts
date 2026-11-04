@@ -5,12 +5,13 @@
  * real folder only exists inside its transcripts, a session's title can come from three places, and
  * a "live" session is a pid that still exists — the registry file outlives the process.
  */
-import { closeSync, mkdirSync, openSync, readSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync, appendFileSync, type Stats } from "node:fs";
+import { closeSync, mkdirSync, openSync, readSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync, appendFileSync, type Stats } from "node:fs";
 import { createHash } from "node:crypto";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 
 import { ConfigStore, fileSignature } from "./config.js";
+import { readJson } from "./json.js";
 import { encodeProjectPath, homePaths, type HomePaths } from "./paths.js";
 import { foldClears, type SessionWithOrigin } from "./sessionChain.js";
 import { type RegistryEntry, SessionLinks } from "./sessionLinks.js";
@@ -187,14 +188,6 @@ function parseLines(text: string, limit: number): unknown[] {
   return out;
 }
 
-function readJsonFile<T>(file: string, fallback: T): T {
-  try {
-    return JSON.parse(readFileSync(file, "utf8")) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 /** A transcript's session id is its file name. */
 function idOf(file: string): string {
   return file.slice(file.lastIndexOf(sep()) + 1, -TRANSCRIPT_EXT.length);
@@ -258,7 +251,7 @@ export class Store {
     const entries: RegistryEntry[] = [];
     for (const file of files) {
       if (!file.endsWith(".json")) continue;
-      const data = readJsonFile<{ sessionId?: string; pid?: number; procStart?: string; status?: string }>(
+      const data = readJson<{ sessionId?: string; pid?: number; procStart?: string; status?: string }>(
         join(this.paths.liveSessions, file), {});
       const pid = Number(data.pid);
       if (data.sessionId && Number.isFinite(pid)) {
@@ -288,7 +281,7 @@ export class Store {
 
   /** What Claude Code last wrote about the session running as `pid` — "busy", "idle" — or nothing known. */
   sessionStatus(pid: number): string | null {
-    const data = readJsonFile<{ status?: string }>(join(this.paths.liveSessions, `${pid}.json`), {});
+    const data = readJson<{ status?: string }>(join(this.paths.liveSessions, `${pid}.json`), {});
     return typeof data.status === "string" ? data.status : null;
   }
 
@@ -427,7 +420,7 @@ export class Store {
     const sig = fileSignature(this.paths.claudeJson);
     let fromClaude = this.claudeJson?.signature === sig && sig !== null ? this.claudeJson.value : null;
     if (!fromClaude) {
-      const data = readJsonFile<{ projects?: Record<string, unknown> }>(this.paths.claudeJson, {});
+      const data = readJson<{ projects?: Record<string, unknown> }>(this.paths.claudeJson, {});
       fromClaude = new Map<string, string>();
       for (const path of Object.keys(data.projects ?? {})) {
         const encoded = encodeProjectPath(path);
@@ -444,7 +437,7 @@ export class Store {
   }
 
   customTitle(dir: string, sessionId: string): string | null {
-    const data = readJsonFile<{ customTitle?: string }>(join(dir, sessionId, CUSTOM_TITLE_FILE), {});
+    const data = readJson<{ customTitle?: string }>(join(dir, sessionId, CUSTOM_TITLE_FILE), {});
     return data.customTitle || null;
   }
 

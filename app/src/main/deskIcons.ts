@@ -12,10 +12,11 @@
  * helper. "Auto arrange" makes Explorer ignore positions, so with it on nothing is touched.
  */
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { type Box, type DeskIcon, movedByUser, placeAround } from "../core/deskIcons.js";
+import { readJson } from "../core/json.js";
 import type { DockEdge } from "../core/types.js";
 import { helperExecutable, type HelperSpec } from "./liveSession.js";
 
@@ -353,15 +354,10 @@ export class IconKeeper {
   }
 
   private load(): Kept | null {
-    try {
-      if (!existsSync(this.file)) return null;
-      const kept = JSON.parse(readFileSync(this.file, "utf8")) as Kept;
-      if (!Array.isArray(kept.original)) return null;
-      // Whatever happened since, the positions on screen now are not the ones this file last saw.
-      return { original: kept.original, spacing: kept.spacing ?? { x: 0, y: 0 }, placed: null };
-    } catch {
-      return null;
-    }
+    const kept = readJson<Partial<Kept>>(this.file, {});
+    if (!Array.isArray(kept.original)) return null;
+    // Whatever happened since, the positions on screen now are not the ones this file last saw.
+    return { original: kept.original, spacing: kept.spacing ?? { x: 0, y: 0 }, placed: null };
   }
 
   private save(): void {

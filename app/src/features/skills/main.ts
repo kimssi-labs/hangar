@@ -10,7 +10,7 @@ import { shell } from "electron";
 import type { Wire } from "../../bridge/build.js";
 import { homePaths } from "../../core/paths.js";
 import { enabledPlugins, parseSkill, pluginInstalls, sameDir, type SkillGroup, type SkillInfo, sortSkills } from "../../core/skills.js";
-import { readStatusJson } from "../../core/status.js";
+import { readJson } from "../../core/json.js";
 import type { ActionResult } from "../../main/ipc.js";
 import { skillsContract } from "./contract.js";
 
@@ -46,8 +46,8 @@ function listSkills(cwd: string | null): SkillGroup[] {
     groups.push({ source: "project", plugin: "", skills: own });
   }
   groups.push({ source: "user", plugin: "", skills: skillsIn(paths.skills) });
-  const enabled = enabledPlugins(readStatusJson<unknown>(paths.settings, null));
-  for (const { plugin, path } of pluginInstalls(readStatusJson<unknown>(paths.installedPlugins, null), enabled)) {
+  const enabled = enabledPlugins(readJson<unknown>(paths.settings, null));
+  for (const { plugin, path } of pluginInstalls(readJson<unknown>(paths.installedPlugins, null), enabled)) {
     groups.push({ source: "plugin", plugin, skills: skillsIn(join(path, "skills"), `${plugin}:`) });
   }
   return groups.filter((group) => group.source === "project" || group.skills.length > 0);

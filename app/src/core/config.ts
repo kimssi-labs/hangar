@@ -4,13 +4,14 @@
  * The terminal version of this app wrote the same file and the same section names, so an existing
  * setup keeps its dock, status-line and launch choices when it moves to the desktop app.
  */
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, SIDE_PANE_TABS, STACK_BELOW, THEME_MODES } from "./constants.js";
 import { AUTO_DEFAULTS, AUTO_MODES, type AutoConfig } from "./gitAuto.js";
 import { MERGE_STRATEGIES, SYNC_DEFAULTS } from "./gitSync.js";
 import { LANGUAGES, type Language } from "./i18n.js";
+import { readJson } from "./json.js";
 import { homePaths } from "./paths.js";
 import type { DockConfig, DockEdge, GitConfig, LaunchConfig, LayoutMode, PermissionMode, ShellChoice, SidePaneTab, StatusConfig, ThemeMode, UiConfig, UpdateConfig } from "./types.js";
 import { ARTIFACT_SCOPES, type ArtifactScope } from "./artifactOrigins.js";
@@ -22,17 +23,6 @@ export const DOCK_FLOOR_KEY = "floor";
 export { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, SIDE_PANE_TABS, STACK_BELOW, THEME_MODES } from "./constants.js";
 
 type Json = Record<string, unknown>;
-
-function readJson(file: string): Json {
-  try {
-    // Strip a BOM first: PowerShell's `-Encoding utf8` writes one, and JSON.parse throws on it —
-    // which would silently look like "no settings yet" and reset every choice in the file.
-    const parsed: unknown = JSON.parse(readFileSync(file, "utf8").replace(/^﻿/, ""));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Json) : {};
-  } catch {
-    return {};                                   // absent or hand-edited into nonsense: use defaults
-  }
-}
 
 /** How long a just-written file's mtime is not trusted: two writes in one clock tick share it. */
 const SETTLE_MS = 2_000;
@@ -65,7 +55,7 @@ function readJsonCached(file: string): Json {
   const signature = fileSignature(file);
   const hit = parsed.get(file);
   if (signature !== null && hit?.signature === signature) return structuredClone(hit.value);
-  const value = readJson(file);
+  const value = asRecord(readJson<unknown>(file, {}));   // absent or hand-edited into nonsense: defaults
   if (signature === null) parsed.delete(file);
   else parsed.set(file, { signature, value: structuredClone(value) });
   return value;
