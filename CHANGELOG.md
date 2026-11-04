@@ -3,6 +3,15 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.21.1
+
+- **Minimising a docked band gives the screen edge back at once.** The caption's minimise button
+  now releases the reserved strip first and minimises in the same moment, instead of waiting for
+  the minimise animation to finish; the edge comes back in about a quarter of a second (it took
+  0.7 to 1.1). Clicking the taskbar button docks it again as before. Releasing no longer reads the
+  desktop icons first: the arrangement kept when docking is put back as it was, so an icon moved
+  by hand while docked returns to its place from before.
+
 ## v2.21.0
 
 - **Hangar asks about a new version as it opens.** A few seconds after start it checks, and when a

@@ -53,7 +53,8 @@ const WS_EX_APPWINDOW = 0x00040000;
  * way out.
  */
 export interface IconHooks {
-  before(): Promise<void>;
+  /** `look` false: only settle what is pending, read nothing — the edge is wanted back at once. */
+  before(look?: boolean): Promise<void>;
   after(at: { band: Rectangle; edge: DockEdge; monitor: Rectangle } | null): void;
   quitting(): void;
 }
@@ -916,7 +917,10 @@ export class Dock {
     if (process.platform === "win32") {
       const api = this.registered ? loadWin32() : null;
       if (api) {
-        await this.icons?.before();
+        // No look at the desktop first: reading it starts a helper process, which held the edge for
+        // half a second more on every minimise (measured 1.07 s against 0.69 s). The arrangement to
+        // go back to is already kept; only icons moved by hand while docked are not noticed now.
+        await this.icons?.before(false);
         const hwnd = this.hwnd;
         this.registered = false;                    // nothing may re-enter while the shell works
         this.reserved = null;

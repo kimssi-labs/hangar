@@ -358,7 +358,7 @@ function registerIpc(): void {
 
   ipcMain.handle(CHANNEL.windowCommand, async (_event, command: WindowCommand) => {
     if (!window || window.isDestroyed()) return windowState();
-    if (command === "minimize") window.minimize();
+    if (command === "minimize") dockFeature.minimize();
     else if (command === "close") window.close();
     else if (command === "pin") {
       const onTop = !window.isAlwaysOnTop();
