@@ -1,17 +1,14 @@
 /**
- * Every keyboard shortcut, in one table.
+ * What a key means inside a list.
  *
- * The terminal version was driven entirely from the keyboard and that has to survive the move to a
- * window: the same keys do the same things here, and the mouse is an addition rather than a
- * replacement. Keeping the mapping pure means the bindings are testable without a browser.
+ * Every list in the window answers the same keys: the arrows, Page Up/Down and Home/End move, Enter
+ * opens, Escape goes back. None of them is a shortcut — a key means something only to the list that
+ * has the focus, so a letter typed into any field is a letter. Keeping the table pure keeps it
+ * testable without a browser.
  */
-export type Screen = "projects" | "sessions" | "settings";
+export type Movement = "moveUp" | "moveDown" | "pageUp" | "pageDown" | "moveFirst" | "moveLast";
 
-export type Action =
-  | "moveUp" | "moveDown" | "pageUp" | "pageDown" | "moveFirst" | "moveLast"
-  | "enter" | "openNewWindow" | "newSession" | "pasteImage"
-  | "rename" | "delete" | "back" | "refresh" | "settings" | "quit"
-  | "search" | "help" | "nextSection" | "previousSection";
+export type ListAction = Movement | "open" | "back" | "rename" | "delete";
 
 export interface KeyEventLike {
   key: string;
@@ -21,27 +18,10 @@ export interface KeyEventLike {
   altKey?: boolean;
 }
 
-/** Shown in the help overlay; the order is the order they appear there. */
-export const SHORTCUTS: { keys: string; action: Action; description: string; screens: Screen[] }[] = [
-  { keys: "↑ ↓", action: "moveDown", description: "Move through the list", screens: ["projects", "sessions", "settings"] },
-  { keys: "PgUp PgDn", action: "pageDown", description: "Move a page at a time", screens: ["projects", "sessions"] },
-  { keys: "Home End", action: "moveLast", description: "First / last row", screens: ["projects", "sessions"] },
-  { keys: "Enter", action: "enter", description: "Open sessions / resume a session", screens: ["projects", "sessions"] },
-  { keys: "O", action: "openNewWindow", description: "Open in a new window", screens: ["projects", "sessions"] },
-  { keys: "N", action: "newSession", description: "Start a new session in the project", screens: ["projects", "sessions"] },
-  { keys: "V", action: "pasteImage", description: "Save the clipboard image, copy its path", screens: ["projects", "sessions"] },
-  { keys: "F2", action: "rename", description: "Rename (alias for a project)", screens: ["projects", "sessions"] },
-  { keys: "Del", action: "delete", description: "Delete, after a confirmation", screens: ["projects", "sessions"] },
-  { keys: "← Esc", action: "back", description: "Back to the projects", screens: ["sessions"] },
-  { keys: "Tab", action: "nextSection", description: "Next settings section", screens: ["settings"] },
-  { keys: "S", action: "settings", description: "Settings", screens: ["projects", "sessions"] },
-  { keys: "F5", action: "refresh", description: "Refresh", screens: ["projects", "sessions", "settings"] },
-  { keys: "/", action: "search", description: "Search", screens: ["projects", "sessions"] },
-  { keys: "?", action: "help", description: "This list", screens: ["projects", "sessions", "settings"] },
-  { keys: "Ctrl+Q", action: "quit", description: "Quit", screens: ["projects", "sessions", "settings"] },
-];
+/** How many rows Page Up and Page Down move. */
+export const PAGE_ROWS = 10;
 
-const NAVIGATION: Record<string, Action> = {
+export const NAVIGATION: Record<string, Movement> = {
   ArrowUp: "moveUp",
   ArrowDown: "moveDown",
   PageUp: "pageUp",
@@ -50,45 +30,21 @@ const NAVIGATION: Record<string, Action> = {
   End: "moveLast",
 };
 
+const ACTIONS: Record<string, ListAction> = { Enter: "open", Escape: "back", F2: "rename", Delete: "delete" };
+
 /**
- * The action a keystroke means on `screen`, or null.
+ * The action a key means to a project or session list, or null.
  *
- * `typing` is true while a text field has focus: only Enter and Escape survive that, so a name with
- * an "o" in it cannot open a window.
+ * A modifier leaves the key to the system — Shift+F10 among them: the browser turns it, and the menu
+ * key, into the list's `contextmenu` event, which is where the row's menu opens.
  */
-export function resolveAction(event: KeyEventLike, screen: Screen, typing = false): Action | null {
-  const key = event.key;
-  if (typing) {
-    if (key === "Enter") return "enter";
-    if (key === "Escape") return "back";
-    return null;
-  }
-  if ((event.ctrlKey || event.metaKey) && key.toLowerCase() === "q") return "quit";
-  if (event.ctrlKey || event.metaKey || event.altKey) return null;
-
-  const navigation = NAVIGATION[key];
-  if (navigation) return navigation;
-  if (key === "Tab") return event.shiftKey ? "previousSection" : "nextSection";
-  if (key === "Enter") return "enter";
-  if (key === "ArrowRight") return screen === "projects" ? "enter" : null;
-  if (key === "ArrowLeft" || key === "Escape") return "back";
-  if (key === "Delete") return "delete";
-  if (key === "F2") return "rename";
-  if (key === "F5") return "refresh";
-  if (key === "/") return "search";
-  if (key === "?") return "help";
-
-  switch (key.toLowerCase()) {
-    case "o": return "openNewWindow";
-    case "n": return "newSession";
-    case "v": return "pasteImage";
-    case "s": return "settings";
-    default: return null;
-  }
+export function listAction(event: KeyEventLike): ListAction | null {
+  if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return null;
+  return NAVIGATION[event.key] ?? ACTIONS[event.key] ?? null;
 }
 
-/** Next index for a movement action, clamped to the list — `pageSize` is what a page means here. */
-export function nextIndex(action: Action, current: number, count: number, pageSize: number): number {
+/** Next index for a movement, clamped to the list — `pageSize` is what a page means here. */
+export function nextIndex(action: Movement, current: number, count: number, pageSize: number): number {
   if (!count) return 0;
   const last = count - 1;
   switch (action) {
@@ -98,6 +54,5 @@ export function nextIndex(action: Action, current: number, count: number, pageSi
     case "pageDown": return Math.min(last, current + pageSize);
     case "moveFirst": return 0;
     case "moveLast": return last;
-    default: return current;
   }
 }

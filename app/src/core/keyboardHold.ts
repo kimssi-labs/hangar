@@ -8,8 +8,9 @@
  * click, sometimes after a detour through the desktop.
  *
  * So a band answers the mouse and leaves the keyboard where it was. It asks for the keyboard only
- * while the page has something to type into — a rename editor, the settings screen, a dialog with a
- * field — and gives it up again when that closes. An undocked window behaves like any other window.
+ * while the page has something to type into — a rename editor, a search box, the settings screen, a
+ * dialog with a field — and gives it up again when that closes. An undocked window behaves like any
+ * other window.
  */
 export function windowTakesKeyboard(docked: boolean, needsTyping: boolean): boolean {
   return !docked || needsTyping;

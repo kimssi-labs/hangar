@@ -30,35 +30,68 @@ export interface Ask {
  */
 export type AskResult = string | true | null;
 
+/**
+ * Puts the keyboard back where it was before a question took it, once the question is gone.
+ *
+ * Read while rendering, before the window behind is made inert and loses the focus; given back
+ * after the question has left, once the window behind takes the focus again.
+ */
+export function useReturnFocus(): void {
+  const [returnTo] = useState(() => document.activeElement);
+  useEffect(() => () => {
+    if (returnTo instanceof HTMLElement && returnTo.isConnected) returnTo.focus();
+  }, [returnTo]);
+}
+
 export function Modal({ ask, onDone }: { ask: Ask; onDone: (result: AskResult) => void }) {
   const t = useText();
   const [value, setValue] = useState(ask.input?.initial ?? "");
   const field = useRef<HTMLInputElement>(null);
+  useReturnFocus();
 
   // The field, or the confirm button, has focus the moment the dialog appears: a dialog that has to
   // be clicked before it can be typed into is a dialog that interrupts twice.
   useEffect(() => { field.current?.focus(); field.current?.select(); }, []);
 
-  // Escape closes and Enter confirms, wherever the focus happens to be.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") { event.preventDefault(); onDone(null); }
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        if (ask.input) { if (value.trim()) onDone(value.trim()); }
-        else onDone(true);
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [ask.input, value, onDone]);
+  const confirm = (): void => {
+    if (!ask.input) onDone(true);
+    else if (value.trim()) onDone(value.trim());
+  };
 
   return (
     <div
       className="absolute inset-0 z-50 bg-ink-900/80 flex items-center justify-center p-6"
       onClick={() => onDone(null)}
     >
-      <div className="card p-4 w-[26rem] max-w-full" onClick={(event) => event.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={ask.title}
+        // Focusable, so a click on the dialog's own text keeps the keyboard in it.
+        tabIndex={-1}
+        className="card p-4 w-[26rem] max-w-full outline-none"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          // The dialog's keys are the dialog's: nothing behind it hears them.
+          event.stopPropagation();
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onDone(null);
+          } else if (event.key === "Enter" && !event.shiftKey && !(event.target instanceof HTMLButtonElement)) {
+            // Enter confirms from the field; on a button it presses that button, as Enter does.
+            event.preventDefault();
+            confirm();
+          } else if (event.key === "Tab") {
+            // Round the dialog's own controls, never out of it.
+            const stops = [...event.currentTarget.querySelectorAll<HTMLElement>("input, button:not(:disabled)")];
+            const edge = event.shiftKey ? stops[0] : stops[stops.length - 1];
+            if (document.activeElement === edge || document.activeElement === event.currentTarget) {
+              event.preventDefault();
+              (event.shiftKey ? stops[stops.length - 1] : stops[0])?.focus();
+            }
+          }
+        }}
+      >
         <h2 className="text-sm font-medium text-bone-100">{ask.title}</h2>
         {ask.detail ? (
           <p className="mt-2 text-xs text-bone-400 whitespace-pre-line break-words">{ask.detail}</p>
@@ -77,10 +110,12 @@ export function Modal({ ask, onDone }: { ask: Ask; onDone: (result: AskResult) =
           <button type="button" className="btn" onClick={() => onDone(null)}>{t("dialog.cancel")}</button>
           <button
             type="button"
-            ref={ask.input ? undefined : (node) => node?.focus()}
+            // On mount only: focused again on every render, a Tab to Cancel was undone by the next
+            // repaint of the window behind, and Enter then confirmed.
+            autoFocus={!ask.input}
             className={`btn ${ask.danger ? "bg-bad/90 text-ink-900 border-transparent font-medium hover:bg-bad" : "btn-accent"}`}
             disabled={Boolean(ask.input) && !value.trim()}
-            onClick={() => onDone(ask.input ? value.trim() : true)}
+            onClick={confirm}
           >
             {ask.confirm}
           </button>

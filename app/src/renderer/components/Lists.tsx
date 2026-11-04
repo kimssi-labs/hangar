@@ -203,6 +203,10 @@ function useScrollIntoView(selected: boolean): React.RefObject<HTMLDivElement> {
   return ref;
 }
 
+/** The ids the rows carry, which their list's `aria-activedescendant` names for the selected one. */
+export const projectRowId = (dir: string): string => `project-${dir}`;
+export const sessionRowId = (id: string): string => `session-${id}`;
+
 export function ProjectRow({
   project, selected, depth = 0, parent = null, trees = 0, onSelect, onOpen, onContextMenu,
 }: {
@@ -226,6 +230,9 @@ export function ProjectRow({
   return (
     <div
       ref={ref}
+      id={projectRowId(project.dir)}
+      role="option"
+      aria-selected={selected}
       className={`row ${selected ? "row-selected" : "hover:bg-ink-700/60"}`}
       style={depth ? { marginLeft: depth * 14 } : undefined}
       onMouseDown={notePointerSelect}
@@ -285,6 +292,9 @@ export function SessionRow({
   return (
     <div
       ref={ref}
+      id={sessionRowId(session.id)}
+      role="option"
+      aria-selected={selected}
       className={`row ${session.live ? "row-live" : "row-session"} ${selected ? "row-selected" : "hover:bg-ink-700/60"}`}
       onMouseDown={notePointerSelect}
       onClick={onSelect}

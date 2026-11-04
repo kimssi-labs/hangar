@@ -3,8 +3,9 @@
  * time, under a row of tabs. It sits wherever the file panel used to (a column of its own, under the
  * detail panel, or under the sessions); the features draw the contents, this only switches them.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
 
+import { NAVIGATION, nextIndex, PAGE_ROWS } from "@core/keymap";
 import type { SidePaneTab } from "@core/types";
 
 import { api } from "../api";
@@ -24,7 +25,19 @@ export function SidePane({ tabs, active, compact, onPick, children }: {
   const t = useText();
   return (
     <>
-      <div role="tablist" className="flex items-stretch gap-0.5 px-1 border-b border-ink-600">
+      {/* One Tab stop, the tab in front; ← → pick the one beside it, as a click on it would. */}
+      <div
+        role="tablist"
+        className="flex items-stretch gap-0.5 px-1 border-b border-ink-600"
+        onKeyDown={(event) => {
+          const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+          if (!step || tabs.length < 2) return;
+          event.preventDefault();
+          const index = (tabs.indexOf(active) + step + tabs.length) % tabs.length;
+          onPick(tabs[index] as SidePaneTab);
+          event.currentTarget.querySelectorAll<HTMLElement>("[role='tab']")[index]?.focus();
+        }}
+      >
         {tabs.map((tab) => {
           const name = t(`pane.${tab}` as "pane.files");
           return (
@@ -33,6 +46,7 @@ export function SidePane({ tabs, active, compact, onPick, children }: {
               type="button"
               role="tab"
               aria-selected={tab === active}
+              tabIndex={tab === active ? 0 : -1}
               aria-label={name}
               title={name}
               data-testid={`pane-tab-${tab}`}
@@ -49,6 +63,76 @@ export function SidePane({ tabs, active, compact, onPick, children }: {
       {children}
     </>
   );
+}
+
+/** What a side-pane list spreads on its scrolling box to be walked with the keys. */
+export interface RovingList {
+  ref: React.RefObject<HTMLDivElement>;
+  tabIndex: number;
+  onFocus(event: FocusEvent<HTMLElement>): void;
+  onBlur(event: FocusEvent<HTMLElement>): void;
+  onKeyDown(event: KeyboardEvent<HTMLElement>): void;
+}
+
+/**
+ * The keyboard for a list in the side pane: one Tab stop, the arrow keys between its rows.
+ *
+ * Rows are the elements marked `data-row` (and `tabIndex={-1}`), read from the page at each key, so a
+ * folder just opened, a group closed or a search typed is already the order the arrows walk — no
+ * state is kept to fall behind. Focus arriving on the list goes on to the row last focused, or the
+ * first. → and ← open and close a row that has `aria-expanded`, by clicking it, as the mouse does;
+ * what Enter does is each row's own (a button's click, or its own key handler).
+ */
+export function useRovingRows(): { list: RovingList; first(): void } {
+  const ref = useRef<HTMLDivElement>(null);
+  const last = useRef<HTMLElement | null>(null);
+  return useMemo(() => {
+    const rows = (): HTMLElement[] => [...(ref.current?.querySelectorAll<HTMLElement>("[data-row]") ?? [])];
+    const go = (row: HTMLElement | undefined): void => {
+      if (!row) return;
+      row.focus({ preventScroll: true });
+      row.scrollIntoView({ block: "nearest" });
+    };
+    return {
+      list: {
+        ref,
+        tabIndex: 0,
+        onFocus: (event) => {
+          const box = event.currentTarget;
+          const target = event.target as HTMLElement;
+          if (target === box) {
+            go(last.current && box.contains(last.current) ? last.current : rows()[0]);
+            return;
+          }
+          if (target.hasAttribute("data-row")) last.current = target;
+          // While a row has the focus the list is not a stop of its own, or Shift+Tab from the row
+          // would land on the list, which hands the focus straight back to the row.
+          box.tabIndex = -1;
+        },
+        onBlur: (event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.tabIndex = 0;
+        },
+        onKeyDown: (event) => {
+          const row = event.target as HTMLElement;
+          if (!row.hasAttribute("data-row") || event.altKey || event.ctrlKey || event.metaKey) return;
+          const move = NAVIGATION[event.key];
+          if (move) {
+            event.preventDefault();
+            const all = rows();
+            go(all[nextIndex(move, all.indexOf(row), all.length, PAGE_ROWS)]);
+            return;
+          }
+          const open = row.getAttribute("aria-expanded");
+          if ((event.key === "ArrowRight" && open === "false") || (event.key === "ArrowLeft" && open === "true")) {
+            event.preventDefault();
+            row.click();
+          }
+        },
+      },
+      /** For the search box above the list: ↓ goes into it. */
+      first: () => go(rows()[0]),
+    };
+  }, []);
 }
 
 /** Which of the side pane's groups are open, and the ways to change that. */

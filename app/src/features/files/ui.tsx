@@ -15,6 +15,7 @@ import { nameOf, type DirEntry, type DirListing, type FileStatus } from "@core/f
 
 import { api } from "../../renderer/api";
 import { Choice } from "../../renderer/components/SettingsCard";
+import { useRovingRows } from "../../renderer/components/SidePane";
 import { Truncated } from "../../renderer/components/Truncated";
 import { useText } from "../../renderer/useText";
 import { api as bridge, MENU_SEPARATOR, type ActionResult, type MenuItemSpec } from "../../renderer/api";
@@ -188,7 +189,7 @@ export function useFiles(cwd: string | null, enabled: boolean): Files {
 }
 
 /**
- * Double-click opens a file the way Explorer would.
+ * Double-click opens a file the way Explorer would, and so does Enter on its row.
  *
  * On a folder it is the single click that does the work (open and close), so a double-click there
  * would only toggle twice; opening is for files. A failure — a type with nothing registered to it,
@@ -314,12 +315,21 @@ function Rows({ files, dir, depth, tools }: { files: Files; dir: string; depth: 
           <div key={entry.path}>
             <button
               type="button"
+              data-row
+              tabIndex={-1}
+              aria-expanded={entry.directory ? isOpen : undefined}
               className={`w-full flex items-center gap-1 rounded px-1 py-0.5 text-left text-xs hover:bg-ink-700/60 ${
                 over === entry.path ? "bg-accent/20 ring-1 ring-accent/60" : ""}`}
               style={{ paddingLeft: depth * INDENT + 4 }}
               title={entry.path}
               onClick={() => entry.directory && files.toggle(entry.path)}
               onDoubleClick={() => { if (!entry.directory) tools.onOpen(entry.path); }}
+              // Enter on a folder is its click; on a file it is the double-click.
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || entry.directory) return;
+                event.preventDefault();
+                tools.onOpen(entry.path);
+              }}
               onContextMenu={() => tools.onMenu(entry)}
               draggable
               onDragStart={(event) => {
@@ -413,9 +423,16 @@ export function ChangedList({ files, tools }: { files: Files; tools: RowTools })
         <button
           key={item.path}
           type="button"
+          data-row
+          tabIndex={-1}
           className="w-full flex items-center gap-1 rounded px-1 py-0.5 text-left text-xs hover:bg-ink-700/60"
           title={item.path}
           onDoubleClick={() => tools.onOpen(item.path)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            tools.onOpen(item.path);
+          }}
           onContextMenu={() => tools.onMenu({ name: nameOf(item.path), path: item.path, directory: false, status: item.status })}
         >
           <Mark status={item.status} />
@@ -445,6 +462,7 @@ export function FilesPane({ files, roomy, ui }: {
 }) {
   const t = useText();
   const onOpen = useOpen(files, ui.notify);
+  const rows = useRovingRows();
   const tools: RowTools = {
     files,
     onOpen,
@@ -472,7 +490,7 @@ export function FilesPane({ files, roomy, ui }: {
           {t(other === "tree" ? "files.showAll" : "files.showChanged")}
         </button>
       </div>
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div {...rows.list} className="flex-1 min-h-0 overflow-auto">
         {view === "tree" ? <FileTree files={files} tools={tools} /> : <ChangedList files={files} tools={tools} />}
       </div>
     </>

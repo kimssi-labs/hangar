@@ -13,7 +13,7 @@ import { type ArtifactGroup, type ArtifactOrigins, type ArtifactScope, ARTIFACT_
 import { type ArtifactInfo, artifactMatches, type ArtifactsState, EMPTY_ARTIFACTS } from "@core/artifacts";
 
 import { api } from "../../renderer/api";
-import { ExpandAll, type PaneOpen } from "../../renderer/components/SidePane";
+import { ExpandAll, type PaneOpen, useRovingRows } from "../../renderer/components/SidePane";
 import { agoParts } from "../../renderer/format";
 import { useText } from "../../renderer/useText";
 
@@ -73,6 +73,7 @@ export function ArtifactsPane({ artifacts, place, scope, onScope, open, notify }
 }) {
   const t = useText();
   const [query, setQuery] = useState("");
+  const keys = useRovingRows();
   const ago = (ms: number): string => {
     const { key, vars } = agoParts(ms);
     return t(key, vars);
@@ -92,19 +93,23 @@ export function ArtifactsPane({ artifacts, place, scope, onScope, open, notify }
   const row = (item: ArtifactInfo) => (
     <div
       key={item.slug}
+      data-row
+      tabIndex={-1}
       className={`group flex items-center gap-1.5 ${flat ? "pl-2" : "pl-5"} pr-2 py-0.5 hover:bg-ink-700/60 cursor-pointer`}
       title={item.description || item.title}
       onClick={() => void api.openArtifact(item.url).then((result) => { if (!result.ok) notify(result); })}
+      // Enter opens it, as the click does; on the copy button inside, Enter is that button's.
+      onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) event.currentTarget.click(); }}
     >
       <span className="shrink-0 w-4 text-center text-[11px] text-bone-400" aria-hidden="true">{ICONS[item.icon] ?? "◧"}</span>
       <span className="flex-1 min-w-0 text-[12px] text-bone-100 truncate">{item.title}</span>
       {item.shared ? <span className="shrink-0 text-[10px] text-bone-500">{t("artifacts.shared")}</span> : null}
-      <span className="shrink-0 text-[11px] text-bone-500 group-hover:hidden">
+      <span className="shrink-0 text-[11px] text-bone-500 group-hover:hidden group-focus-within:hidden">
         {Number.isFinite(Date.parse(item.updatedAt)) ? ago(Date.parse(item.updatedAt)) : ""}
       </span>
       <button
         type="button"
-        className="hidden group-hover:block shrink-0 text-[11px] text-bone-400 hover:text-bone-100 px-1"
+        className="hidden group-hover:block group-focus-within:block shrink-0 text-[11px] text-bone-400 hover:text-bone-100 px-1"
         title={t("artifacts.copy")}
         aria-label={t("artifacts.copy")}
         onClick={(event) => {
@@ -133,6 +138,7 @@ export function ArtifactsPane({ artifacts, place, scope, onScope, open, notify }
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); keys.first(); } }}
           placeholder={t("artifacts.search")}
           aria-label={t("artifacts.search")}
           className="flex-1 min-w-0 bg-transparent text-[12px] text-bone-100 placeholder:text-bone-500 outline-none"
@@ -172,14 +178,14 @@ export function ArtifactsPane({ artifacts, place, scope, onScope, open, notify }
           {t(`artifacts.failure.${artifacts.failure}` as "artifacts.failure.login")}
         </div>
       ) : null}
-      <div data-testid="artifacts-list" className="flex-1 min-h-0 overflow-auto py-1">
+      <div {...keys.list} data-testid="artifacts-list" className="flex-1 min-h-0 overflow-auto py-1">
         {note ? <div className="px-2 text-[11px] text-bone-500">{note}</div> : null}
         {note ? null : flat ? groups.flatMap((group) => group.items.map(row)) : groups.map((group) => {
           const key = groupKey(group);
           const shown = query !== "" || open.isOpen(key);
           return (
             <div key={key}>
-              <button type="button" onClick={() => open.toggle(key)} data-testid="artifacts-group"
+              <button type="button" data-row tabIndex={-1} aria-expanded={shown} onClick={() => open.toggle(key)} data-testid="artifacts-group"
                 className="w-full text-left px-2 py-0.5 text-[11px] text-bone-400 hover:text-bone-100 truncate">
                 {shown ? "▾" : "▸"} {label(group)} ({group.items.length})
               </button>

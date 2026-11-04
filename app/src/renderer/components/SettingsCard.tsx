@@ -1,35 +1,33 @@
 /**
- * The pieces every settings card is made of, and the list of cards.
+ * The pieces every settings card is made of.
  *
  * Shared by the shell's cards and the features' own, so the screen reads as one whoever drew each
- * card. The order here is the order on screen and the order Tab walks.
+ * card.
  */
 import type { ReactNode } from "react";
 
+// ponytail: unused since Tab stopped cycling the cards; App.tsx still imports it on a line next to
+// the worktree branch's own import change. Delete both once that branch has merged.
 export const SETTINGS_SECTIONS = ["appearance", "language", "layout", "monitor", "dock", "usage", "files", "git", "updates", "launch", "permissions"] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
+/** A card: its ring says the keyboard is inside it, wherever Tab has taken it. */
 export function Card({
-  title, section, focused, onFocus, hint, body = "space-y-1", children,
+  title, hint, body = "space-y-1", children,
 }: {
   title: string;
-  section: SettingsSection;
-  focused: SettingsSection;
-  /** The pointer is over this card: it becomes the one Tab moves from. */
-  onFocus(section: SettingsSection): void;
   hint?: string;
   /** The body's spacing class; the cards differ in how much air their rows want. */
   body?: string;
   children: ReactNode;
 }) {
-  const active = section === focused;
   return (
-    <section className={`card p-4 transition-colors ${active ? "ring-1 ring-accent/50" : "opacity-80"}`}>
+    <section className="card p-4 transition-colors focus-within:ring-1 focus-within:ring-accent/50">
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="text-sm font-medium text-bone-100">{title}</h3>
         {hint ? <span className="text-[11px] text-bone-500">{hint}</span> : null}
       </div>
-      <div className={body} onMouseEnter={() => onFocus(section)}>{children}</div>
+      <div className={body}>{children}</div>
     </section>
   );
 }

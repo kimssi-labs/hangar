@@ -69,8 +69,19 @@ async function bandWindow(): Promise<{ app: ElectronApplication; page: Page }> {
     win?.setBounds(bounds);
   }, BAND);
   await page.locator(".row").first().waitFor({ state: "visible", timeout: 30_000 });
+  // The band's stack draws the project list anew, so the keyboard is put back in it before Enter.
+  await page.getByRole("listbox", { name: "Projects" }).focus();
   await page.keyboard.press("Enter");           // into the project's sessions
   await expect(page.getByText("세션 0").first()).toBeVisible();
+  // The rows the sessions screen mounts settle over a frame or two (measured: the list 2791 px tall,
+  // then 2217, then 2186, within 20 ms of Enter); a scrollTop set in between is pulled back to the
+  // new end. So the list is left to hold still first.
+  const height = (): Promise<number> => page.getByTestId("stack-sessions").evaluate((el) => el.scrollHeight);
+  await expect.poll(async () => {
+    const was = await height();
+    await page.waitForTimeout(250);
+    return (await height()) === was;
+  }).toBe(true);
   return { app, page };
 }
 

@@ -143,6 +143,8 @@ test("a delete asks first, in the window, and cancelling deletes nothing", async
   const { app, page } = await launch(home);
   try {
     await expect(page.getByText("workspace", { exact: true }).first()).toBeVisible();
+    // Delete is the project list's key, and the list has the keyboard from the start.
+    await expect(page.getByRole("listbox", { name: "Projects" })).toBeFocused();
     await page.keyboard.press("Delete");
 
     // The question is in the page — a native box would leave the DOM untouched.

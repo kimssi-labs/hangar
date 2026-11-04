@@ -14,16 +14,16 @@ import type { Dictionary } from "../i18n.js";
 
 export const ko: Dictionary = {
   // -- 기본 화면 --------------------------------------------------------------------------------
-  "app.search": "프로젝트 검색  ( / )",
+  "app.search": "프로젝트 검색",
   "app.addProject": "프로젝트 추가",
   "app.addProject.title": "폴더를 골라 프로젝트로 추가",
   "app.projects": "프로젝트",
   "app.projects.count": "{count}개",
   "app.sessions.count": "세션 {count}개",
   "app.new": "새 세션",
-  "app.new.title": "이 프로젝트에서 새 세션 시작 (N)",
+  "app.new.title": "이 프로젝트에서 새 세션 시작",
   "app.settings": "설정",
-  "app.settings.title": "설정 (S)",
+  "app.settings.title": "설정",
   "app.noMatch": "검색 결과가 없습니다.",
   "app.running": "{count}개 실행 중",
   "app.running.none": "실행 없음",
@@ -46,6 +46,7 @@ export const ko: Dictionary = {
   "menu.syncDefault": "기준 브랜치에서 최신화",
   "menu.resume": "이어서 하기",
   "menu.resumeWindow": "새 창에서 이어서 하기",
+  "menu.pasteImage": "클립보드 이미지 저장, 경로 복사",
 
   // -- 목록 -------------------------------------------------------------------------------------
   "list.sessions": "세션 {count}개",
@@ -102,7 +103,6 @@ export const ko: Dictionary = {
   "settings.saved": "바꾸는 즉시 저장됩니다.",
   "settings.back": "뒤로",
   "settings.back.title": "뒤로 (Esc)",
-  "settings.tabHint": "Tab으로 카드 이동",
 
   "settings.appearance": "테마",
   "settings.appearance.system": "시스템",
@@ -370,5 +370,4 @@ export const ko: Dictionary = {
   "dialog.worktreeForce": "그 작업을 버리고 강제로 제거할까요?",
   "detail.worktrees": "Worktree",
   "detail.worktreeHere": "현재",
-  "keys.title": "단축키",
 };
