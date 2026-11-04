@@ -319,6 +319,25 @@ test("the + button adds a folder as a project and lands on it", async () => {
 });
 
 /**
+ * A dock that cannot be applied at start-up says why. A band saved for a monitor that is not plugged
+ * in is not applied — rightly — but the reason went out on `app:info`, a channel the page only ever
+ * invokes and never listens to, so the window came up undocked without a word.
+ */
+test("a saved dock that cannot be applied at start-up says why", async () => {
+  const { home } = fixture();
+  mkdirSync(join(home, "config"), { recursive: true });
+  writeFileSync(join(home, "config", "manager.json"), JSON.stringify({
+    dock: { enabled: true, device: "9999,9999 640x480", edge: "top", percent: 20 },
+  }));
+  const { app, page } = await launch(home);
+  try {
+    await expect(page.getByText("Saved monitor 9999,9999 640x480 is not connected", { exact: false })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+/**
  * Versions up to 2.15.1 could add a Stop hook to Claude Code's settings.json. It never received the
  * figures it was written for, so the app takes it back out at start-up — that entry and its script,
  * and nothing else in a file that is the user's.
