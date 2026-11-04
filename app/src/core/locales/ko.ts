@@ -36,7 +36,6 @@ export const ko: Dictionary = {
   "menu.newSession": "새 세션 시작",
   "menu.newSessionWindow": "새 창에서 새 세션 시작",
   "menu.worktreeAdd": "새 worktree…",
-  "menu.worktreeForce": "그 작업을 버리고 강제로 제거할까요?",
   "menu.worktreeRemove": "이 worktree 제거…",
   "menu.pin": "위에 고정",
   "menu.rename": "이름 바꾸기",
@@ -60,8 +59,6 @@ export const ko: Dictionary = {
   "state.waiting": "확인 대기",
   "state.idle": "대기 중",
   "state.closed": "닫힘",
-  "list.running": "실행 중",
-  "list.idle": "대기",
 
   // -- 상세 패널 --------------------------------------------------------------------------------
   "detail.folderName": "실제 폴더 이름",
@@ -170,7 +167,6 @@ export const ko: Dictionary = {
   "dialog.deleteFile": "{name}을(를) 삭제할까요?",
   "dialog.deleteFolder": "{name} 폴더를 삭제할까요?",
   "dialog.deleteFile.detail": "휴지통으로 가며, 거기서 되돌릴 수 있습니다.",
-  "files.title": "파일",
   "files.reading": "폴더를 읽는 중…",
   "files.unreadable": "폴더를 읽을 수 없습니다.",
   "files.empty": "비어 있는 폴더입니다.",
@@ -346,7 +342,6 @@ export const ko: Dictionary = {
   "since.years": "{count}년 전",
   "since.absolute": "{when}",
 
-  // -- 단축키 -----------------------------------------------------------------------------------
   // -- 대화상자 ---------------------------------------------------------------------------------
   "dialog.cancel": "취소",
   "dialog.delete": "삭제",
