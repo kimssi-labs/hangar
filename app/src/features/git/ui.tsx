@@ -124,7 +124,7 @@ export async function runGitAction(action: GitAction, target: ProjectInfo, ui: G
       return;
     }
     case "gitSync": {
-      notify({ ok: true, message: "Updating from the base branch…" });
+      notify({ ok: true, message: t("git.syncing") });
       notify(await api.gitSync(target.dir));
       await refresh();
       return;

@@ -30,6 +30,8 @@ export const ko: Dictionary = {
   "app.sessionsRunning": "세션 {count}개 실행 중",
   "app.sessionRunning": "세션 1개 실행 중",
   "app.noSessionRunning": "실행 중인 세션 없음",
+  "app.docked": "도킹했습니다.",
+  "app.undocked": "도킹을 해제했습니다.",
 
   // -- 우클릭 메뉴 ------------------------------------------------------------------------------
   "menu.openSessions": "세션 목록 열기",
@@ -51,6 +53,7 @@ export const ko: Dictionary = {
   "list.sessions": "세션 {count}개",
   "list.worktree": "worktree",
   "list.trees": "worktree {count}개",
+  "list.pinned": "고정됨",
   "list.detached": "분리됨",
   "list.folderUnknown": "폴더 경로 없음",
   "list.memory": "memory",
@@ -240,6 +243,7 @@ export const ko: Dictionary = {
   "settings.git.count": "변경된 파일 수도 표시",
   "settings.git.note": "브랜치는 .git 파일에서 바로 읽으므로 부담이 없습니다. 변경 파일 수는 선택한 프로젝트에만 git status를 실행하므로, 저장소가 커도 그 항목만 잠시 느려집니다.",
   "settings.git.updating": "기준 브랜치에서 최신화",
+  "git.syncing": "기준 브랜치에서 최신화하는 중…",
   "settings.git.base": "기준 브랜치",
   "settings.git.base.placeholder": "origin/main — 비워두면 원격의 기본 브랜치 사용",
   "settings.git.strategy.rebase": "Rebase",

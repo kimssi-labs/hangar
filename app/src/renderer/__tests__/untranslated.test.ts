@@ -15,8 +15,14 @@ import { describe, expect, it } from "vitest";
 const COMPONENTS = join(__dirname, "..", "components");
 const RENDERER = join(__dirname, "..");
 
-/** Attributes a person reads. `placeholder` and `title` are as visible as the text itself. */
-const VISIBLE_ATTRIBUTE = /\b(?:placeholder|title|aria-label)="([A-Z][^"]*)"/g;
+/**
+ * Attributes a person reads. `placeholder` and `title` are as visible as the text itself, and a
+ * screen reader speaks `aria-label`. Lower case too: "off" and "pinned" slipped past a capital-only
+ * scan into the Korean screen.
+ */
+const VISIBLE_ATTRIBUTE = /\b(?:placeholder|title|aria-label)="([A-Za-z][^"]*)"/g;
+/** A toast's words written straight into `notify({ message: "..." })`, as the dock and git toasts were. */
+const TOAST_MESSAGE = /\bmessage:\s*(?:[^,}"]*\?\?\s*)?"([A-Za-z][^"]*)"/g;
 /** Text between tags: `>Some words<`, but not `>{t("...")}<` and not a lone symbol. */
 const VISIBLE_TEXT = />\s*([A-Z][A-Za-z][^<>{}]{2,})\s*</g;
 
@@ -70,6 +76,12 @@ describe("every string a person reads goes through the dictionary", () => {
   it("has no English left in a visible attribute", () => {
     const left = sources().flatMap(({ file, text }) =>
       findings(VISIBLE_ATTRIBUTE, text).map((phrase) => `${file.split(/[\/]/).pop()}: ${phrase}`));
+    expect(left).toEqual([]);
+  });
+
+  it("has no English left in a toast", () => {
+    const left = sources().flatMap(({ file, text }) =>
+      findings(TOAST_MESSAGE, text).map((phrase) => `${file.split(/[\/]/).pop()}: ${phrase}`));
     expect(left).toEqual([]);
   });
 
