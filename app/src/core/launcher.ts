@@ -36,20 +36,13 @@ export interface LaunchRequest {
   claudeExe: string;
   sessionId?: string | null;
   /**
-   * The name to give the session, which Claude Code puts in its prompt box, its /resume picker AND
-   * the terminal tab. Passing the name this app shows is what keeps the tab and the row saying the
-   * same thing; leaving it null lets Claude Code name the session from the conversation.
+   * The name a person gave the session, or null when nobody did.
+   *
+   * Passed as `--name`, which Claude Code puts in its prompt box, its /resume picker AND the
+   * terminal tab, and as the tab's first title, so tab and row read alike from the moment it opens.
+   * Left null, Claude Code names the session from the conversation, its tab included.
    */
   displayName?: string | null;
-  /**
-   * What the terminal tab is called at first.
-   *
-   * The session's own name, so the tab and the row read alike from the moment it opens. Only the
-   * first word on it: Claude Code renames the tab as the conversation goes, and for a session it
-   * has named that is the same name again. For a session with no name yet — a new one — the
-   * project is the best a tab can say.
-   */
-  tabTitle?: string | null;
   config: LaunchConfig;
   target: OpenTarget;
   platform: NodeJS.Platform;
@@ -243,7 +236,7 @@ export function launchCommand(request: LaunchRequest, have: (exe: string) => boo
   // with a spinner glyph while it works — and it does that from the moment it starts, so a title of
   // ours would only be overwritten a second later. A renamed session is the one case worth stating:
   // the tab then says what the row says even before Claude Code has read the name.
-  const title = request.tabTitle?.trim() ?? "";
+  const title = request.displayName?.trim() ?? "";
 
   if (request.platform === "win32" && request.hasWindowsTerminal) {
     return {
