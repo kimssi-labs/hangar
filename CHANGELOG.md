@@ -3,6 +3,20 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.23.1
+
+- **Every repository row shows its branch beside the name**: `app [main]`. The branch line under
+  the path is gone, so a row is a line shorter and more of the list fits. A worktree is called by
+  its repository, `⑂ app [feature/x]`, under that repository's row, and in a narrow list the name
+  gives way before the branch. The sessions screen's top bar says it the same way.
+- **A repository whose git folder is kept elsewhere is no longer taken for a worktree.** A checkout
+  made with `git init --separate-git-dir`, like a submodule, has a `.git` file just as a linked
+  worktree does. Such a row lost its name to the branch, and its menu offered "Remove this
+  worktree…" (git refused, so nothing was removed). Only a checkout whose git directory holds a
+  `commondir` counts as a worktree now.
+- A checkout reached through a relative `.git` pointer (a submodule, or a worktree made with
+  `worktree.useRelativePaths`) now shows its branch; the pointer was read from the app's own folder.
+
 ## v2.23.0
 
 - **Much lighter while it sits there.** Hangar is meant to stay open all day, so the work it does
