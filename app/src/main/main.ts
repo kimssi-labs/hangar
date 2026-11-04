@@ -200,7 +200,8 @@ const dockFeature = registerDock(context, wiring, {
   settingsPayload: () => settingsFeature.payload(),
   pushSettings: () => settingsFeature.push(),
   placeFloating,
-  appNote: (text) => window?.webContents.send(CHANNEL.appInfo, text),
+  // A line on screen, like any other: it used to be sent on `app:info`, which the page only invokes.
+  appNote: context.notify,
 });
 const updatesFeature = registerUpdates(context, wiring);
 // Git depends on the project rows, and says so: these are handed over rather than reached for.
