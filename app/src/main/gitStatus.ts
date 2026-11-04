@@ -25,6 +25,8 @@ import {
 
 /** Give up rather than hold anything up; a huge repository is not worth a stalled row. */
 const STATUS_TIMEOUT_MS = 4_000;
+/** Room for git's answer; a status of a big repository is larger than Node's default of 1 MB. */
+const GIT_MAX_BUFFER = 4 * 1024 * 1024;
 /** A count this old is re-taken. Long enough that scrolling a list costs nothing. */
 export const COUNT_TTL_MS = 30_000;
 /**
@@ -133,7 +135,7 @@ function porcelain(cwd: string, done: (counted: Counted | null) => void): void {
   execFile(
     "git",
     ["--no-optional-locks", "status", "--porcelain", "--untracked-files=normal"],
-    { cwd, timeout: STATUS_TIMEOUT_MS, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
+    { cwd, timeout: STATUS_TIMEOUT_MS, windowsHide: true, maxBuffer: GIT_MAX_BUFFER },
     (error, stdout) => {
       const finish = (counted: Counted | null): void => {
         const callers = waiting.get(cwd) ?? [];
@@ -168,6 +170,20 @@ export function changedPaths(cwd: string, done: (statuses: Map<string, FileStatu
 }
 
 /**
+ * One git command in `cwd`, bounded and with no console window. Never rejects: `code` is git's exit
+ * code (1 when it could not say), `output` its stdout and stderr together, trimmed.
+ */
+function git(cwd: string, args: string[], timeout: number): Promise<{ code: number; stdout: string; output: string }> {
+  return new Promise((resolve) => {
+    execFile("git", args, { cwd, timeout, windowsHide: true, maxBuffer: GIT_MAX_BUFFER }, (error, stdout, stderr) => resolve({
+      code: error ? ((error as { code?: number }).code ?? 1) : 0,
+      stdout,
+      output: `${stdout}\n${stderr}`.trim(),
+    }));
+  });
+}
+
+/**
  * Bring a working tree up to date with its base branch.
  *
  * Fetch the base into a ref of our own, then rebase or merge onto that ref — never onto FETCH_HEAD,
@@ -178,14 +194,7 @@ export async function updateFromBase(
   cwd: string,
   config: GitSyncConfig,
 ): Promise<SyncOutcome> {
-  const run = (args: string[], timeout: number): Promise<{ code: number; output: string }> =>
-    new Promise((resolve) => {
-      execFile("git", args, { cwd, timeout, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
-        (error, stdout, stderr) => {
-          const code = error ? ((error as { code?: number }).code ?? 1) : 0;
-          resolve({ code, output: `${stdout}\n${stderr}`.trim() });
-        });
-    });
+  const run = (args: string[], timeout: number): ReturnType<typeof git> => git(cwd, args, timeout);
 
   const head = headOf(cwd);
   if (!head) return { ok: false, kind: "no-base", message: "This project is not a git repository." };
@@ -229,11 +238,8 @@ export async function updateFromBase(
 
 /** Every checkout of the repository this folder belongs to. */
 export async function listWorktrees(cwd: string): Promise<Worktree[]> {
-  const result = await new Promise<{ code: number; out: string }>((resolve) => {
-    execFile("git", ["worktree", "list", "--porcelain"], { cwd, timeout: STEP_TIMEOUT_MS, windowsHide: true },
-      (error, stdout) => resolve({ code: error ? 1 : 0, out: stdout }));
-  });
-  return result.code === 0 ? parseWorktrees(result.out) : [];
+  const result = await git(cwd, ["worktree", "list", "--porcelain"], STEP_TIMEOUT_MS);
+  return result.code === 0 ? parseWorktrees(result.stdout) : [];
 }
 
 /**
@@ -274,14 +280,7 @@ export async function createWorktree(cwd: string, branch: string, base: string):
   const name = cleanBranchName(branch);
   if (!name) return { ok: false, kind: "failed", message: `"${branch}" is not a branch name git will take.` };
 
-  const run = (args: string[]): Promise<{ code: number; out: string }> =>
-    new Promise((resolve) => {
-      execFile("git", args, { cwd, timeout: FETCH_TIMEOUT_MS, windowsHide: true },
-        (error, stdout, stderr) => resolve({
-          code: error ? ((error as { code?: number }).code ?? 1) : 0,
-          out: `${stdout}\n${stderr}`.trim(),
-        }));
-    });
+  const run = (args: string[]): ReturnType<typeof git> => git(cwd, args, FETCH_TIMEOUT_MS);
 
   let qualified: string | null = null;
   if (base.trim()) {
@@ -301,19 +300,13 @@ export async function createWorktree(cwd: string, branch: string, base: string):
 
   const path = suggestPath(cwd, name);
   const created = await run(addArgs({ path, branch: name, base: qualified }));
-  const outcome = classifyWorktree(created.code, created.out);
+  const outcome = classifyWorktree(created.code, created.output);
   return outcome.ok ? { ok: true, path } : outcome;
 }
 
 /** Remove a worktree, refusing one with uncommitted work unless forced. */
 export async function dropWorktree(repo: string, path: string, force: boolean): Promise<WorktreeOutcome> {
-  const result = await new Promise<{ code: number; out: string }>((resolve) => {
-    execFile("git", removeArgs(path, force), { cwd: repo, timeout: STEP_TIMEOUT_MS, windowsHide: true },
-      (error, stdout, stderr) => resolve({
-        code: error ? ((error as { code?: number }).code ?? 1) : 0,
-        out: `${stdout}\n${stderr}`.trim(),
-      }));
-  });
+  const result = await git(repo, removeArgs(path, force), STEP_TIMEOUT_MS);
   counts.delete(path);
-  return classifyWorktree(result.code, result.out);
+  return classifyWorktree(result.code, result.output);
 }
