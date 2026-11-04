@@ -12,9 +12,8 @@
  * status line or hook could also write — with the block Claude Code hands them, which has no
  * model-scoped window — and every such write took the "1w Fable" gauge away (measured).
  */
-import { readFileSync } from "node:fs";
-
 import { RATE_WINDOWS } from "./constants.js";
+import { readJson } from "./json.js";
 import { homePaths } from "./paths.js";
 import type { RateWindow, StatusConfig, StatusSnapshot } from "./types.js";
 
@@ -22,16 +21,6 @@ export { RATE_WINDOWS } from "./constants.js";
 
 
 interface RateBucket { used_percentage?: number; utilization?: number; resets_at?: number; model?: unknown }
-
-function readJson<T>(file: string, fallback: T): T {
-  try {
-    // Strip a BOM: JSON.parse throws on one, and the throw would read as "this machine reports no
-    // usage" rather than as the encoding accident it is. Windows tools write one by default.
-    return JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, "")) as T;
-  } catch {
-    return fallback;
-  }
-}
 
 /** Windows present in the cache, normalised; a window whose reset already passed reads 0 %. */
 export function rateWindows(raw: Record<string, unknown>, now = Date.now()): RateWindow[] {
@@ -73,5 +62,3 @@ export function readStatus(
   const chosen = config.windows;
   return { windows: chosen === null ? all : all.filter((w) => chosen.includes(w.key)) };
 }
-
-export { readJson as readStatusJson };

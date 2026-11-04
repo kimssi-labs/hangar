@@ -6,7 +6,7 @@
  * Chromium's network stack, as for the usage figures — the machine's proxy, and a request
  * claude.ai's bot wall lets through, which Node's fetch is not (measured: 403 "Just a moment").
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { net, shell } from "electron";
@@ -14,8 +14,8 @@ import { net, shell } from "electron";
 import type { Wire } from "../../bridge/build.js";
 import { ARTIFACTS_ENDPOINT, ARTIFACTS_HEADERS, type ArtifactsState, EMPTY_ARTIFACTS, failureFor, isArtifactUrl, parseArtifacts } from "../../core/artifacts.js";
 import { type ArtifactOrigins, PUBLISH_MARK, publishedSlugs } from "../../core/artifactOrigins.js";
+import { readJson } from "../../core/json.js";
 import { homePaths } from "../../core/paths.js";
-import { readStatusJson } from "../../core/status.js";
 import { accessTokenFrom } from "../../core/usageEndpoint.js";
 import type { ActionResult } from "../../main/ipc.js";
 import { artifactsContract } from "./contract.js";
@@ -23,12 +23,8 @@ import { artifactsContract } from "./contract.js";
 const REQUEST_TIMEOUT_MS = 15_000;
 
 function cached(): ArtifactsState {
-  try {
-    const saved = JSON.parse(readFileSync(homePaths().hangarArtifacts, "utf8")) as ArtifactsState;
-    return Array.isArray(saved.items) ? { items: saved.items, fetchedAt: saved.fetchedAt ?? null, failure: null } : EMPTY_ARTIFACTS;
-  } catch {
-    return EMPTY_ARTIFACTS;
-  }
+  const saved = readJson<Partial<ArtifactsState>>(homePaths().hangarArtifacts, {});
+  return Array.isArray(saved.items) ? { items: saved.items, fetchedAt: saved.fetchedAt ?? null, failure: null } : EMPTY_ARTIFACTS;
 }
 
 function keep(state: ArtifactsState): void {
@@ -44,7 +40,7 @@ function keep(state: ArtifactsState): void {
 
 async function refresh(): Promise<ArtifactsState> {
   const last = cached();
-  const token = accessTokenFrom(readStatusJson<unknown>(homePaths().credentials, null));
+  const token = accessTokenFrom(readJson<unknown>(homePaths().credentials, null));
   if (!token) return { ...last, failure: "login" };
   let response: Response;
   try {
@@ -70,14 +66,6 @@ async function refresh(): Promise<ArtifactsState> {
 /** What one transcript published, as of its size and time — so an unchanged file is never read again. */
 interface Scanned { size: number; mtime: number; slugs: string[] }
 
-function readJsonFile<T>(file: string, fallback: T): T {
-  try {
-    return JSON.parse(readFileSync(file, "utf8")) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 let scanning: Promise<ArtifactOrigins> | null = null;
 
 /**
@@ -87,7 +75,7 @@ let scanning: Promise<ArtifactOrigins> | null = null;
  */
 async function scanOrigins(): Promise<ArtifactOrigins> {
   const paths = homePaths();
-  const before = readJsonFile<Record<string, Scanned>>(paths.hangarArtifactOrigins, {});
+  const before = readJson<Record<string, Scanned>>(paths.hangarArtifactOrigins, {});
   const after: Record<string, Scanned> = {};
   const origins: ArtifactOrigins = {};
   const dirs = await readdir(paths.projects).catch(() => [] as string[]);

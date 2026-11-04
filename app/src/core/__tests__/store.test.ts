@@ -128,6 +128,18 @@ describe("Store.scan", () => {
   });
 });
 
+describe("Claude Code's state file", () => {
+  it("still names a folder when .claude.json was saved with a BOM", () => {
+    // Windows tools write one by default, and JSON.parse throws on it: the store read the throw as
+    // "no projects known", so a project only .claude.json names silently lost its folder.
+    const { home, cwd, dir } = makeHome();
+    const file = join(home, "..", ".claude.json");
+    writeFileSync(file, String.fromCharCode(0xfeff) + readFileSync(file, "utf8"), "utf8");
+    const store = new Store(home, { isAlive: () => false, folderExists: () => true });
+    expect(store.knownPaths().get(dir)).toBe(cwd);
+  });
+});
+
 describe("reading transcripts", () => {
   it("finds the cwd without reading the whole file", () => {
     const { home } = makeHome();

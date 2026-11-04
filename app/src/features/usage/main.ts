@@ -20,8 +20,9 @@ import { net } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
+import { readJson } from "../../core/json.js";
 import { homePaths } from "../../core/paths.js";
-import { readStatus, readStatusJson, readStatusUpdatedAt } from "../../core/status.js";
+import { readStatus, readStatusUpdatedAt } from "../../core/status.js";
 import { accessTokenFrom, backoffFor, cacheFromEndpoint, type EndpointFailure, failureFor, loginState, OAUTH_BETA, shouldAsk, USAGE_ENDPOINT, USER_AGENT } from "../../core/usageEndpoint.js";
 import { hookFileName, hookInstalled, withoutHook } from "../../core/usageHook.js";
 import { usageContract, type UsageState } from "./contract.js";
@@ -101,7 +102,7 @@ function sessionRunning(ctx: MainContext): boolean {
 function usageState(): UsageState {
   return {
     updatedAt: readStatusUpdatedAt(),
-    login: loginState(readStatusJson<unknown>(homePaths().credentials, null)),
+    login: loginState(readJson<unknown>(homePaths().credentials, null)),
     endpointFailure: lastFailure,
   };
 }
@@ -128,7 +129,7 @@ async function refreshFromEndpoint(landed: () => void, live: boolean, manual = f
   const paths = homePaths();
   const now = Date.now();
   if (inFlight || !shouldAsk({ now, updatedAt: readStatusUpdatedAt(), lastAskedAt, nextAttemptAt, live, manual })) return;
-  const token = accessTokenFrom(readStatusJson<unknown>(paths.credentials, null), now);
+  const token = accessTokenFrom(readJson<unknown>(paths.credentials, null), now);
   if (!token) return;
   lastAskedAt = now;
   inFlight = true;
