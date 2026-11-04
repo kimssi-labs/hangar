@@ -121,7 +121,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const [paneFraction, setPaneFraction] = useState(0);
   /** Measured height of the stacked pair, so the divider can be kept inside it. */
   const [stackHeight, setStackHeight] = useState(0);
-  const stackRef = useRef<HTMLDivElement | null>(null);
   const [fileColumn, setFileColumn] = useState(false);
   const filesRef = useRef<() => void>(() => undefined);
   useTheme(theme);
@@ -170,17 +169,20 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
 
   // Measure the room the two stacked panes share, rather than guessing it from the window: the
   // header and toolbar above them came to 149 px here, which is more than a divider can spare.
-  useEffect(() => {
-    const element = stackRef.current;
-    if (!element || typeof ResizeObserver === "undefined") {
-      setStackHeight(0);
-      return;
-    }
+  // Measured whenever the stack is drawn, not when the shape changes: docking from the settings
+  // screen turns the window into a stack while no stack is on screen, the height read 0, and the
+  // dividers were pinned at their minimum until the shape changed again.
+  const stackObserver = useRef<ResizeObserver | null>(null);
+  const stackRef = useCallback((element: HTMLDivElement | null) => {
+    stackObserver.current?.disconnect();
+    stackObserver.current = null;
+    if (!element) { setStackHeight(0); return; }
+    setStackHeight(element.getBoundingClientRect().height);
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => setStackHeight(entry?.contentRect.height ?? 0));
     observer.observe(element);
-    setStackHeight(element.getBoundingClientRect().height);
-    return () => observer.disconnect();
-  }, [mode]);
+    stackObserver.current = observer;
+  }, []);
   useEffect(() => { void api.windowState().then(setWindowState); }, []);
 
   // How wide the right-hand panel is, whichever shape drew it, so the top bar can split where the
