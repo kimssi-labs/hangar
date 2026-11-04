@@ -649,3 +649,39 @@ test("full layout, short window: the gauges do not cover the side pane's tabs", 
     await app.close();
   }
 });
+
+/**
+ * A band as narrow as the owner's (about 230 px) keeps every caption button and a usable search box.
+ *
+ * At 230 px the maximise and close buttons were pushed out of the window, and the search box was
+ * squeezed to 26 px under the New button so it could not be clicked (2.22.0 too; CI, docking at
+ * 20 % of a 1024 px screen, could not click it either).
+ */
+test("a narrow band keeps its close button and a search box that can be clicked", async () => {
+  const { app, page } = await launch(fixture());
+  try {
+    for (const width of [205, 230, 300]) {
+      await app.evaluate(({ BrowserWindow }, w) => {
+        const win = BrowserWindow.getAllWindows().find((b) => b.webContents.getURL().includes("index.html"));
+        win?.setMinimumSize(100, 100);                       // a docked band is pinned narrower than a window may be
+        win?.setContentSize(w, 900);
+      }, width);
+      await expect.poll(() => page.evaluate(() => window.innerWidth), { timeout: 8000 }).toBeLessThan(width + 8);
+      const close = (await page.getByRole("button", { name: "Close" }).boundingBox())!;
+      const search = page.getByPlaceholder("Search projects");
+      const box = (await search.boundingBox())!;
+      const fresh = (await page.getByRole("button", { name: "New", exact: true }).boundingBox())!;
+      const inner = await page.evaluate(() => window.innerWidth);
+      expect(close.x + close.width, `${width}: the close button is inside the window`).toBeLessThanOrEqual(inner + 0.5);
+      expect(box.width, `${width}: the search box has room to type in`).toBeGreaterThanOrEqual(45);
+      expect(box.x + box.width <= fresh.x || fresh.y >= box.y + box.height,
+        `${width}: New does not sit on the search box`).toBe(true);
+      await search.click();
+      await page.keyboard.type("wo");
+      await expect(search).toHaveValue("wo");
+      await search.press("Escape");
+    }
+  } finally {
+    await app.close();
+  }
+});

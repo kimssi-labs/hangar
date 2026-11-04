@@ -44,6 +44,19 @@
   /* The title strip's colour: the panel at 60 % over the page, as the translucent strip it was came
      out — mixed once, opaque, so there is nothing behind it to blend or blur on every frame. */
   .title-bar { background: color-mix(in srgb, rgb(var(--panel)) 60%, rgb(var(--surface))); }
+  /* The title bar in a narrow window or band: the version gives way first, then the name, and the
+     caption buttons narrow, so close is never pushed off the edge (at 230 px maximise and close
+     were outside the window, in 2.22.0 too). */
+  .title-bar { container: title-bar / inline-size; }
+  @container title-bar (max-width: 359.98px) { .title-bar .title-version { display: none; } }
+  /* Scoped under their containers: the utilities on these elements (w-11, flex-1) come later in the
+     sheet, and a lone class would lose to them. */
+  @container title-bar (max-width: 299.98px) { .title-bar .title-name { display: none; } .title-bar .caption-button { width: 2rem; } }
+  /* The top bar's left half: narrower than this, the title and its count keep the first line and
+     the search box, + and New get the next line whole (at 230 px the search box was 26 px wide,
+     under the New button, in 2.22.0 too). */
+  .header-left { container: header-left / inline-size; }
+  @container header-left (max-width: 339.98px) { .header-left .header-actions { flex-basis: 100%; } }
   .no-drag { -webkit-app-region: no-drag; }
   /* Scrollable, but without a visible bar: in a 32 px strip the bar is taller than the content. */
   .no-bar { scrollbar-width: none; }

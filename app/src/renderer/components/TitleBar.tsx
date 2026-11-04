@@ -20,8 +20,8 @@ export function TitleBar({ version, draggable = true, controls }: {
     >
       {/* The app's own mark, so a docked band still says whose band it is. */}
       <img src="./icon.png" alt="" className="h-4 w-4 shrink-0 rounded-sm" />
-      <Truncated as="span" className="text-xs font-semibold tracking-wide text-bone-100">Hangar</Truncated>
-      <span className="text-[11px] text-bone-500 tabular-nums">v{version}</span>
+      <Truncated as="span" className="title-name min-w-0 text-xs font-semibold tracking-wide text-bone-100">Hangar</Truncated>
+      <span className="title-version shrink-0 text-[11px] text-bone-500 tabular-nums">v{version}</span>
       <div className="flex-1" />
       {controls}
     </header>

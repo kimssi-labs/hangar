@@ -726,7 +726,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
             <>
               <div className={`flex items-center border-b border-ink-600 ${tight ? "pl-2 py-1" : "pl-4 py-2"}`}>
                 {/* Left: as wide as the lists below it, so the search box grows and shrinks with them. */}
-                <div className={`flex flex-1 min-w-0 items-center gap-2 ${tight ? "pr-1" : "pr-2"}`}>
+                <div className={`header-left flex flex-1 min-w-0 flex-wrap items-center gap-x-2 gap-y-1 ${tight ? "pr-1" : "pr-2"}`}>
                 <Truncated
                   as="span"
                   testId="screen-title"
@@ -735,9 +735,10 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 >
                   {screen === "sessions" && openProjectInfo ? <ProjectTitle project={openProjectInfo} projects={projects} /> : t("app.projects")}
                 </Truncated>
-                <span className="chip">{screen === "sessions"
+                <span className="chip shrink-0 whitespace-nowrap">{screen === "sessions"
                   ? t("app.sessions.count", { count: sessions.length })
                   : t("app.projects.count", { count: filtered.length })}</span>
+                <div className="header-actions flex flex-1 min-w-0 items-center gap-2">
                 <ProjectSearch query={query} onQuery={setQuery} searchRef={searchRef} onAdd={() => void addProject()}
                   onDown={() => {
                     if (screen === "sessions") setSessionIndex(0); else setProjectIndex(0);
@@ -752,6 +753,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 >
                   {t("app.new")}
                 </button>
+                </div>
                 </div>
                 {/* Right: over the panel, its width plus the divider's, settings at its far end. */}
                 <div

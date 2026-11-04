@@ -13,6 +13,7 @@ import type { DockConfig, DockEdge } from "@core/types";
 
 import { api, type SettingsPayload } from "../../renderer/api";
 import { Choice } from "../../renderer/components/SettingsCard";
+import { CAPTION_BUTTON } from "../../renderer/components/WindowControls";
 import { useText } from "../../renderer/useText";
 import { chosenMonitor, type DisplayInfo, type DockState } from "./contract";
 
@@ -71,7 +72,7 @@ function DockGlyph({ edge, releasing }: { edge: DockEdge; releasing: boolean }) 
   );
 }
 
-const BUTTON = "no-drag grid h-8 w-11 place-items-center text-bone-400 transition-colors";
+const BUTTON = CAPTION_BUTTON;
 
 /** The caption button: the wall sits on the configured edge and the arrow points into or out of it. */
 export function DockButton({ docked, edge, ready, onToggle }: { docked: boolean; edge: DockEdge; ready: boolean; onToggle: () => void }) {
