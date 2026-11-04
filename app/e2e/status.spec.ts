@@ -88,11 +88,18 @@ test("a busy session shows a dot, one waiting for you shows a bell, a closed one
     expect(await markOf("확인 요청"), "the session asking something").toBe("waiting");
     expect(await markOf("끝난 대화"), "the session that finished").toBe("idle");
     expect(await markOf("닫힌 대화"), "the session that is not running").toBe("closed");
+    // Busy is a ring that stays put: a pulse animated for as long as the session worked and kept the
+    // compositor drawing at the display's rate the whole time.
+    const busyDot = page.locator(".row").filter({ hasText: "답변 중" }).first().locator("span[title]").first();
+    expect(await busyDot.evaluate((el) => el.getAnimations().length), "the busy mark does not animate").toBe(0);
+    expect(await busyDot.evaluate((el) => getComputedStyle(el).outlineStyle), "the busy mark has its ring").not.toBe("none");
     // The project rows speak the same four words: the busiest thing happening inside each.
     await page.keyboard.press("Escape");
     const busyProject = page.locator(".row").filter({ hasText: "workspace" }).first();
     await expect(busyProject.locator("span[title]").first()).toHaveAttribute("title", "busy");
     expect(await busyProject.locator("span[title]").first().getAttribute("class")).not.toContain("bg-ink-500");
+    expect(await busyProject.locator("span[title]").first().evaluate((el) => el.getAnimations().length)).toBe(0);
+    expect(await busyProject.locator("span[title]").first().evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe("none");
 
     const quietProject = page.locator(".row").filter({ hasText: "quiet" }).first();
     await expect(quietProject.locator("span[title]").first()).toHaveAttribute("title", "closed");

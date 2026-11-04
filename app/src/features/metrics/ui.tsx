@@ -1,12 +1,13 @@
 /**
  * CPU and memory — the page side.
  *
- * Owns the series the graphs are drawn from: the machine's, and one per running session. Filled
- * once from the history at first paint, then extended on every sample the main process pushes — and
+ * Owns the series the graphs are drawn from: the machine's, and one per running session (store.ts).
+ * Filled from the history at first paint and on coming back into view, then extended on every
+ * sample the main process pushes — and
  * the machine gauges themselves (`MachineGauges`): CPU with its clock, memory with its total. A
  * screen places one component; adding a reading (a disk, a GPU) is a change here and nowhere else.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 import type { MetricSample, MetricsSnapshot } from "@core/types";
 
@@ -15,57 +16,32 @@ import { AreaChart } from "../../renderer/components/Chart";
 import { Choice } from "../../renderer/components/SettingsCard";
 import { formatBytes } from "../../renderer/format";
 import { useText } from "../../renderer/useText";
+import { createMetricsStore, type MetricsState } from "./store";
 
-/** Samples a series keeps; older ones fall off the left of the graph. */
-const HISTORY_LIMIT = 300;
+/** The one store of the window: samples out of sight are dropped, main still has them (store.ts). */
+const store = createMetricsStore(() => document.hidden);
 
-const cap = (samples: MetricSample[]): MetricSample[] => samples.slice(-HISTORY_LIMIT);
-
-export interface Metrics {
-  systemHistory: MetricSample[];
-  sessionHistory: Record<string, MetricSample[]>;
-  /** Not part of the history: a clock speed is a reading of right now, not a series. */
-  cpuGhz: number | null;
-  /** What the machine has, as the sampler reports it — the ceiling the memory graph is drawn to. */
-  memoryTotal: number;
-  /** The machine's memory when the sampler has said so; until then, the largest reading seen. */
-  totalMemory: number;
-  latestSystem: MetricSample | null;
-  /** Read the history so far — once, at first paint. Stable. */
-  load(): Promise<void>;
+/**
+ * The feed: the sampler's pushes go into the store, and `load` reads main's history into it — at
+ * first paint, and again whenever the window comes back into view. Holds no state of its own, so
+ * the component that calls it is not re-rendered by a sample. `on` is the monitoring setting: off,
+ * every reading below reads as nothing. `load` is stable.
+ */
+export function useMetrics(on: boolean): { load(): Promise<void> } {
+  useEffect(() => api.onMetrics((snapshot: MetricsSnapshot) => { store.push(snapshot); }), []);
+  useEffect(() => store.setOn(on), [on]);
+  const load = useCallback(async () => { store.load(await api.metrics()); }, []);
+  return { load };
 }
 
-export function useMetrics(): Metrics {
-  const [systemHistory, setSystemHistory] = useState<MetricSample[]>([]);
-  const [sessionHistory, setSessionHistory] = useState<Record<string, MetricSample[]>>({});
-  const [cpuGhz, setCpuGhz] = useState<number | null>(null);
-  const [memoryTotal, setMemoryTotal] = useState(0);
+/** Everything in the store — for the machine gauges, which change with every sample. */
+function useMetricsState(): MetricsState {
+  return useSyncExternalStore(store.subscribe, store.get);
+}
 
-  const load = useCallback(async () => {
-    const history = await api.metrics();
-    setSystemHistory(history.system);
-    setSessionHistory(history.sessions);
-  }, []);
-
-  useEffect(() => api.onMetrics((snapshot: MetricsSnapshot) => {
-    setCpuGhz(snapshot.system.cpuGhz);
-    setMemoryTotal(snapshot.system.memoryTotalBytes);
-    setSystemHistory((previous) => cap([...previous, {
-      at: snapshot.at, cpu: snapshot.system.cpu, memoryBytes: snapshot.system.memoryBytes,
-    }]));
-    setSessionHistory((previous) => {
-      const next: Record<string, MetricSample[]> = {};
-      for (const [id, usage] of Object.entries(snapshot.sessions)) {
-        next[id] = cap([...(previous[id] ?? []), { at: snapshot.at, cpu: usage.cpu, memoryBytes: usage.memoryBytes }]);
-      }
-      return next;
-    });
-  }), []);
-
-  const totalMemory = memoryTotal || (systemHistory.length ? Math.max(...systemHistory.map((s) => s.memoryBytes)) : 1);
-  const latestSystem = systemHistory.length ? systemHistory[systemHistory.length - 1] ?? null : null;
-
-  return { systemHistory, sessionHistory, cpuGhz, memoryTotal, totalMemory, latestSystem, load };
+/** One session's series: re-renders its caller only when that session's series changes. */
+export function useSessionSamples(id: string | null): readonly MetricSample[] {
+  return useSyncExternalStore(store.subscribe, () => store.sessionSamples(id));
 }
 
 /** The settings card body: whether anything is measured at all. */
@@ -93,9 +69,12 @@ export function MonitorSettings({ on, onChange }: { on: boolean; onChange(on: bo
  * without its clock, or a percentage of memory without the gigabytes, is half a reading.
  * `wide` uses the longer labels a side panel has room for.
  */
-export function MachineGauges({ metrics, compact = false, wide = false }: { metrics: Metrics; compact?: boolean; wide?: boolean }) {
+export function MachineGauges({ compact = false, wide = false }: { compact?: boolean; wide?: boolean }) {
   const t = useText();
-  const { systemHistory, cpuGhz, memoryTotal, totalMemory, latestSystem } = metrics;
+  const { system: systemHistory, cpuGhz, memoryTotal } = useMetricsState();
+  // The machine's memory when the sampler has said so; until then, the largest reading seen.
+  const totalMemory = memoryTotal || (systemHistory.length ? Math.max(...systemHistory.map((s) => s.memoryBytes)) : 1);
+  const latestSystem = systemHistory[systemHistory.length - 1] ?? null;
   const cpuValue = latestSystem
     ? `${latestSystem.cpu.toFixed(0)}%${cpuGhz ? ` · ${cpuGhz.toFixed(1)} GHz` : ""}`
     : "\u2014";

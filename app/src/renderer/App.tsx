@@ -20,7 +20,7 @@ import { shouldPrompt, UPDATE_SNOOZE_MS } from "@core/updates";
 import { UsageGauges, useUsage } from "../features/usage/ui";
 import { MachineGauges, useMetrics } from "../features/metrics/ui";
 import { usePasteResults } from "../features/clipboard/ui";
-import type { ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
+import type { MetricSample, ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
 import { SIDE_PANE_TABS } from "@core/constants";
 
 import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
@@ -52,6 +52,12 @@ const ASIDE_MIN = 160;
 const ASIDE_MAX = 640;
 
 type Toast = { text: string; tone: "ok" | "bad" } | null;
+
+/**
+ * What the session lists are handed for a row's graph. The rows read their own series from the
+ * metrics store (Lists.tsx), so a sample re-renders a row's readings rather than the list.
+ */
+const noRowSamples = (): MetricSample[] => [];
 
 /**
  * The window, wrapped in the language it is read in.
@@ -98,10 +104,11 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   /** The update question has had its answer this run; it is asked once a run at most. */
   const [updateAsked, setUpdateAsked] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("dock");
-  // The graphs' series and their readings live with the metrics feature; destructured so the
-  // markup below reads as it did.
-  const metrics = useMetrics();
-  const { sessionHistory } = metrics;
+  // Monitoring off means there is nothing to draw — and nothing being measured, which is the point.
+  const monitoring = settings?.ui.monitor ?? true;
+  // The graphs' series live in the metrics feature's store, not here: a sample re-renders the
+  // components that draw a reading, never this whole window.
+  const metrics = useMetrics(monitoring);
   // Docked counts as maximised: the band is the window at its full extent, so the middle caption
   // button offers to restore, and restoring is what gives the edge back.
   const [windowState, setWindowState] = useState({ maximized: false, onTop: false });
@@ -150,15 +157,31 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     })();
   }, []);
 
+  // Out of sight — minimised, hidden, or covered by another window — nothing is refreshed and the
+  // metrics feature drops its samples; on coming back, one refresh and the history main kept, so
+  // what is drawn is as current as if it had never stopped. A docked band stays visible, so it
+  // keeps updating.
   useEffect(() => {
-    const timer = setInterval(() => void refresh(), REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [refresh]);
+    const timer = setInterval(() => { if (!document.hidden) void refresh(); }, REFRESH_MS);
+    const onVisibility = (): void => {
+      if (document.hidden) return;
+      void metrics.load();
+      void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [refresh, metrics.load]);
 
-  // Main can save the settings too, so the language follows from wherever it changed.
+  // Main can save the settings too, so the language follows from wherever it changed. Only the two
+  // values it reads: a settings push that changed something else is no reason to set it again.
+  const language = settings?.ui.language;
+  const locale = info?.locale;
   useEffect(() => {
-    if (settings && info) onLanguage({ language: settings.ui.language, locale: info.locale });
-  }, [settings?.ui.language, info?.locale, onLanguage, settings, info]);
+    if (language && locale) onLanguage({ language, locale });
+  }, [language, locale, onLanguage]);
   useEffect(() => api.onWindowState(setWindowState), []);
 
   // A docked band answers the mouse and leaves the keyboard with whatever the user was typing in
@@ -444,10 +467,18 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     if (target) await rename(target, title, rowUi);
   }, [rowUi]);
 
+  // Stable, so the prompt's Escape listener is added once rather than on every render of this window.
+  const answerUpdate = useCallback((yes: boolean, snooze: boolean) => {
+    setUpdateAsked(true);
+    if (snooze) void api.saveUi({ updateSnoozeUntil: Date.now() + UPDATE_SNOOZE_MS });
+    if (yes) {
+      updates.act("now");
+      notify({ ok: true, message: t("update.prompt.started") });
+    }
+  }, [updates.act, notify, t]);
+
   const usageWindows = usage.status?.windows ?? [];
 
-  // The project's folder, for whichever shape has room to draw it. Nothing is read while the
-  // setting is off, and nothing while no project is selected.
   const showFiles = settings?.ui.files ?? true;
   const paneTabs = SIDE_PANE_TABS.filter((tab) => settings?.ui[tab] ?? true);
   const showPane = paneTabs.length > 0;
@@ -457,13 +488,18 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const skills = useSkills(filesCwd, showPane && activeTab === "skills");
   const artifacts = useArtifacts(showPane && activeTab === "artifacts");
   const paneOpen = usePaneOpen(settings?.ui.paneOpen);
-  const files = useFiles(showFiles ? filesCwd : null, showFiles);
+  const band = mode === "band";
+  const column = mode === "column";
+  const showDetail = mode === "full";
+  // The project's folder is read only while it is on screen: the Files tab is the one picked, and
+  // the shape draws a side pane at all (stacked and full do; band and compact draw none). Nothing
+  // while the setting is off, nothing while no project is selected — and turning back to the tab
+  // reads it again at once (useFiles).
+  const filesShown = showFiles && showPane && activeTab === "files" && (column || showDetail);
+  const files = useFiles(filesCwd, filesShown);
   // The list refresh runs on a timer that must not restart whenever this callback is rebuilt, so
   // the tick reaches the panel through a ref rather than through the dependency list.
   filesRef.current = files.refresh;
-
-  // Monitoring off means there is nothing to draw — and nothing being measured, which is the point.
-  const monitoring = settings?.ui.monitor ?? true;
   // Fractions turned back into pixels against what is on screen right now, then clamped so no pane
   // is squeezed out. Saving happens on release, so a drag writes one line, not one per frame.
   const navWidth = navFraction ? Math.round(navFraction * windowWidth) : 0;
@@ -473,9 +509,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   // An undragged project list is flexible and gives way, down to the same floor the sessions keep.
   const paneMax = Math.max(STACK_PANE_MIN, stackHeight - (topHeight || STACK_MIN) - STACK_MIN);
   const paneHeight = Math.min(paneMax, paneFraction ? Math.round(paneFraction * stackHeight) : STACK_PANE_DEFAULT);
-  const band = mode === "band";
-  const column = mode === "column";
-  const showDetail = mode === "full";
   // Stacked is a choice about the lists, not about the window: a stacked window can be wide, and
   // when it is, the room to its right is a file column rather than nothing (useLayoutMode).
   useLayoutEffect(() => {
@@ -521,7 +554,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const machineCards = (
     <>
       <UsageGauges windows={usageWindows} compact />
-      {monitoring ? <MachineGauges metrics={metrics} /> : null}
+      {monitoring ? <MachineGauges /> : null}
     </>
   );
 
@@ -541,14 +574,13 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       tight={tight}
     />
   );
-  const samplesOf = (sessionId: string) => (monitoring ? sessionHistory[sessionId] ?? [] : []);
   const sessionRows = screen === "sessions" ? (
     <SessionList
       sessions={sessions}
       selected={sessionIndex}
       editing={editing}
       editRef={editRef}
-      samples={samplesOf}
+      samples={noRowSamples}
       onRename={(value, explicit) => void commitRename(value, explicit)}
       onCancelEdit={() => setEditing(null)}
       onSelect={setSessionIndex}
@@ -558,7 +590,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   ) : project ? (
     <SessionPreview
       project={project}
-      samples={samplesOf}
+      samples={noRowSamples}
       onEnter={() => enterSessions(project.dir)}
       onContextMenu={(item, index) => void sessionMenu(project.dir, item, index)}
     />
@@ -742,7 +774,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                       scrolls — with one scrollbar for the lot, the gauges left the screen. */}
                   <div className="shrink-0 max-h-[50%] overflow-auto">
                     {screen === "sessions" && session ? (
-                      <SessionDetail session={session} samples={monitoring ? sessionHistory[session.id] ?? [] : []} />
+                      <SessionDetail session={session} />
                     ) : project ? (
                       <ProjectDetail project={project} worktrees={worktrees} />
                     ) : null}
@@ -755,7 +787,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
 
                   <div className="shrink-0 p-3 space-y-2 border-t border-ink-600">
                     <UsageGauges windows={usageWindows} />
-                    {monitoring ? <MachineGauges metrics={metrics} wide /> : null}
+                    {monitoring ? <MachineGauges wide /> : null}
                     <div className="text-[11px] text-bone-500">
                       {liveSessions.length === 0
                         ? t("app.noSessionRunning")
@@ -796,7 +828,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
               {column && (monitoring || usageWindows.length > 0) ? (
                 <div className="shrink-0 border-t border-ink-600 p-1 flex gap-1 [&>*]:min-w-0 [&>*]:flex-1">
                   <UsageGauges windows={usageWindows} compact />
-                  {monitoring ? <MachineGauges metrics={metrics} compact /> : null}
+                  {monitoring ? <MachineGauges compact /> : null}
                 </div>
               ) : null}
             </>
@@ -808,17 +840,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       {!dialog && settings && shouldPrompt(updates.state, {
         now: Date.now(), snoozedUntil: settings.ui.updateSnoozeUntil, asked: updateAsked,
       }) ? (
-        <UpdatePrompt
-          state={updates.state}
-          onAnswer={(yes, snooze) => {
-            setUpdateAsked(true);
-            if (snooze) void api.saveUi({ updateSnoozeUntil: Date.now() + UPDATE_SNOOZE_MS });
-            if (yes) {
-              updates.act("now");
-              notify({ ok: true, message: t("update.prompt.started") });
-            }
-          }}
-        />
+        <UpdatePrompt state={updates.state} onAnswer={answerUpdate} />
       ) : null}
 
       {toast ? (
