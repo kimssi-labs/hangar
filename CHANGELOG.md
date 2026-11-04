@@ -3,6 +3,18 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.22.0
+
+- **Installing again keeps Hangar pinned to the taskbar.** Running the setup file over an existing
+  install deleted and recreated the Start entry, and with it unpinned Hangar from the taskbar; only
+  the in-app update kept it. The installer now keeps the Start entry, and the pin, whenever it
+  installs into the folder Hangar is already in. Picking a different folder still makes new
+  shortcuts there.
+- **The installer no longer asks "just me or everyone".** Hangar installs for every account, under
+  Program Files by default, and the folder can still be chosen. An existing install is updated in
+  the folder it is in.
+- **A shorter README:** what Hangar is, one screenshot and the feature list.
+
 ## v2.21.2
 
 - **The stacked panes resize after docking from the settings screen.** Docking from the settings

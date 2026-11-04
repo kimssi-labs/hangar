@@ -27,8 +27,11 @@ win:
       arch: [x64]
 nsis:
   oneClick: false
-  perMachine: false
+  # One install for every account, in a folder the user may pick: no "just me / everyone" page.
+  perMachine: true
   allowToChangeInstallationDirectory: true
+  # build/installer.nsh keeps the Start entry, and with it the taskbar pin, when Hangar is
+  # installed again into the folder it is already in.
   createDesktopShortcut: false        # the Start entry is enough; a desktop icon is clutter
   createStartMenuShortcut: true          # the Start entry is what Windows pins to the taskbar from
   shortcutName: Hangar
