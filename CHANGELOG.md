@@ -3,6 +3,59 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.23.0
+
+- **Much lighter while it sits there.** Hangar is meant to stay open all day, so the work it does
+  while nobody touches it was cut:
+  - A CPU/memory sample once a second used to redraw the whole window; now only the gauges and the
+    running rows redraw. Charts draw only when their data, size or theme changes, labels measure
+    themselves only when their text changes, and the busy mark no longer pulses for hours.
+  - The project scan every 15 s reads only what changed: folder listings are reused while unchanged,
+    only running sessions are looked at again, `history.jsonl` and live transcripts are read from
+    where the last read stopped, settings files are cached, and an unchanged list is not sent to
+    the window at all. A full rescan still runs every three minutes as a safety net.
+  - Minimised or covered, the window stops refreshing and drawing, and catches up the moment it is
+    seen again. A docked band stays visible, so it keeps updating.
+  - The Files panel reads the folder and runs `git status` only while the Files tab is on screen,
+    at most every 30 s. The process tree behind the session gauges is walked every 5 s instead of
+    every second. Program lookups are cached and open no console window.
+- **The keyboard reaches everything.** Tab moves between the areas (top bar, project list,
+  sessions, side pane tabs and their lists, details); the arrow keys, Page Up/Down and Home/End move
+  inside a list; Enter opens; Escape goes back; the menu key or Shift+F10 opens a row's menu; F2
+  renames and Delete deletes in the project and session lists. Dialogs keep Tab inside themselves
+  and give focus back when they close. In a docked band a search box takes typing; the lists stay
+  for the mouse there, so the band never takes the keyboard from your terminal on its own.
+- **Single-letter shortcuts are gone** (O, N, V, S, F5, /, ? and Ctrl+Q, with the help overlay),
+  and with them a bug: typing those letters into a dialog, a search box or a settings field ran the
+  shortcut instead of typing the letter. Everything they did is still a button or a menu entry;
+  saving the clipboard image is in the project menu, and the global paste hotkey (Ctrl+Alt+V) stays.
+- **Worktrees are easy to tell apart.** A worktree row is named by its branch, with a fork icon and
+  an indent rail in a colour nothing else uses; its repository row shows how many worktrees it has
+  (`⑂2`); the sessions screen's title reads `repository ⑂ branch`, also for a worktree whose
+  repository is not in the list. The branch and the uncommitted count sit in the same style on
+  every row. The push/pull counts, which were never filled in, are gone; what changed is the Files
+  panel's job.
+- **A clicked row that is cut off scrolls into view.** Once the double-click time has passed, a row
+  half hidden at the top or bottom of its list slides fully into view, so a double-click still opens
+  the row it was aimed at. The keyboard still scrolls at once.
+- **Images copied in Teams, browsers and chat apps paste as a path.** They come with an HTML copy of
+  the picture, which was taken for text, so Ctrl+V in a terminal pasted nothing. The HTML now
+  survives the round trip, Office charts and shapes are still left alone, and a copy read while
+  another program holds the clipboard is tried again.
+- **Fixes**
+  - A session between 64 KB and 512 KB long now shows its newer AI title instead of its first one.
+  - In a short window with the full layout, the CPU and memory cards were drawn over the Files /
+    Skills / Artifacts tabs; the details now give way first and the side pane keeps its tabs.
+  - A dock note at start-up (a saved monitor that is not connected) now reaches the window.
+  - A `.claude.json` saved with a byte-order mark no longer reads as having no projects.
+  - A save is never lost when a virus or DLP scanner holds the file open: settings are written
+    atomically, and in place if the file is held.
+  - The test suite's windows no longer take the foreground, which cancelled drags in other windows
+    while it ran.
+- **Smaller and simpler inside**: one helper each for native calls, JSON, JSON Lines and git; the
+  usage-hook clean-up for 2.15.1 and older, a second loading screen and the unused application
+  menu are gone.
+
 ## v2.22.0
 
 - **Installing again keeps Hangar pinned to the taskbar.** Running the setup file over an existing
