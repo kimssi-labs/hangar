@@ -11,6 +11,8 @@
  * caller only where it is cheap or asked for, and the head line stands on its own without it.
  */
 
+import { translator, type Translate } from "./i18n.js";
+
 /** A branch name, a tag, or a short commit for a detached head. */
 export interface GitInfo {
   /** Branch, or the short commit when the head is detached. */
@@ -40,24 +42,9 @@ export function countDirty(porcelain: string): number {
 /**
  * The head and what is uncommitted, in words: the row's tooltip and the detail panel.
  *
- * A translator is passed in rather than imported: this module is the rules, and the wording is the
- * window's. English is what a caller without one gets, which keeps the tests readable.
+ * The window passes its own translator; a caller without one, a test say, gets the English.
  */
-// Loose in the key so the window's own translator, whose keys are the full message union, can be
-// passed straight in; the keys used here are all defined in the dictionaries.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type GitPhrase = (key: any, vars?: Record<string, string | number>) => string;
-
-const EN_GIT: Record<string, (v: Record<string, string | number>) => string> = {
-  "git.on": (v) => `Git: on ${v.branch}`,
-  "git.detached": (v) => `Git: detached at ${v.commit}`,
-  "git.uncounted": () => "changes not counted",
-  "git.clean": () => "nothing uncommitted",
-  "git.dirty": (v) => `${v.count} uncommitted`,
-};
-const inEnglish: GitPhrase = (key, vars = {}) => EN_GIT[key]?.(vars) ?? key;
-
-export function gitTitle(info: GitInfo, t: GitPhrase = inEnglish): string {
+export function gitTitle(info: GitInfo, t: Translate = translator("en")): string {
   const where = info.detached
     ? t("git.detached", { commit: info.head })
     : t("git.on", { branch: info.head });
