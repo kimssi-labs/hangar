@@ -2,8 +2,23 @@
  * Reading and writing the JSON (and JSON Lines) the app and Claude Code keep — one way, so every
  * reader agrees.
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+
+/**
+ * What a rename onto a file that someone else holds open fails with on Windows. A virus or DLP
+ * scanner that opened the file without sharing delete blocks a rename onto it, but not a write into
+ * it, which is what these saves did before they became atomic.
+ */
+const TARGET_BUSY = new Set(["EPERM", "EBUSY", "EACCES"]);
+/** Tries at the rename before writing in place; the scanner usually lets go within a few ms. */
+const RENAME_TRIES = 3;
+const RENAME_RETRY_MS = 20;
+
+/** A short synchronous pause, for a save that has to finish before its caller goes on. */
+function pause(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
 
 /**
  * The parsed contents of `file`, or `fallback` when it is absent, empty, not JSON or JSON `null`.
@@ -23,12 +38,31 @@ export function readJson<T>(file: string, fallback: T): T {
 /**
  * `value` as JSON in `file`: written beside it first and renamed over it, so a reader never catches
  * a half-written file. `indent` is for a file a person may edit. Throws when it cannot be written.
+ *
+ * When the rename keeps failing because the file is held open by someone else, it is written in
+ * place instead: a save that is not atomic beats a save that is lost.
  */
 export function writeJson(file: string, value: unknown, indent = 0): void {
   mkdirSync(dirname(file), { recursive: true });
+  const text = indent ? `${JSON.stringify(value, null, indent)}\n` : JSON.stringify(value);
   const tmp = `${file}.tmp`;
-  writeFileSync(tmp, indent ? `${JSON.stringify(value, null, indent)}\n` : JSON.stringify(value), "utf8");
-  renameSync(tmp, file);
+  writeFileSync(tmp, text, "utf8");
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      renameSync(tmp, file);
+      return;
+    } catch (error) {
+      const busy = TARGET_BUSY.has((error as NodeJS.ErrnoException).code ?? "");
+      if (busy && attempt < RENAME_TRIES) {
+        pause(RENAME_RETRY_MS);
+        continue;
+      }
+      rmSync(tmp, { force: true });
+      if (!busy) throw error;
+      writeFileSync(file, text, "utf8");
+      return;
+    }
+  }
 }
 
 /**
