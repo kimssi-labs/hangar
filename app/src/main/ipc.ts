@@ -67,11 +67,6 @@ export interface AppInfo {
   /** The machine's own locale, so "system" can resolve to something. */
   locale: string;
   version: string;
-  platform: NodeJS.Platform;
-  claudeFound: boolean;
-  home: string;
-  dockSupported: boolean;
-  dockNote: string | null;
 }
 
 export interface ActionResult {

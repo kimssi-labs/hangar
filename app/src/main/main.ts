@@ -29,7 +29,7 @@ import { register as registerSkills } from "../features/skills/main.js";
 import { register as registerUpdates } from "../features/updates/main.js";
 import { register as registerUsage } from "../features/usage/main.js";
 import { openingRect } from "../core/windowPlacement.js";
-import { claudeExecutable, which } from "./executables.js";
+import { which } from "./executables.js";
 import { CHANNEL, MENU_SEPARATOR, PAGES, type ActionResult, type AppInfo, type MenuItemSpec, type PageName, type WindowCommand, type WindowState } from "./ipc.js";
 
 const DEV_SERVER = "http://localhost:5273";
@@ -395,13 +395,6 @@ function registerIpc(): void {
     // app.getLocale() is the OS's own choice, which is what an unset language should follow.
     locale: app.getLocale(),
     version: app.getVersion(),
-    platform: process.platform,
-    claudeFound: Boolean(claudeExecutable()),
-    home: claudeHome(),
-    dockSupported: process.platform === "win32" || !process.env["WAYLAND_DISPLAY"],
-    dockNote: process.env["WAYLAND_DISPLAY"]
-      ? "Wayland does not let an application reserve screen space."
-      : null,
   }));
 }
 

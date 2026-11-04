@@ -23,7 +23,7 @@ export interface RenameRequest {
 }
 
 export interface DeleteRequest {
-  /** The window already asked; skip the native box rather than asking twice. */
+  /** Ignored: the window always asks before it sends a delete. Kept while the page still sets it. */
   confirmed?: boolean;
   projectDir: string;
   sessionId?: string;
