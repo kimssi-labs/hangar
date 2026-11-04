@@ -376,13 +376,13 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     if (!settings) return;
     if (!enabled) {
       setSettings(await dock.release());
-      notify({ ok: true, message: "Undocked." });
+      notify({ ok: true, message: t("app.undocked") });
       return;
     }
     const result = await dock.apply({ ...settings.dock, device: chosenMonitor(settings.dock.device, displays), enabled: true });
     if (result.settings) setSettings(result.settings);
-    notify({ ok: result.ok, message: result.message ?? "Docked." });
-  }, [settings, displays, notify]);
+    notify({ ok: result.ok, message: result.message ?? t("app.docked") });
+  }, [settings, displays, notify, t]);
 
   // The keyboard starts in the project list, once the layout the settings ask for is drawn — the
   // list it lands in is then the one that stays. Not in a band, which leaves the keyboard with the

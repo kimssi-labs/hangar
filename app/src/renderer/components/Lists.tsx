@@ -87,8 +87,9 @@ function StatusMark({ session }: { session: SessionInfo }) {
 
 /** The mark of a pinned row: a pushpin, drawn rather than an emoji so it takes the theme's colour. */
 function Pin() {
+  const t = useText();
   return (
-    <svg viewBox="0 0 16 16" className="w-3 h-3 shrink-0 text-accent" fill="currentColor" aria-label="pinned" role="img">
+    <svg viewBox="0 0 16 16" className="w-3 h-3 shrink-0 text-accent" fill="currentColor" aria-label={t("list.pinned")} role="img">
       <path d="M9.6 1.2 14.8 6.4l-1.9.5-2.5 2.5.4 3.2-1.2 1.2-3-3-4 4-.9-.9 4-4-3-3 1.2-1.2 3.2.4 2.5-2.5z" />
     </svg>
   );

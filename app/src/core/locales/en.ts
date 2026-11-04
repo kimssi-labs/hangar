@@ -23,6 +23,8 @@ export const en = {
   "app.sessionsRunning": "{count} sessions running",
   "app.sessionRunning": "1 session running",
   "app.noSessionRunning": "no session running",
+  "app.docked": "Docked.",
+  "app.undocked": "Undocked.",
 
   // -- the right-click menus -----------------------------------------------------------------------
   "menu.openSessions": "Open sessions",
@@ -44,6 +46,7 @@ export const en = {
   "list.sessions": "{count} sessions",
   "list.worktree": "worktree",
   "list.trees": "{count} worktree(s)",
+  "list.pinned": "pinned",
   "list.detached": "detached",
   "list.folderUnknown": "folder unknown",
   "list.memory": "memory",
@@ -232,6 +235,7 @@ export const en = {
   "settings.git.count": "Also count uncommitted files",
   "settings.git.note": "The branch is read straight from .git, which costs nothing. Counting changes runs git status for the selected project only, so a large repository slows that row and no other.",
   "settings.git.updating": "Updating from the base branch",
+  "git.syncing": "Updating from the base branch…",
   "settings.git.base": "Base branch",
   "settings.git.base.placeholder": "origin/main — blank asks the remote for its default",
   "settings.git.strategy.rebase": "Rebase",

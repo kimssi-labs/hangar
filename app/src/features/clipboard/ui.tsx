@@ -54,7 +54,7 @@ export function PasteSettings({ launch, hotkeyActive, onChange }: {
           type="text"
           spellCheck={false}
           value={launch.pasteHotkey}
-          placeholder="off"
+          placeholder={t("settings.launch.off")}
           onChange={(event) => set({ pasteHotkey: event.target.value })}
           className="flex-1 min-w-0 bg-ink-800 border border-ink-600 rounded-lg px-2 py-1 text-xs placeholder:text-bone-500 focus:border-accent/60"
         />
