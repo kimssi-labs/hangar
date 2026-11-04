@@ -149,3 +149,16 @@ jobs:
             done
           done
           [ "$missing" = 0 ]
+      # Only the newest releases stay; older ones and their installers are deleted once this one is
+      # published and checked. The tags stay, so every version is still in the history.
+      - name: Keep the five newest releases
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: 5
+        run: |
+          gh release list --limit 1000 --exclude-drafts --json tagName,publishedAt \
+            --jq "sort_by(.publishedAt) | reverse | .[${KEEP}:] | .[].tagName" |
+          while read -r old; do
+            gh release delete "$old" --yes
+          done
