@@ -1,5 +1,6 @@
 /**
- * Reading and writing the JSON files the app and Claude Code keep — one way, so every reader agrees.
+ * Reading and writing the JSON (and JSON Lines) the app and Claude Code keep — one way, so every
+ * reader agrees.
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -28,4 +29,23 @@ export function writeJson(file: string, value: unknown, indent = 0): void {
   const tmp = `${file}.tmp`;
   writeFileSync(tmp, indent ? `${JSON.stringify(value, null, indent)}\n` : JSON.stringify(value), "utf8");
   renameSync(tmp, file);
+}
+
+/**
+ * The objects in JSON Lines `text`, at most `limit` of them. A blank line, one a byte window cut in
+ * half, one still being written and one that is not an object are passed over, never fatal.
+ */
+export function parseJsonl<T = Record<string, unknown>>(text: string, limit = Infinity): T[] {
+  const out: T[] = [];
+  for (const line of text.split("\n")) {
+    if (out.length >= limit) break;
+    if (!line.trim()) continue;
+    try {
+      const value: unknown = JSON.parse(line);
+      if (value && typeof value === "object") out.push(value as T);
+    } catch {
+      /* cut off, or not finished yet: read again once it is whole */
+    }
+  }
+  return out;
 }
