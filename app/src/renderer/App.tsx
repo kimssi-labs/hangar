@@ -197,7 +197,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   useEffect(() => api.onWindowState(setWindowState), []);
 
   // A docked band answers the mouse and leaves the keyboard with whatever the user was typing in
-  // (core/keyboardHold.ts). It asks for the keyboard only while this page has a field open.
+  // (features/dock/main.ts). It asks for the keyboard only while this page has a field open.
   useEffect(() => {
     api.holdKeyboard(Boolean(editing) || screen === "settings" || dialog !== null || searching);
   }, [editing, screen, dialog, searching]);
@@ -386,7 +386,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
 
   // The keyboard starts in the project list, once the layout the settings ask for is drawn — the
   // list it lands in is then the one that stays. Not in a band, which leaves the keyboard with the
-  // terminal (core/keyboardHold.ts).
+  // terminal (features/dock/main.ts).
   const placedFocus = useRef(false);
   useEffect(() => {
     if (!settings || placedFocus.current) return;

@@ -16,7 +16,6 @@ import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
 import { percentFloor } from "../../core/config.js";
 import { DOCK_PERCENT } from "../../core/constants.js";
-import { windowTakesKeyboard } from "../../core/keyboardHold.js";
 import type { DockConfig } from "../../core/types.js";
 import type { WindowChrome } from "../../main/chrome.js";
 import { bandRect, bandThickness, Dock, displayKey, dockReady, keepTaskbarButton, pickDisplay, setupKey } from "../../main/dock.js";
@@ -81,7 +80,7 @@ export interface DockFeature {
 export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeature {
   let dock: Dock | null = null;
   let icons: IconKeeper | null = null;
-  /** Set while the page has a field open — see core/keyboardHold.ts. */
+  /** Set while the page has a field open — see applyKeyboardHold. */
   let needsTyping = false;
   let resizeTimer: NodeJS.Timeout | null = null;
   /** Minimised while docked: the edge is given back, and the band comes back with the window. */
@@ -106,11 +105,17 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
   /**
    * A docked band answers the mouse but leaves the keyboard with whatever the user was typing in.
    * Re-applied whenever either half of the decision changes.
+   *
+   * Clicking a band used to move the keyboard as any window does, which on Windows shows as the
+   * taskbar's input indicator turning into an X — the focused window accepts no text — and the next
+   * Korean keystrokes meant for the terminal went nowhere (measured on this machine). So a band asks
+   * for the keyboard only while the page has something to type into — a rename editor, a search box,
+   * the settings screen, a dialog with a field — and an undocked window behaves like any other.
    */
   function applyKeyboardHold(): void {
     const window = ctx.window();
     if (!window || window.isDestroyed()) return;
-    const takes = windowTakesKeyboard(dock?.isDocked === true, needsTyping);
+    const takes = dock?.isDocked !== true || needsTyping;
     if (window.isFocusable() === takes) return;
     window.setFocusable(takes);
     if (!takes) keepTaskbarButton(window);           // Electron took the button away with the focus
