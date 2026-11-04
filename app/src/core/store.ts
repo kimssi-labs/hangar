@@ -185,11 +185,13 @@ export interface StoreOptions {
   folderExists?: (path: string) => boolean;
   /** Injected so a test can move the clock past FULL_RESCAN_MS. */
   now?: () => number;
+  /** The settings this reads aliases, pins and added folders from: main hands over its own. */
+  config?: ConfigStore;
 }
 
 export class Store {
   readonly paths: HomePaths;
-  readonly config: ConfigStore;
+  private readonly config: ConfigStore;
   private readonly isAlive: (pid: number) => boolean;
   private readonly folderExists: (path: string) => boolean;
   private readonly now: () => number;
@@ -216,7 +218,7 @@ export class Store {
 
   constructor(home?: string, options: StoreOptions = {}) {
     this.paths = homePaths(home);
-    this.config = new ConfigStore(home);
+    this.config = options.config ?? new ConfigStore(home);
     this.isAlive = options.isAlive ?? defaultIsAlive;
     this.now = options.now ?? Date.now;
     this.links = new SessionLinks(this.paths.hangarChains);

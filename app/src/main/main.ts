@@ -163,8 +163,8 @@ function pushWindowState(): void {
   window.webContents.send(CHANNEL.windowStatePush, windowState());
 }
 
-const store = new Store();
 const config = new ConfigStore();
+const store = new Store(undefined, { config });
 
 /**
  * What a feature's main side may reach, and the plumbing it registers through.

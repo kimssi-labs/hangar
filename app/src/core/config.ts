@@ -46,8 +46,8 @@ export function fileSignature(file: string): string | null {
  * Parsed settings files, by path, against their signature.
  *
  * The scan alone asked for these four times every fifteen seconds, each a read and a parse. Module
- * level, not per instance: main and the store each hold a ConfigStore on the same file, and a write
- * through either must be seen by both. Handed out as copies, because callers edit what they get.
+ * level, not per instance: any two ConfigStores on the same file — the tests make them — must see
+ * each other's writes. Handed out as copies, because callers edit what they get.
  */
 const parsed = new Map<string, { signature: string; value: Json }>();
 
