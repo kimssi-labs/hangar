@@ -10,7 +10,7 @@ import { autoPlan, intervalMs, sweepSummary, MIN_INTERVAL_MINUTES, SWEEP_LIMIT }
 import type { GitInfo } from "../git.js";
 import type { ProjectInfo } from "../types.js";
 
-const GIT: GitInfo = { head: "feature", detached: false, ahead: 0, behind: 0, dirty: 0 };
+const GIT: GitInfo = { head: "feature", detached: false, dirty: 0 };
 
 function project(overrides: Partial<ProjectInfo> = {}): ProjectInfo {
   return {
@@ -27,6 +27,7 @@ function project(overrides: Partial<ProjectInfo> = {}): ProjectInfo {
     pinned: false,
     git: GIT,
     worktree: false,
+    mainRepo: null,
     parentDir: null,
     ...overrides,
   };

@@ -50,6 +50,8 @@ export const ko: Dictionary = {
   // -- 목록 -------------------------------------------------------------------------------------
   "list.sessions": "세션 {count}개",
   "list.worktree": "worktree",
+  "list.trees": "worktree {count}개",
+  "list.detached": "분리됨",
   "list.folderUnknown": "폴더 경로 없음",
   "list.memory": "memory",
   // 행의 상태 표시에 마우스를 올렸을 때 나오는 말.
@@ -332,8 +334,6 @@ export const ko: Dictionary = {
   "tip.usageResets": "{label} — {percent} 사용, {left} 남음, {clock} 초기화",
   "git.on": "Git: {branch} 브랜치",
   "git.detached": "Git: {commit} 커밋에 분리됨",
-  "git.push": "푸시할 커밋 {count}개",
-  "git.pull": "받을 커밋 {count}개",
   "git.uncounted": "변경 파일 수 미집계",
   "git.clean": "변경 사항 없음",
   "git.dirty": "변경 파일 {count}개",

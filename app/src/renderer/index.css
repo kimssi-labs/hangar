@@ -18,6 +18,10 @@
     --text: 28 27 26;
     --muted: 107 104 98;
     --faint: 143 139 129;
+    /* Git's own colour (worktrees, branches, what is uncommitted) and nothing else's, so it never
+       reads as the orange of a pin or a selection. Darker here: the dark theme's blue is under 3:1
+       on this surface. */
+    --tree: 42 100 160;
   }
   [data-theme="dark"] {
     --surface: 20 20 19;
@@ -27,6 +31,7 @@
     --text: 236 234 228;
     --muted: 143 139 129;
     --faint: 107 104 98;
+    --tree: 91 155 213;
   }
   body { @apply font-sans antialiased select-none; background: rgb(var(--surface)); color: rgb(var(--text)); }
   /* Keyboard focus must always be visible — the app is meant to be driven without a mouse. */
@@ -75,6 +80,9 @@
   .row-selected { @apply bg-ink-700 ring-1 ring-accent/40; }
   .card { @apply bg-ink-800 border border-ink-600 rounded-xl; }
   .chip { @apply text-[11px] px-1.5 py-0.5 rounded-md bg-ink-700 text-bone-400; }
+  /* Git's counts (the worktrees under a repository, the files uncommitted) as one small pill in
+     git's colour: a badge, not a word, and the same one on the name line and the branch line. */
+  .tree-chip { @apply shrink-0 inline-flex items-center gap-0.5 rounded-md px-1 text-[11px] leading-4 tabular-nums text-tree bg-tree/15; }
   .btn { @apply px-3 py-1.5 rounded-lg text-sm bg-ink-700 border border-ink-600 transition-colors hover:border-bone-500; }
   /* Fixed dark ink: on the accent orange, the light theme's near-white surface would not read. */
   .btn-accent { @apply bg-accent/90 hover:bg-accent text-[#1c1b1a] border-transparent font-medium; }

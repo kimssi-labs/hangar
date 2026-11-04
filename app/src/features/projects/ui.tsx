@@ -322,7 +322,7 @@ export function ProjectPane({
   return (
     <>
       <div className={`flex-1 overflow-auto space-y-0.5 ${tight ? "p-1" : "p-2"}`}>
-        {placed.map(({ item, depth }, index) => (
+        {placed.map(({ item, depth, parent, trees }, index) => (
           editing === item.dir ? (
             <RenameInput key={item.dir} inputRef={editRef} defaultValue={item.alias ?? item.name} onCommit={onRename} onCancel={onCancelEdit} />
           ) : (
@@ -330,6 +330,8 @@ export function ProjectPane({
               key={item.dir}
               project={item}
               depth={depth}
+              parent={parent}
+              trees={trees}
               selected={isSelected(item, index)}
               onSelect={() => onSelect(index)}
               onOpen={() => onOpen(item.dir)}

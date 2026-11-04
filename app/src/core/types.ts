@@ -47,6 +47,8 @@ export interface ProjectInfo {
   git: import("./git.js").GitInfo | null;
   /** This folder is a linked worktree of a repository that lives elsewhere. */
   worktree: boolean;
+  /** That repository's folder, read from the worktree's `.git` pointer, whether it is listed or not. */
+  mainRepo: string | null;
   /** The project this worktree belongs under, when that repository is in the list too. */
   parentDir: string | null;
 }

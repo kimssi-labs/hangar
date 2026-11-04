@@ -18,6 +18,7 @@ import type { MainContext } from "../../bridge/context.js";
 import { launchCommand, sessionEnvironment, WT_EXE } from "../../core/launcher.js";
 import { scanSignature } from "../../core/store.js";
 import type { ProjectInfo } from "../../core/types.js";
+import { linkWorktrees } from "../../core/worktree.js";
 import { cachedWhich, claudeExecutable, detectLinuxTerminal, haveExecutable } from "../../main/executables.js";
 import { headOf, isLinkedWorktree, mainCheckoutOf } from "../../main/gitStatus.js";
 import { focusSession, helperExecutable, stopSession } from "../../main/liveSession.js";
@@ -68,7 +69,8 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
         }
       }
       // Second pass: a worktree points at a folder, and the list is keyed by project. Match the two so
-      // the window can show each worktree under the repository it came from.
+      // the window can show each worktree under the repository it came from, and name that
+      // repository even when it is not listed (the folder read here is kept as `mainRepo`).
       // Compared with separators and case normalised: the pointer file writes forward slashes where
       // a transcript's cwd on Windows has backslashes, and the two would never match as written.
       //
@@ -92,17 +94,7 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
         }
         return real.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
       };
-      if (projects.some((p) => p.worktree)) {
-        const byPath = new Map(projects
-          .filter((p) => p.cwd)
-          .map((p) => [key(p.cwd as string, p.exists), p.dir]));
-        for (const project of projects) {
-          if (!project.worktree || !project.cwd) continue;
-          const repo = mainCheckoutOf(project.cwd);
-          // The repository a worktree we just read points at is taken to be there, as it always was.
-          project.parentDir = repo ? byPath.get(key(repo, true)) ?? null : null;
-        }
-      }
+      linkWorktrees(projects, mainCheckoutOf, key);
     }
     const ms = Date.now() - t0;
     if (ms > SLOW_SCAN_MS) console.log(`[hangar] scan took ${ms} ms for ${projects.length} projects`);

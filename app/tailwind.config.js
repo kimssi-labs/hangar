@@ -28,6 +28,7 @@ module.exports = {
           500: token("faint"),
         },
         accent: { DEFAULT: "#d97757", soft: "#e69c81", dim: "#8a4b34" },
+        tree: token("tree"),          // git: worktrees, branches, the uncommitted count
         ok: "#3f9f61",
         warn: "#c08a1e",
         bad: "#cf4a38",
