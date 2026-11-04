@@ -28,6 +28,31 @@ describe("shouldAddPath", () => {
     expect(shouldAddPath({ formats: ["text/plain", "text/html"], sequence: 9 }, 8)).toBe(false);
   });
 
+  it("adds a path to an image copied from a web view, which comes with an HTML copy of itself", () => {
+    // New Teams (WebView2), browsers and Electron chat apps put the picture on the clipboard
+    // together with HTML holding an <img> of it, and no plain text. Electron reports that as
+    // text/html + image/png (measured on a Teams copy), and treating the HTML as text skipped it.
+    expect(shouldAddPath({ formats: ["text/html", "image/png"], sequence: 9 }, 8)).toBe(true);
+  });
+
+  it("still leaves an image alone when plain text comes with it", () => {
+    // A range of spreadsheet cells is a picture, HTML and plain text: the text is what is meant.
+    expect(shouldAddPath({ formats: ["text/plain", "text/html", "text/rtf", "image/png"], sequence: 9 }, 8)).toBe(false);
+  });
+
+  it("only HTML is let through: rich text or a file reference beside the picture still count", () => {
+    // A WordPad/Office object, and a file copied with its thumbnail (pasting it into Explorer must
+    // keep working), are not pictures to be flattened.
+    expect(shouldAddPath({ formats: ["text/rtf", "image/png"], sequence: 9 }, 8)).toBe(false);
+    expect(shouldAddPath({ formats: ["text/uri-list", "image/png"], sequence: 9 }, 8)).toBe(false);
+    expect(shouldAddPath({ formats: ["text/uri-list"], sequence: 9 }, 8)).toBe(false);
+    expect(shouldAddPath({ formats: ["text/html"], sequence: 9 }, 8)).toBe(false);
+  });
+
+  it("leaves an Office chart or shape alone, even when it offers only a picture and HTML", () => {
+    expect(shouldAddPath({ formats: ["text/html", "image/png"], sequence: 9, officeObject: true }, 8)).toBe(false);
+  });
+
   it("ignores an empty clipboard", () => {
     expect(shouldAddPath({ formats: [], sequence: 9 }, 8)).toBe(false);
   });

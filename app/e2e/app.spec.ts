@@ -234,6 +234,45 @@ test("a copied screenshot is given a path without anyone pressing a shortcut", a
 });
 
 /**
+ * A picture copied from a web view comes with an HTML copy of itself.
+ *
+ * New Teams (WebView2), browsers and Electron chat apps put the bitmap on the clipboard together
+ * with HTML holding an `<img>` of it and no plain text. The watch took the HTML for text and left
+ * the copy alone, so Ctrl+V in a terminal pasted nothing (reported from a Teams chat, formats
+ * measured). The HTML also has to survive the round trip: leaving the terminal gives the picture
+ * back with it, so pasting into another chat still gets what was copied.
+ */
+test("an image copied from a web view, HTML and all, is given a path and keeps its HTML", async () => {
+  test.skip(process.platform !== "win32", "the clipboard watch is Windows-only");
+  const { home } = fixture();
+  const { app, page } = await launch(home, { HANGAR_CLIP_FOCUS: "terminal" });
+  try {
+    await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
+    await app.evaluate(({ clipboard, nativeImage }) => {
+      const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFElEQVR4nGO8WR7OgA0wYRUdtBIATsMBtyGIWZMAAAAASUVORK5CYII=";
+      clipboard.clear();
+      clipboard.write({ html: `<img src="data:image/png;base64,${base64}" alt="">`, image: nativeImage.createFromBuffer(Buffer.from(base64, "base64")) });
+    });
+
+    await expect.poll(
+      () => app.evaluate(({ clipboard }) => clipboard.readText()),
+      { message: "the watch never added a path to the web view's picture", timeout: 8000 },
+    ).toMatch(new RegExp(String.raw`hangar-clips[\\/]clip-\d{8}-\d{6}-\d{3}\.png$`));
+
+    // Away from the terminal: the path goes, the picture and its HTML stay.
+    await app.evaluate(() => { process.env.HANGAR_CLIP_FOCUS = "other"; });
+    await expect.poll(
+      () => app.evaluate(({ clipboard }) => clipboard.readText()),
+      { message: "the path stayed after the terminal lost the front", timeout: 8000 },
+    ).toBe("");
+    expect(await app.evaluate(({ clipboard }) => !clipboard.readImage().isEmpty()), "the picture is still there").toBe(true);
+    expect(await app.evaluate(({ clipboard }) => clipboard.readHTML()), "the HTML came back with it").toContain("<img");
+  } finally {
+    await app.close();
+  }
+});
+
+/**
  * The other half of the same rule: while no terminal is in front, the screenshot is left as it
  * was. Word pastes the text when a clipboard offers both a bitmap and a text (measured), so a path
  * added beside every screenshot turned Ctrl+V in a document into a file name — the report that
