@@ -9,10 +9,11 @@
  */
 import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 
+import { MENU_SEPARATOR } from "@core/constants";
 import type { LaunchConfig, PermissionMode, ProjectInfo, SessionInfo, ShellChoice } from "@core/types";
 import { placeWorktrees, type Placed } from "@core/worktree";
 
-import { api, MENU_SEPARATOR, type MenuItemSpec } from "../../renderer/api";
+import { api, type MenuItemSpec } from "../../renderer/api";
 import { ProjectRow, SessionRow } from "../../renderer/components/Lists";
 import { Choice } from "../../renderer/components/SettingsCard";
 import type { Ask, AskResult } from "../../renderer/components/Modal";
