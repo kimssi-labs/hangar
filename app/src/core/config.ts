@@ -184,11 +184,10 @@ export class ConfigStore {
 
   // -- status line -------------------------------------------------------------------------------
   status(): StatusConfig {
-    const raw = this.section(SECTION.status);
-    const chosen = raw["windows"];
-    // Null unless a choice was written down: every window Claude Code reports, which on a machine
-    // it reports none for is nothing either way.
-    return { windows: Array.isArray(chosen) ? chosen.map(String) : null };
+    const { enabled, windows } = this.section(SECTION.status);
+    // On unless switched off. A file from an older version holds a list of windows instead: an empty
+    // list was off, and any other (a few windows ticked included) is on.
+    return { enabled: typeof enabled === "boolean" ? enabled : !Array.isArray(windows) || windows.length > 0 };
   }
 
   saveStatus(config: StatusConfig): void {

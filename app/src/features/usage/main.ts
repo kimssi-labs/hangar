@@ -102,10 +102,7 @@ async function refreshFromEndpoint(landed: () => void, live: boolean, manual = f
 export function register(ctx: MainContext, wire: Wire): UsageFeature {
   const publish = (): void => wire.emit(usageContract.onStatus, readStatus(undefined, ctx.config.status()));
   /** Whether any gauge is drawn: off is off, and nothing is asked for what nothing shows. */
-  const showing = (): boolean => {
-    const windows = ctx.config.status().windows;
-    return windows === null || windows.length > 0;
-  };
+  const showing = (): boolean => ctx.config.status().enabled;
   const refresh = async (manual = false): Promise<void> => {
     if (showing()) await refreshFromEndpoint(publish, sessionRunning(ctx), manual);
   };
