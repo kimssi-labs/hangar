@@ -12,11 +12,10 @@
  * helper. "Auto arrange" makes Explorer ignore positions, so with it on nothing is touched.
  */
 import { execFile, execFileSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { rmSync } from "node:fs";
 
 import { type Box, type DeskIcon, movedByUser, placeAround } from "../core/deskIcons.js";
-import { readJson } from "../core/json.js";
+import { readJson, writeJson } from "../core/json.js";
 import type { DockEdge } from "../core/types.js";
 import { helperExecutable, type HelperSpec } from "./liveSession.js";
 
@@ -362,9 +361,7 @@ export class IconKeeper {
 
   private save(): void {
     try {
-      if (!this.kept) return;
-      mkdirSync(dirname(this.file), { recursive: true });
-      writeFileSync(this.file, JSON.stringify(this.kept));
+      if (this.kept) writeJson(this.file, this.kept);
     } catch (error) {
       console.error("[hangar] desktop icons: could not save", (error as Error).message);
     }

@@ -5,13 +5,13 @@
  * real folder only exists inside its transcripts, a session's title can come from three places, and
  * a "live" session is a pid that still exists — the registry file outlives the process.
  */
-import { closeSync, mkdirSync, openSync, readSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync, appendFileSync, type Stats } from "node:fs";
+import { closeSync, mkdirSync, openSync, readSync, readdirSync, rmSync, statSync, unlinkSync, appendFileSync, type Stats } from "node:fs";
 import { createHash } from "node:crypto";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 
 import { ConfigStore, fileSignature } from "./config.js";
-import { readJson } from "./json.js";
+import { readJson, writeJson } from "./json.js";
 import { encodeProjectPath, homePaths, type HomePaths } from "./paths.js";
 import { foldClears, type SessionWithOrigin } from "./sessionChain.js";
 import { type RegistryEntry, SessionLinks } from "./sessionLinks.js";
@@ -648,9 +648,7 @@ export class Store {
    */
   renameSession(session: SessionInfo, title: string): void {
     const dir = session.file.slice(0, session.file.lastIndexOf(sep()));
-    const sideDir = join(dir, session.id);
-    mkdirSync(sideDir, { recursive: true });
-    writeFileSync(join(sideDir, CUSTOM_TITLE_FILE), JSON.stringify({ customTitle: title }), "utf8");
+    writeJson(join(dir, session.id, CUSTOM_TITLE_FILE), { customTitle: title });
     const line = JSON.stringify({ type: CUSTOM_TITLE_TYPE, customTitle: title, sessionId: session.id });
     // Only the last byte decides whether a newline is owed — not a read of the whole transcript.
     let size = 0;

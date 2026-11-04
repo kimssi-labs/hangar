@@ -1,7 +1,8 @@
 /**
- * Reading the JSON files the app and Claude Code keep — one way, so every reader agrees.
+ * Reading and writing the JSON files the app and Claude Code keep — one way, so every reader agrees.
  */
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 /**
  * The parsed contents of `file`, or `fallback` when it is absent, empty, not JSON or JSON `null`.
@@ -16,4 +17,15 @@ export function readJson<T>(file: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+/**
+ * `value` as JSON in `file`: written beside it first and renamed over it, so a reader never catches
+ * a half-written file. `indent` is for a file a person may edit. Throws when it cannot be written.
+ */
+export function writeJson(file: string, value: unknown, indent = 0): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  writeFileSync(tmp, indent ? `${JSON.stringify(value, null, indent)}\n` : JSON.stringify(value), "utf8");
+  renameSync(tmp, file);
 }

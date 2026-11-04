@@ -6,15 +6,14 @@
  * Chromium's network stack, as for the usage figures — the machine's proxy, and a request
  * claude.ai's bot wall lets through, which Node's fetch is not (measured: 403 "Just a moment").
  */
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 import { net, shell } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import { ARTIFACTS_ENDPOINT, ARTIFACTS_HEADERS, type ArtifactsState, EMPTY_ARTIFACTS, failureFor, isArtifactUrl, parseArtifacts } from "../../core/artifacts.js";
 import { type ArtifactOrigins, PUBLISH_MARK, publishedSlugs } from "../../core/artifactOrigins.js";
-import { readJson } from "../../core/json.js";
+import { readJson, writeJson } from "../../core/json.js";
 import { homePaths } from "../../core/paths.js";
 import { accessTokenFrom } from "../../core/usageEndpoint.js";
 import type { ActionResult } from "../../main/ipc.js";
@@ -28,11 +27,8 @@ function cached(): ArtifactsState {
 }
 
 function keep(state: ArtifactsState): void {
-  const file = homePaths().hangarArtifacts;
   try {
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(`${file}.tmp`, JSON.stringify(state), "utf8");
-    renameSync(`${file}.tmp`, file);
+    writeJson(homePaths().hangarArtifacts, state);
   } catch (error) {
     console.error("[hangar] artifacts: could not save the list", (error as Error).message);
   }
@@ -97,8 +93,7 @@ async function scanOrigins(): Promise<ArtifactOrigins> {
     }
   }
   try {
-    mkdirSync(dirname(paths.hangarArtifactOrigins), { recursive: true });
-    writeFileSync(paths.hangarArtifactOrigins, JSON.stringify(after), "utf8");
+    writeJson(paths.hangarArtifactOrigins, after);
   } catch (error) {
     console.error("[hangar] artifacts: could not save the origins", (error as Error).message);
   }
