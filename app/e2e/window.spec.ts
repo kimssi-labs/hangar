@@ -1069,6 +1069,9 @@ test("dragging the band's grip resizes it", async () => {
     const box = await grip.boundingBox();
     expect(box, "the grip is a strip with a size").not.toBeNull();
     expect(box!.width * box!.height, "the grip is a strip with a size").toBeGreaterThan(0);
+    // A maximised window beside the band lays its 8 px invisible frame over the band's edge and
+    // takes those clicks; the grip has to reach past it (a 6 px one was out of reach under it).
+    expect(box!.height, "the grip reaches past a maximised neighbour's frame").toBeGreaterThanOrEqual(8 + 6);
 
     // A real drag through the page: down on the strip, 80 px towards the desktop, up.
     const x = box!.x + box!.width / 2;

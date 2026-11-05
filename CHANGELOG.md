@@ -3,6 +3,13 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.23.3
+
+- **The docked band's resize edge can be grabbed beside a maximised window.** A maximised window
+  reaches over the band by its invisible 8 px frame and takes the clicks there, so the 6 px grip
+  under it could not be grabbed. The grip is 14 px deep now, and only a thin line on the edge
+  lights up when it is hovered.
+
 ## v2.23.2
 
 - **A repository's branch is back on its own line** under the path, with its uncommitted count, as
