@@ -98,12 +98,19 @@ export function DockButton({ docked, edge, ready, onToggle }: { docked: boolean;
   );
 }
 
-/** Which way the band grows when this edge is dragged, and where the grip sits. */
-const GRIP: Record<DockEdge, { place: string; cursor: string; vertical: boolean; sign: 1 | -1 }> = {
-  top: { place: "left-0 right-0 bottom-0 h-1.5", cursor: "cursor-ns-resize", vertical: false, sign: 1 },
-  bottom: { place: "left-0 right-0 top-0 h-1.5", cursor: "cursor-ns-resize", vertical: false, sign: -1 },
-  left: { place: "top-0 bottom-0 right-0 w-1.5", cursor: "cursor-ew-resize", vertical: true, sign: 1 },
-  right: { place: "top-0 bottom-0 left-0 w-1.5", cursor: "cursor-ew-resize", vertical: true, sign: -1 },
+/**
+ * Which way the band grows when this edge is dragged, and where the grip sits.
+ *
+ * 14 px deep, not 6: a maximised window next to the band reaches over it by its invisible resize
+ * frame (8 px at 100 %) and sits above it, so the band's last 8 px take no clicks. A 6 px grip was
+ * entirely under it and could not be grabbed; this one keeps 6 px clear. Only a 4 px line on the
+ * edge is drawn when it is hovered: a 14 px orange bar looked heavy.
+ */
+const GRIP: Record<DockEdge, { place: string; line: string; cursor: string; vertical: boolean; sign: 1 | -1 }> = {
+  top: { place: "left-0 right-0 bottom-0 h-3.5", line: "inset-x-0 bottom-0 h-1", cursor: "cursor-ns-resize", vertical: false, sign: 1 },
+  bottom: { place: "left-0 right-0 top-0 h-3.5", line: "inset-x-0 top-0 h-1", cursor: "cursor-ns-resize", vertical: false, sign: -1 },
+  left: { place: "top-0 bottom-0 right-0 w-3.5", line: "inset-y-0 right-0 w-1", cursor: "cursor-ew-resize", vertical: true, sign: 1 },
+  right: { place: "top-0 bottom-0 left-0 w-3.5", line: "inset-y-0 left-0 w-1", cursor: "cursor-ew-resize", vertical: true, sign: -1 },
 };
 
 /** Smaller than this and the band is not a band; the main process clamps the far end. */
@@ -134,7 +141,7 @@ export function DockGrip({ edge, onDrag }: {
       role="separator"
       aria-orientation={grip.vertical ? "vertical" : "horizontal"}
       aria-label={t("tip.resizeBand")}
-      className={`no-drag absolute z-20 ${grip.place} ${grip.cursor} bg-transparent hover:bg-accent/40 active:bg-accent/60 transition-colors`}
+      className={`group no-drag absolute z-20 ${grip.place} ${grip.cursor}`}
       onPointerDown={(event) => {
         start.current = { at: grip.vertical ? event.screenX : event.screenY, thickness: thicknessNow() };
         latest.current = start.current.thickness;
@@ -152,7 +159,9 @@ export function DockGrip({ edge, onDrag }: {
         event.currentTarget.releasePointerCapture(event.pointerId);
         onDrag(latest.current, true);
       }}
-    />
+    >
+      <div className={`pointer-events-none absolute ${grip.line} bg-transparent group-hover:bg-accent/40 group-active:bg-accent/60 transition-colors`} />
+    </div>
   );
 }
 
