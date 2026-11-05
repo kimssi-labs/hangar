@@ -56,7 +56,6 @@ export const ko: Dictionary = {
   "list.pinned": "고정됨",
   "list.detached": "분리됨",
   "list.folderUnknown": "폴더 경로 없음",
-  "list.memory": "memory",
   // 행의 상태 표시에 마우스를 올렸을 때 나오는 말.
   "state.busy": "답변 중",
   "state.waiting": "확인 대기",

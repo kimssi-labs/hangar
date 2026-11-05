@@ -3,6 +3,15 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.23.2
+
+- **A repository's branch is back on its own line** under the path, with its uncommitted count, as
+  before v2.23.1. Only a worktree shows its branch beside its name, `⑂ app [feature/x]`, under its
+  repository's row, and the sessions screen's top bar says a worktree the same way.
+- **The `memory` mark is gone from project rows.** Claude Code makes a memory folder for every
+  project, so it marked every row that had a session. The detail panel and the delete question
+  still say when deleting a project takes its memory folder with it.
+
 ## v2.23.1
 
 - **Every repository row shows its branch beside the name**: `app [main]`. The branch line under
