@@ -109,13 +109,26 @@ function Fork({ className = "w-3 h-3 shrink-0" }: { className?: string }) {
   );
 }
 
+/** The branch on a repository's line: the fork's colour and weight, git's usual drawing. */
+function BranchMark() {
+  return (
+    <svg viewBox="0 0 16 16" className="w-3 h-3 shrink-0 text-tree" fill="none" stroke="currentColor"
+      strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+      <circle cx="4.5" cy="3.5" r="1.75" />
+      <circle cx="4.5" cy="12.5" r="1.75" />
+      <circle cx="11.5" cy="4.5" r="1.75" />
+      <path d="M4.5 5.25v5.5M11.5 6.25c0 3-7 2-7 4.5" />
+    </svg>
+  );
+}
+
 /**
- * The branch beside a repository's name, in brackets: `app [main]`. It is the thing to check before
- * resuming a session, and on the name line it costs no line of its own.
+ * A worktree's branch beside its name, in brackets: `app [feature/x]`. A worktree is called by its
+ * repository, so the branch is what tells it from the repository's own row and from the worktrees
+ * beside it. A repository's own branch keeps its line under the path (GitLine).
  *
- * It keeps up to 60% of that line, so a narrow list cuts the name first: the branch is what tells two
- * worktrees of one repository apart, and their repository's row above says the name. Only the branch
- * itself is cut, inside brackets that stay.
+ * It keeps up to 60% of the name line, so a narrow list cuts the name first; the repository's row
+ * above says it anyway. Only the branch itself is cut, inside brackets that stay.
  */
 function Branch({ git }: { git: GitInfo }) {
   const t = useText();
@@ -144,17 +157,32 @@ function TreeCount({ count }: { count: number }) {
 }
 
 /**
- * A project's name in the sessions screen's top bar, said the way its row says it: the branch beside
- * the name, and a worktree marked by the fork and called by its repository. A line of its own, so the
- * name gives way before the branch here too.
+ * The repository line: the branch, and what is uncommitted. Only the branch gives way when the row
+ * is narrow, so a docked band still shows the mark and the count beside whatever fits of the name.
+ */
+function GitLine({ git }: { git: GitInfo }) {
+  const t = useText();
+  return (
+    <div className="flex items-center gap-1 text-[11px] text-bone-400" title={gitTitle(git, t)} data-testid="project-git">
+      <BranchMark />
+      <span className="truncate">{git.detached ? `${git.head} ${t("list.detached")}` : git.head}</span>
+      <Uncommitted git={git} />
+    </div>
+  );
+}
+
+/**
+ * A project's name in the sessions screen's top bar. A worktree reads the way its row does,
+ * `⑂ <repository> [<branch>]`: there is no row above it there to say which repository it belongs to.
+ * A line of its own, so the name gives way before the branch here too.
  */
 export function ProjectTitle({ project, projects }: { project: ProjectInfo; projects: ProjectInfo[] }) {
-  const parent = project.worktree && project.parentDir
-    ? projects.find((p) => p.dir === project.parentDir) : undefined;
+  if (!project.worktree) return <>{project.name}</>;
+  const parent = project.parentDir ? projects.find((p) => p.dir === project.parentDir) : undefined;
   return (
     <span className="flex min-w-0 items-center gap-1.5">
-      {project.worktree ? <Fork className="w-3.5 h-3.5 shrink-0" /> : null}
-      <Truncated as="span">{project.worktree ? treeName(project, parent?.name ?? null) : project.name}</Truncated>
+      <Fork className="w-3.5 h-3.5 shrink-0" />
+      <Truncated as="span">{treeName(project, parent?.name ?? null)}</Truncated>
       {project.git ? <Branch git={project.git} /> : null}
     </span>
   );
@@ -238,7 +266,8 @@ export function ProjectRow({
   const t = useText();
   const ref = useScrollIntoView(selected);
   const { git } = project;
-  // A worktree goes by its repository, with its branch beside it like any repository row.
+  // A worktree goes by its repository, its branch beside the name: its folder, `<repo>-<branch>`,
+  // would say the branch twice and lose it first to a narrow list.
   const name = project.worktree ? treeName(project, parent?.name ?? null) : project.name;
   return (
     <div
@@ -271,12 +300,17 @@ export function ProjectRow({
           >
             {name}
           </Truncated>
-          {git ? <Branch git={git} /> : null}
-          {git ? <Uncommitted git={git} /> : null}
-          {project.hasMemory ? <span className="chip">{t("list.memory")}</span> : null}
+          {project.worktree && git ? <Branch git={git} /> : null}
+          {project.worktree && git ? <Uncommitted git={git} /> : null}
+          {/* No memory mark here: Claude Code makes a memory folder for every project, so it marked
+              every row with a session. The detail panel and the delete question still say it. */}
           {trees ? <TreeCount count={trees} /> : null}
         </div>
         <Truncated className="text-[11px] text-bone-500">{project.cwd ?? t("list.folderUnknown")}</Truncated>
+        {/* One line, and only where there is a repository: the branch is the thing you check before
+            resuming a session, and opening a terminal to find it out is the friction this removes.
+            A worktree says its branch beside its name already, with its count. */}
+        {git && !project.worktree ? <GitLine git={git} /> : null}
       </div>
       <div className="row-figures">
         <div>{t("list.sessions", { count: project.sessions.length })}</div>

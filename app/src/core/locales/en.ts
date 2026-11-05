@@ -49,7 +49,6 @@ export const en = {
   "list.pinned": "pinned",
   "list.detached": "detached",
   "list.folderUnknown": "folder unknown",
-  "list.memory": "memory",
   // What a row's mark says when the pointer rests on it.
   "state.busy": "busy",
   "state.waiting": "waiting",
