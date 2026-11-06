@@ -3,6 +3,19 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.24.0
+
+- **The search box finds sessions too.** A query matches a session's title or its first prompt (still
+  found after a session was renamed), keeps the project that holds it, and the project row says how
+  many of its sessions match. The preview beside the list and the sessions screen show only the
+  matching sessions.
+- **The top bar no longer squeezes.** The project name and its session count stay together on one
+  line; when the search box would get narrower than 16rem, the search, `+` and New session move to a
+  line of their own, with the settings button beside them.
+- **The middle list keeps its room in a narrow window.** The project list and the side panel give way
+  in proportion, down to their own minimums, so the session list keeps at least 280 px instead of
+  shrinking to 60 px with New session drawn over the search box.
+
 ## v2.23.3
 
 - **The docked band's resize edge can be grabbed beside a maximised window.** A maximised window

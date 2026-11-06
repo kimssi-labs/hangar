@@ -58,6 +58,31 @@ export function hasFileColumn(width: number, had: boolean): boolean {
   return had ? width >= FILES_COLUMN_MIN : width >= FILES_COLUMN_BACK;
 }
 
+/** The lists between the side panes keep at least this much: at 640 px they were left 130. */
+export const LIST_MIN = 280;
+
+/**
+ * The side panes' widths, given way so the lists between them keep LIST_MIN.
+ *
+ * A pane's width is its own choice (dragged, or the shape's default) and the window does not know
+ * it: a 288 px project list and a 208 px gauge column in a 560 px window left the sessions 60 px,
+ * the search box with no width and New drawn over it. Each pane gives up its share of what is
+ * missing, in proportion to how far it is above its own floor, and never goes under that floor.
+ */
+export function fitSidePanes(
+  window: number,
+  wanted: { nav: number; aside: number },
+  floor: { nav: number; aside: number },
+  gutters: number,
+): { nav: number; aside: number } {
+  const over = wanted.nav + wanted.aside - (window - gutters - LIST_MIN);
+  const giveNav = Math.max(0, wanted.nav - floor.nav);
+  const giveAside = Math.max(0, wanted.aside - floor.aside);
+  if (window <= 0 || over <= 0 || giveNav + giveAside <= 0) return wanted;
+  const share = Math.min(1, over / (giveNav + giveAside));
+  return { nav: Math.round(wanted.nav - giveNav * share), aside: Math.round(wanted.aside - giveAside * share) };
+}
+
 export function layoutFor(
   width: number,
   height: number,

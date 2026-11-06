@@ -131,6 +131,30 @@ test("a search box takes the keyboard in a band, and gives it back when it is le
   }
 });
 
+test("the search finds a session and shows its project with only the matching sessions beside it", async () => {
+  const { home, workspace } = fixture();
+  const dir = workspace.replace(/[^A-Za-z0-9]/g, "-");
+  const id = "bbbbbbbb-1111-2222-3333-444444444444";
+  writeFileSync(join(home, "projects", dir, `${id}.jsonl`), [
+    JSON.stringify({ type: "user", cwd: workspace, sessionId: id, message: { content: "fix the splash screen" }, origin: { kind: "human" } }),
+    JSON.stringify({ type: "assistant", message: { content: "…" } }),
+  ].join("\n") + "\n");
+  const { app, page } = await launch(home);
+  try {
+    const preview = page.getByRole("listbox", { name: "Sessions" }).getByRole("option");
+    await page.getByRole("listbox", { name: "Projects" }).getByRole("option").first().click();
+    await expect(preview).toHaveCount(2);
+    await page.getByPlaceholder("Search projects").fill("splash");
+    await expect(page.getByRole("listbox", { name: "Projects" }).getByRole("option")).toHaveCount(1);
+    await expect(page.getByTestId("session-matches")).toHaveText("1 of 2 sessions");
+    await expect(preview).toHaveCount(1);
+    await expect(preview.first()).toContainText("splash");
+  } finally {
+    await app.close();
+    rmSync(home, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
 test("Tab walks the areas in order, and the keys work inside each one", async () => {
   const { home, workspace } = fixture();
   const { app, page } = await launch(home);
