@@ -14,7 +14,7 @@ import type { Dictionary } from "../i18n.js";
 
 export const ko: Dictionary = {
   // -- 기본 화면 --------------------------------------------------------------------------------
-  "app.search": "프로젝트 검색",
+  "app.search": "프로젝트·세션 검색",
   "app.addProject": "프로젝트 추가",
   "app.addProject.title": "폴더를 골라 프로젝트로 추가",
   "app.projects": "프로젝트",
@@ -51,6 +51,7 @@ export const ko: Dictionary = {
 
   // -- 목록 -------------------------------------------------------------------------------------
   "list.sessions": "세션 {count}개",
+  "list.matches": "세션 {total}개 중 {count}개",
   "list.worktree": "worktree",
   "list.trees": "worktree {count}개",
   "list.pinned": "고정됨",

@@ -38,7 +38,7 @@ import { SkillsPane, useSkills } from "../features/skills/ui";
 import { ArtifactsPane, useArtifacts } from "../features/artifacts/ui";
 import { SidePane, usePaneOpen } from "./components/SidePane";
 import type { ArtifactScope } from "@core/artifactOrigins";
-import { hasFileColumn, STACK_MIN, stackedTopHeight, useLayoutMode, useMeasured } from "./useLayoutMode";
+import { fitSidePanes, hasFileColumn, STACK_MIN, stackedTopHeight, useLayoutMode, useMeasured } from "./useLayoutMode";
 import { useTheme } from "./useTheme";
 import { TextProvider, useText } from "./useText";
 
@@ -53,6 +53,8 @@ const NAV_MAX = 560;
 const ASIDE_MIN = 160;
 /** Enough of a stacked pane to be a list rather than a sliver. */
 const ASIDE_MAX = 640;
+/** The two vertical splitters (`w-1`) and the borders beside them. */
+const PANE_GUTTERS = 10;
 
 type Toast = { text: string; tone: "ok" | "bad" } | null;
 
@@ -227,6 +229,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const openProjectInfo = projects.find((p) => p.dir === openProject) ?? null;
   const sessions = useMemo(() => filterSessions(openProjectInfo, query), [openProjectInfo, query]);
   const session = sessions[Math.min(sessionIndex, Math.max(0, sessions.length - 1))] ?? null;
+  const previewSessions = useMemo(() => filterSessions(project, query), [project, query]);
   // The project row drawn as selected, which the project list's keys move from: the selection on
   // the projects screen, the open project beside its sessions, none on the settings screen.
   const projectCursor = screen === "projects" ? projectIndex
@@ -539,6 +542,12 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   useLayoutEffect(() => {
     setFileColumn((had) => showPane && column && hasFileColumn(windowWidth, had));
   }, [showPane, column, windowWidth]);
+  // What the side panes are drawn at: their own width, given way so the lists between keep theirs.
+  // The splitters start their drags from these, so a drag starts from what is on screen.
+  const panes = fitSidePanes(windowWidth, {
+    nav: column ? 0 : navWidth || (band ? 224 : 288),
+    aside: column ? (fileColumn ? asideWidth || 320 : 0) : asideWidth || (showDetail || band ? 320 : 208),
+  }, { nav: column ? 0 : NAV_MIN, aside: ASIDE_MIN }, PANE_GUTTERS);
   // Wide enough to draw a tree without it being mostly indentation; the panel's own button can
   // still ask for the other one.
   const filesPane = <FilesPane files={files} roomy={fileColumn || showDetail} ui={rowUi} />;
@@ -588,6 +597,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const projectPane = (
     <ProjectPane
       placed={placed}
+      query={query}
       editing={editing}
       editRef={editRef}
       onRename={(value, explicit) => void commitRename(value, explicit)}
@@ -613,7 +623,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     />
   ) : project ? (
     <SessionPreview
-      project={project}
+      sessions={previewSessions}
       onEnter={() => enterSessions(project.dir)}
       onContextMenu={(item, index) => void sessionMenu(project.dir, item, index)}
     />
@@ -724,9 +734,12 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
             </div>
           ) : (
             <>
-              <div className={`flex items-center border-b border-ink-600 ${tight ? "pl-2 py-1" : "pl-4 py-2"}`}>
-                {/* Left: as wide as the lists below it, so the search box grows and shrinks with them. */}
-                <div className={`header-left flex flex-1 min-w-0 flex-wrap items-center gap-x-2 gap-y-1 ${tight ? "pr-1" : "pr-2"}`}>
+              <div className={`flex items-center border-b border-ink-600 ${tight ? "pl-2 py-1.5" : "pl-4 py-2"}`}>
+                {/* Left: as wide as the lists below it, so the search box grows and shrinks with them.
+                    The title and its count are one piece that never splits; the search box, + and New
+                    take a line of their own once they would be squeezed under 16rem beside it. */}
+                <div className={`flex flex-1 min-w-0 flex-wrap items-center gap-x-2 gap-y-2 ${tight ? "pr-1" : "pr-2"}`}>
+                <div className="flex min-w-0 max-w-full items-center gap-2">
                 <Truncated
                   as="span"
                   testId="screen-title"
@@ -738,7 +751,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 <span className="chip shrink-0 whitespace-nowrap">{screen === "sessions"
                   ? t("app.sessions.count", { count: sessions.length })
                   : t("app.projects.count", { count: filtered.length })}</span>
-                <div className="header-actions flex flex-1 min-w-0 items-center gap-2">
+                </div>
+                <div className="flex flex-1 min-w-[min(16rem,100%)] items-center gap-2">
                 <ProjectSearch query={query} onQuery={setQuery} searchRef={searchRef} onAdd={() => void addProject()}
                   onDown={() => {
                     if (screen === "sessions") setSessionIndex(0); else setProjectIndex(0);
@@ -755,9 +769,10 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 </button>
                 </div>
                 </div>
-                {/* Right: over the panel, its width plus the divider's, settings at its far end. */}
+                {/* Right: over the panel, its width plus the divider's, settings at its far end, on the
+                    line of the buttons when the left half has wrapped onto two. */}
                 <div
-                  className={`flex shrink-0 items-center justify-end gap-2 ${tight ? "pr-2" : "pr-4"}`}
+                  className={`flex shrink-0 self-end items-center justify-end gap-2 ${tight ? "pr-2" : "pr-4"}`}
                   style={asidePx ? { width: asidePx + HEADER_DIVIDER_PX } : undefined}
                 >
                 <button ref={settingsButtonRef} type="button" className="btn" title={t("app.settings.title")} onClick={() => void openSettings()} aria-label={t("app.settings")}>
@@ -773,14 +788,14 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                   scroller Chromium would make a Tab stop of its own. */}
               <nav
                 {...projectBox}
-                className={`${navWidth ? "" : band ? "w-56" : "w-72"} col-start-1 row-span-full shrink-0 border-r border-ink-600 overflow-auto`}
-                style={navWidth ? { width: navWidth } : undefined}
+                className="col-start-1 row-span-full shrink-0 border-r border-ink-600 overflow-auto"
+                style={{ width: panes.nav }}
               >
                 {projectPane}
               </nav>
               <div className="col-start-2 row-span-full flex">
                 <Splitter
-                  width={navWidth || (band ? 224 : 288)}
+                  width={panes.nav}
                   side="left"
                   min={NAV_MIN}
                   max={NAV_MAX}
@@ -841,7 +856,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 {column && fileColumn ? (
                   <>
                     <Splitter
-                      width={asideWidth || 320}
+                      width={panes.aside}
                       side="right"
                       min={ASIDE_MIN}
                       max={ASIDE_MAX}
@@ -851,8 +866,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                     <aside
                       ref={asideRef}
                       data-testid="files-column"
-                      className={`${asideWidth ? "" : "w-80"} shrink-0 border-l border-ink-600 flex flex-col`}
-                      style={asideWidth ? { width: asideWidth } : undefined}
+                      className="shrink-0 border-l border-ink-600 flex flex-col"
+                      style={{ width: panes.aside }}
                     >
                       {sidePane}
                     </aside>
@@ -860,7 +875,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 ) : null}
                 {column ? null : (
                   <Splitter
-                    width={asideWidth || (showDetail ? 320 : 208)}
+                    width={panes.aside}
                     side="right"
                     min={ASIDE_MIN}
                     max={ASIDE_MAX}
@@ -871,8 +886,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                 {column ? null : showDetail ? (
                 <aside
                   ref={asideRef}
-                  className={`${asideWidth ? "" : "w-80"} shrink-0 border-l border-ink-600 flex flex-col`}
-                  style={asideWidth ? { width: asideWidth } : undefined}
+                  className="shrink-0 border-l border-ink-600 flex flex-col"
+                  style={{ width: panes.aside }}
                 >
                   {/* Three bands: what is selected, the folder, the gauges, each scrolling on its
                       own — with one scrollbar for the lot, the gauges left the screen. When the
@@ -913,9 +928,9 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                   // gauge is the same as not being drawn. Short means lay them across.
                   <aside
                     ref={asideRef}
-                    className={`${asideWidth ? "" : band ? "w-80" : "w-52"} shrink-0 border-l border-ink-600 p-1 ${
+                    className={`shrink-0 border-l border-ink-600 p-1 ${
                       band ? "flex flex-col gap-1 min-h-0" : "space-y-1 overflow-y-auto no-bar"}`}
-                    style={asideWidth ? { width: asideWidth } : undefined}
+                    style={{ width: panes.aside }}
                   >
                     {/* The row takes what is left and clips: a card is taller than a thin band
                         allows, and without the clip it ran out of the row and was drawn straight

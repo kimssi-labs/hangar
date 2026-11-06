@@ -41,29 +41,9 @@ export function useProjects() {
   return { projects, setProjects, scan, liveSessions };
 }
 
-/**
- * The list as it is drawn: matches in order, with each worktree tucked under its repository.
- *
- * One array for both the drawing and the keyboard, or the arrow keys would walk a different list
- * from the one on screen.
- */
-export function filterProjects(projects: ProjectInfo[], query: string): Placed<ProjectInfo>[] {
-  const needle = query.trim().toLowerCase();
-  const matched = needle
-    ? projects.filter((project) =>
-      project.name.toLowerCase().includes(needle)
-      || (project.cwd ?? "").toLowerCase().includes(needle)
-      || project.sessions.some((s) => s.title.toLowerCase().includes(needle)))
-    : projects;
-  return placeWorktrees(matched);
-}
+import { filterSessions } from "@core/search";
 
-/** A project's sessions — those matching the search, when there is one. */
-export function filterSessions(project: ProjectInfo | null, query: string): SessionInfo[] {
-  if (!project) return [];
-  const needle = query.trim().toLowerCase();
-  return needle ? project.sessions.filter((s) => s.title.toLowerCase().includes(needle)) : project.sessions;
-}
+export { filterProjects, filterSessions } from "@core/search";
 
 /**
  * Where `dir` sits in a freshly scanned list — through the same placement it is drawn with. The
@@ -281,7 +261,7 @@ export function ProjectSearch({ query, onQuery, searchRef, onAdd, onDown }: {
 }) {
   const t = useText();
   return (
-    <div className="flex flex-1 min-w-0 gap-1">
+    <div className="flex flex-1 min-w-0 gap-2">
       <input
         ref={searchRef}
         value={query}
@@ -310,9 +290,11 @@ export function ProjectSearch({ query, onQuery, searchRef, onAdd, onDown }: {
 
 /** The project rows — the pane the window is navigated from. */
 export function ProjectPane({
-  placed, editing, editRef, onRename, onCancelEdit, isSelected, onSelect, onOpen, onContextMenu, tight,
+  placed, query, editing, editRef, onRename, onCancelEdit, isSelected, onSelect, onOpen, onContextMenu, tight,
 }: {
   placed: Placed<ProjectInfo>[];
+  /** The search, so a row can say how many of its sessions it was kept for. */
+  query: string;
   /** The dir of the row being renamed, if any. */
   editing: string | null;
   editRef: EditRef;
@@ -340,6 +322,7 @@ export function ProjectPane({
               depth={depth}
               parent={parent}
               trees={trees}
+              matched={query.trim() ? filterSessions(item, query).length : null}
               selected={isSelected(item, index)}
               onSelect={() => onSelect(index)}
               onOpen={() => onOpen(item.dir)}
@@ -389,8 +372,9 @@ export function SessionList({
 }
 
 /** The projects screen's glimpse of the selected project: its first sessions, and a way to the rest. */
-export function SessionPreview({ project, onEnter, onContextMenu }: {
-  project: ProjectInfo;
+export function SessionPreview({ sessions, onEnter, onContextMenu }: {
+  /** The project's sessions the search keeps: the same list the sessions screen opens on. */
+  sessions: SessionInfo[];
   /** Any click lands on the sessions screen; the preview is a doorway, not a list to select from. */
   onEnter(): void;
   onContextMenu(item: SessionInfo, index: number): void;
@@ -399,7 +383,7 @@ export function SessionPreview({ project, onEnter, onContextMenu }: {
   // reach what scrolling already reaches.
   return (
     <>
-      {project.sessions.map((item, index) => (
+      {sessions.map((item, index) => (
         <SessionRow
           key={item.id}
           session={item}

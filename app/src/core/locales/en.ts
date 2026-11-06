@@ -7,7 +7,7 @@
  */
 export const en = {
   // -- chrome ------------------------------------------------------------------------------------
-  "app.search": "Search projects",
+  "app.search": "Search projects and sessions",
   "app.addProject": "Add a project",
   "app.addProject.title": "Add a project folder…",
   "app.projects": "Projects",
@@ -44,6 +44,7 @@ export const en = {
 
   // -- lists -----------------------------------------------------------------------------------------
   "list.sessions": "{count} sessions",
+  "list.matches": "{count} of {total} sessions",
   "list.worktree": "worktree",
   "list.trees": "{count} worktree(s)",
   "list.pinned": "pinned",

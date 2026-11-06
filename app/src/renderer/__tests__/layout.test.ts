@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { BAND_MAX_HEIGHT, COLUMN_MAX_WIDTH, COMPACT_MAX_WIDTH, layoutFor, STACK_MIN, stackedTopHeight } from "../useLayoutMode";
 import { CARD_INSET, fitsUpright, isNarrow, NARROW_CARD, textWidth, WIDE_CARD } from "../components/Chart";
-import { FILES_COLUMN_BACK, FILES_COLUMN_MIN, hasFileColumn } from "../useLayoutMode";
+import { FILES_COLUMN_BACK, FILES_COLUMN_MIN, fitSidePanes, hasFileColumn, LIST_MIN } from "../useLayoutMode";
 
 describe("layoutFor", () => {
   it("treats a wide, short dock as a band", () => {
@@ -150,5 +150,25 @@ describe("hasFileColumn", () => {
     }
     expect(hasFileColumn(0, true)).toBe(true);
     expect(hasFileColumn(0, false)).toBe(false);
+  });
+});
+
+describe("fitSidePanes", () => {
+  const floor = { nav: 180, aside: 160 };
+
+  it("leaves the panes alone when the lists between them have their room", () => {
+    expect(fitSidePanes(1180, { nav: 288, aside: 320 }, floor, 10)).toEqual({ nav: 288, aside: 320 });
+  });
+
+  it("gives way so the lists keep their floor, each pane in proportion to what it can spare", () => {
+    // 640 px with 288 + 208 left the lists 134 px.
+    const fit = fitSidePanes(640, { nav: 288, aside: 208 }, floor, 10);
+    expect(640 - 10 - fit.nav - fit.aside).toBeGreaterThanOrEqual(LIST_MIN - 1);
+    expect(fit.nav).toBeGreaterThan(floor.nav);
+    expect(fit.aside).toBeGreaterThan(floor.aside);
+  });
+
+  it("never takes a pane under its own floor", () => {
+    expect(fitSidePanes(560, { nav: 288, aside: 208 }, floor, 10)).toEqual(floor);
   });
 });

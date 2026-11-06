@@ -249,7 +249,7 @@ export const projectRowId = (dir: string): string => `project-${dir}`;
 export const sessionRowId = (id: string): string => `session-${id}`;
 
 export function ProjectRow({
-  project, selected, depth = 0, parent = null, trees = 0, onSelect, onOpen, onContextMenu,
+  project, selected, depth = 0, parent = null, trees = 0, matched = null, onSelect, onOpen, onContextMenu,
 }: {
   project: ProjectInfo;
   selected: boolean;
@@ -259,6 +259,8 @@ export function ProjectRow({
   parent?: ProjectInfo | null;
   /** How many worktrees are shown under this row. */
   trees?: number;
+  /** While searching: how many of its sessions match, which is what the preview beside it lists. */
+  matched?: number | null;
   onSelect: () => void;
   onOpen: () => void;
   onContextMenu?: () => void;
@@ -313,7 +315,9 @@ export function ProjectRow({
         {git && !project.worktree ? <GitLine git={git} /> : null}
       </div>
       <div className="row-figures">
-        <div>{t("list.sessions", { count: project.sessions.length })}</div>
+        {matched === null
+          ? <div>{t("list.sessions", { count: project.sessions.length })}</div>
+          : <div data-testid="session-matches" className={matched ? "text-accent" : ""}>{t("list.matches", { count: matched, total: project.sessions.length })}</div>}
         <div>{since(t, project.lastUsed)}</div>
       </div>
     </div>
