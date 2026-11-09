@@ -1343,3 +1343,46 @@ test("minimising a band from its button gives the edge back at once, and restori
     await app.close();
   }
 });
+
+/**
+ * Minimised again right after a restore, the band gives its edge back too (reported on 2.25.0-test.1).
+ * The restore starts a re-dock that takes the best part of a second; a minimise inside that time once
+ * found nothing reserved yet and released nothing, and the re-dock then reserved the edge for a
+ * window nobody could see. Dock operations now run one at a time, and a re-dock that finishes on a
+ * minimised window gives the edge straight back.
+ */
+test("minimised again right after a restore, the band still gives its edge back", async () => {
+  // With the desktop icons kept, as by default: reading them makes the re-dock long enough to land
+  // in (without, it is too quick to catch here). The keeper puts them back when the band goes.
+  const { app, page } = await launch(fixture({ theme: "dark", keepIcons: true }));
+  try {
+    test.skip(process.platform !== "win32", "an appbar is Windows' own");
+    const primary = (await monitors(page)).find((d) => d.primary)!;
+    const undocked = await nativeWorkArea(app, primary.id);
+    await page.evaluate((device) => window.hangar.applyDock({ enabled: true, device, edge: "right", percent: 15 }), primary.id);
+    await page.waitForTimeout(1700);
+    const docked = await nativeWorkArea(app, primary.id);
+    expect(docked.width, "docked").toBeLessThan(undocked.width);
+    const minimise = page.getByRole("button", { name: "Minimise" });
+    for (const gap of [0, 300, 600]) {
+      await minimise.click();
+      await expect.poll(async () => (await nativeWorkArea(app, primary.id)).width, { timeout: 5000 }).toBe(undocked.width);
+      // Long enough for the icons to have been put back, so the re-dock reads them again: that read
+      // is what keeps it in flight.
+      await page.waitForTimeout(2500);
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.restore());
+      await page.waitForTimeout(gap);
+      await minimise.click();
+      await page.waitForTimeout(3000);                        // past any re-dock that was in flight
+      expect((await iconicRect(app))?.iconic, `minimised ${gap} ms after the restore`).toBe(true);
+      expect((await nativeWorkArea(app, primary.id)).width, `no edge held, minimised ${gap} ms after the restore`).toBe(undocked.width);
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.restore());
+      await expect.poll(async () => (await nativeWorkArea(app, primary.id)).width, { timeout: 8000, message: "docked again" }).toBe(docked.width);
+    }
+  } finally {
+    await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
+    await app.close();
+  }
+});

@@ -151,9 +151,49 @@ function Uncommitted({ git }: { git: GitInfo }) {
 }
 
 /** A repository row's count of the worktrees listed under it: the fork, and how many. */
-function TreeCount({ count }: { count: number }) {
+/**
+ * How many rows are tucked under this one, and the switch that shows or folds them: worktrees carry
+ * the fork mark, runs a session started do not.
+ */
+function FoldChip({ count, open, worktrees, onToggle }: { count: number; open: boolean; worktrees: boolean; onToggle(): void }) {
   const t = useText();
-  return <span className="tree-chip" title={t("list.trees", { count })}><Fork />{count}</span>;
+  const what = worktrees ? t("list.trees", { count }) : t("list.under", { count });
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      className="tree-chip hover:bg-tree/30"
+      title={`${what} · ${t(open ? "list.fold.open" : "list.fold.closed")}`}
+      aria-expanded={open}
+      data-testid="fold-chip"
+      onMouseDown={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      onClick={onToggle}
+    >
+      <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+      {worktrees ? <Fork /> : null}
+      {count}
+    </button>
+  );
+}
+
+/** The folded headless runs at the end of a session list, and the switch that shows them. */
+export function RunsRow({ count, open, onToggle }: { count: number; open: boolean; onToggle(): void }) {
+  const t = useText();
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      data-testid="runs-row"
+      aria-expanded={open}
+      title={t(open ? "list.fold.open" : "list.fold.closed")}
+      className="w-full flex items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs text-bone-400 hover:bg-ink-700/60"
+      onClick={onToggle}
+    >
+      <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+      {t("list.runs", { count })}
+    </button>
+  );
 }
 
 /**
@@ -249,7 +289,8 @@ export const projectRowId = (dir: string): string => `project-${dir}`;
 export const sessionRowId = (id: string): string => `session-${id}`;
 
 export function ProjectRow({
-  project, selected, depth = 0, parent = null, trees = 0, matched = null, onSelect, onOpen, onContextMenu,
+  project, selected, depth = 0, parent = null, trees = 0, open = false, worktrees = false, matched = null,
+  onSelect, onOpen, onContextMenu, onToggle,
 }: {
   project: ProjectInfo;
   selected: boolean;
@@ -257,13 +298,19 @@ export function ProjectRow({
   depth?: number;
   /** That repository's row, when the worktree is shown under it. */
   parent?: ProjectInfo | null;
-  /** How many worktrees are shown under this row. */
+  /** How many rows are tucked under this row, shown or folded. */
   trees?: number;
+  /** Whether they are shown. */
+  open?: boolean;
+  /** They are all worktrees. */
+  worktrees?: boolean;
   /** While searching: how many of its sessions match, which is what the preview beside it lists. */
   matched?: number | null;
   onSelect: () => void;
   onOpen: () => void;
   onContextMenu?: () => void;
+  /** Show or fold the rows under this one. */
+  onToggle?: () => void;
 }) {
   const t = useText();
   const ref = useScrollIntoView(selected);
@@ -306,7 +353,7 @@ export function ProjectRow({
           {project.worktree && git ? <Uncommitted git={git} /> : null}
           {/* No memory mark here: Claude Code makes a memory folder for every project, so it marked
               every row with a session. The detail panel and the delete question still say it. */}
-          {trees ? <TreeCount count={trees} /> : null}
+          {trees ? <FoldChip count={trees} open={open} worktrees={worktrees} onToggle={() => onToggle?.()} /> : null}
         </div>
         <Truncated className="text-[11px] text-bone-500">{project.cwd ?? t("list.folderUnknown")}</Truncated>
         {/* One line, and only where there is a repository: the branch is the thing you check before

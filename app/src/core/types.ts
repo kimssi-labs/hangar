@@ -24,6 +24,8 @@ export interface SessionInfo {
   continues: number;
   /** Their ids, oldest first. Deleting this row deletes them: one row is one conversation. */
   folded: string[];
+  /** Started by `claude -p` or the Agent SDK, not in a terminal: folded into one group at the end. */
+  headless: boolean;
 }
 
 export interface ProjectInfo {

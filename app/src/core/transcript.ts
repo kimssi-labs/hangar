@@ -49,6 +49,14 @@ export interface TranscriptFacts {
    * another file. There is nothing in one to read or resume.
    */
   conversation: boolean;
+  /**
+   * Started by a program rather than typed into a terminal: `claude -p` or the Agent SDK.
+   *
+   * Every entry says how Claude Code was started (`entrypoint`): `cli` in a terminal, `sdk-cli` for
+   * `claude -p`, `sdk-ts` / `sdk-py` for the SDKs. A script fanning out headless runs leaves dozens
+   * of these in a folder, and the list folds them out of the way of the sessions a person opened.
+   */
+  headless: boolean;
 }
 
 /**
@@ -88,7 +96,11 @@ interface Entry {
   agentName?: string;
   origin?: { kind?: string };
   message?: { content?: unknown };
+  entrypoint?: string;
 }
+
+/** The `entrypoint` prefix of a run no terminal started (see TranscriptFacts.headless). */
+const HEADLESS_ENTRYPOINT = "sdk-";
 
 /** The name an entry carries, whichever of the three ways it spells one. */
 function titleOf(entry: Entry): string | null {
@@ -148,5 +160,10 @@ export function factsFrom(head: string, tail: string, complete: boolean): Transc
     firstPrompt = firstLine(entry.message?.content);
   }
 
-  return { aiTitle, firstPrompt, conversation, startedByClear, carriedTitle };
+  // How the session was started is said by its first spoken entry; a later `--resume` from a terminal
+  // does not make a script's run a person's session.
+  const spoken = early.find((entry) => entry.type === USER || entry.type === ASSISTANT);
+  const headless = spoken?.entrypoint?.startsWith(HEADLESS_ENTRYPOINT) ?? false;
+
+  return { aiTitle, firstPrompt, conversation, startedByClear, carriedTitle, headless };
 }

@@ -200,37 +200,59 @@ export function linkWorktrees<T extends {
 export interface Placed<T> {
   item: T;
   depth: number;
-  /** The row a worktree is tucked under, or null for a row at the top level. */
+  /** The row this one is tucked under, or null for a row at the top level. */
   parent: T | null;
-  /** How many worktrees are tucked under this row. */
+  /** How many rows are tucked directly under this row, shown or folded. */
   trees: number;
+  /** Whether those rows are shown. */
+  open: boolean;
+  /** Those rows are all worktrees, not runs a session started. */
+  worktrees: boolean;
 }
 
 /**
- * The list order, with each worktree tucked under the project it belongs to.
+ * The list order, with each row tucked under the project it belongs to: a worktree under its
+ * repository, a folder of headless runs under the project that started them (core/spawned.ts),
+ * and so on down, as deep as the links go.
  *
- * A worktree is a project in its own right — its own folder, its own sessions — but it is also part
- * of a repository the list already shows, and two sibling rows hide that. So it follows its parent
- * and is indented; a worktree whose repository is not in the list stays where the sort put it.
+ * Each such row is a project in its own right, but two sibling rows hide what ties them. So a row
+ * follows its parent and is indented; one whose parent is not in the list stays where the sort put
+ * it. `isOpen` says whether a row's children are shown; `byDefault` is true when they are all
+ * worktrees (a handful of checkouts worth seeing) and false for runs (dozens no one opened).
  */
-export function placeWorktrees<T extends { dir: string; parentDir?: string | null }>(
+export function placeWorktrees<T extends { dir: string; parentDir?: string | null; worktree?: boolean }>(
   projects: T[],
+  isOpen: (item: T, byDefault: boolean) => boolean = () => true,
 ): Placed<T>[] {
-  const children = new Map<string, T[]>();
-  const known = new Set(projects.map((project) => project.dir));
-  for (const project of projects) {
+  const byDir = new Map(projects.map((project) => [project.dir, project]));
+  // The parent a row is drawn under: listed, and not reached again by climbing from it, so a loop
+  // of links cannot hide its rows.
+  const parentOf = (project: T): string | null => {
     const parent = project.parentDir;
-    if (!parent || parent === project.dir || !known.has(parent)) continue;
-    children.set(parent, [...(children.get(parent) ?? []), project]);
+    if (!parent || !byDir.has(parent)) return null;
+    const climbed = new Set([project.dir]);
+    for (let at: string | null | undefined = parent; at && byDir.has(at); at = byDir.get(at)?.parentDir) {
+      if (climbed.has(at)) return null;
+      climbed.add(at);
+    }
+    return parent;
+  };
+  const children = new Map<string, T[]>();
+  const roots: T[] = [];
+  for (const project of projects) {
+    const parent = parentOf(project);
+    if (parent) children.set(parent, [...(children.get(parent) ?? []), project]);
+    else roots.push(project);
   }
   const placed: Placed<T>[] = [];
-  for (const project of projects) {
-    const parent = project.parentDir;
-    if (parent && parent !== project.dir && known.has(parent)) continue;   // placed under its parent
-    const trees = children.get(project.dir) ?? [];
-    placed.push({ item: project, depth: 0, parent: null, trees: trees.length });
-    for (const child of trees) placed.push({ item: child, depth: 1, parent: project, trees: 0 });
-  }
+  const place = (item: T, depth: number, parent: T | null): void => {
+    const kids = children.get(item.dir) ?? [];
+    const worktrees = kids.length > 0 && kids.every((kid) => kid.worktree === true);
+    const open = kids.length > 0 && isOpen(item, worktrees);
+    placed.push({ item, depth, parent, trees: kids.length, open, worktrees });
+    if (open) for (const kid of kids) place(kid, depth + 1, item);
+  };
+  for (const root of roots) place(root, 0, null);
   return placed;
 }
 

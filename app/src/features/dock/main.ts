@@ -256,7 +256,13 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
         parked = false;
         setImmediate(() => {
           void dock?.apply(current())
-            .then(() => {
+            .then(async () => {
+              // Minimised again before this re-dock began, when there was no band yet to give back:
+              // give it back now, or a minimised window holds the edge until it is restored.
+              if (window.isMinimized() && dock?.isDocked && !parked) {
+                parked = true;
+                await dock.release();
+              }
               emitState();
               applyKeyboardHold();                 // a band again: the keyboard goes back to the terminal
             })

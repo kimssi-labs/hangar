@@ -6,7 +6,7 @@
  * keystrokes meant for the terminal went nowhere. The band answers the mouse, so it does not need
  * the keyboard — except while the page has a field open, a search box included.
  */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
@@ -149,6 +149,49 @@ test("the search finds a session and shows its project with only the matching se
     await expect(page.getByTestId("session-matches")).toHaveText("1 of 2 sessions");
     await expect(preview).toHaveCount(1);
     await expect(preview.first()).toContainText("splash");
+  } finally {
+    await app.close();
+    rmSync(home, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("headless runs a session started fold under its project, and its own runs fold at the end", async () => {
+  const { home, workspace } = fixture();
+  const dir = workspace.replace(/[^A-Za-z0-9]/g, "-");
+  // A folder named nothing like the project, filled by `claude -p` runs the workspace's session started.
+  const batch = join(workspace, "..", "out-7");
+  const batchDir = batch.replace(/[^A-Za-z0-9]/g, "-");
+  mkdirSync(join(home, "projects", batchDir), { recursive: true });
+  const run = (folder: string, cwd: string, id: string) => writeFileSync(join(home, "projects", folder, `${id}.jsonl`), [
+    JSON.stringify({ type: "user", entrypoint: "sdk-cli", cwd, sessionId: id, message: { content: "Record: a.md" }, origin: { kind: "human" } }),
+    JSON.stringify({ type: "assistant", entrypoint: "sdk-cli", message: { content: "…" } }),
+  ].join("\n") + "\n");
+  const starter = join(home, "projects", dir, "aaaaaaaa-1111-2222-3333-444444444444.jsonl");
+  writeFileSync(starter, [
+    JSON.stringify({ type: "user", cwd: workspace, timestamp: new Date(Date.now() - 120_000).toISOString(), message: { content: "세션" }, origin: { kind: "human" } }),
+    JSON.stringify({ type: "assistant", timestamp: new Date(Date.now() - 60_000).toISOString(), message: { content: [{ type: "tool_use", input: { command: `python bundle.py "${batch}"` } }] } }),
+  ].join("\n") + "\n");
+  run(batchDir, batch, "cccccccc-1111-2222-3333-444444444444");
+  run(batchDir, batch, "dddddddd-1111-2222-3333-444444444444");
+  run(dir, workspace, "eeeeeeee-1111-2222-3333-444444444444");
+  // The starting session was still running when the runs began.
+  const later = new Date(Date.now() + 5_000);
+  utimesSync(starter, later, later);
+  const { app, page } = await launch(home);
+  try {
+    const projects = page.getByRole("listbox", { name: "Projects" }).getByRole("option");
+    const preview = page.getByRole("listbox", { name: "Sessions" }).getByRole("option");
+    await expect(projects).toHaveCount(1);                        // the runs' folder is folded under it
+    await projects.first().click();
+    await expect(preview).toHaveCount(1);                         // its own run waits behind the switch
+    await page.getByTestId("runs-row").click();
+    await expect(preview).toHaveCount(2);
+    await page.getByTestId("fold-chip").click();
+    await expect(projects).toHaveCount(2);
+    await expect(projects.nth(1)).toContainText("out-7");
+    await page.getByRole("listbox", { name: "Projects" }).focus();
+    await page.keyboard.press("ArrowLeft");                       // ← folds it again
+    await expect(projects).toHaveCount(1);
   } finally {
     await app.close();
     rmSync(home, { recursive: true, force: true, maxRetries: 3 });

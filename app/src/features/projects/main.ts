@@ -16,6 +16,7 @@ import { dialog, shell } from "electron";
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
 import { launchCommand, sessionEnvironment, WT_EXE } from "../../core/launcher.js";
+import { linkSpawned, MentionIndex } from "../../core/spawned.js";
 import { scanSignature } from "../../core/store.js";
 import type { ProjectInfo } from "../../core/types.js";
 import { linkWorktrees } from "../../core/worktree.js";
@@ -55,6 +56,8 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
   const find = (dir: string): ProjectInfo | undefined => projects.find((p) => p.dir === dir);
   /** Resolved real paths, per folder — dropped whenever the store reads everything again. */
   const realPaths = new Map<string, string>();
+  /** Whether a session's transcript named a folder just before a run began there (core/spawned.ts). */
+  const mentionIndex = new MentionIndex();
 
   function scan(): ProjectInfo[] {
     const t0 = Date.now();
@@ -96,6 +99,9 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
       };
       linkWorktrees(projects, mainCheckoutOf, key);
     }
+    // After the worktrees, which keep their repository: a folder of headless runs goes under the
+    // project whose session started them (core/spawned.ts). It does not wait for git.
+    linkSpawned(projects, (file, cwd, time) => mentionIndex.names(file, cwd, time));
     const ms = Date.now() - t0;
     if (ms > SLOW_SCAN_MS) console.log(`[hangar] scan took ${ms} ms for ${projects.length} projects`);
     deps.scanned();                                 // the running set may have changed

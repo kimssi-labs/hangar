@@ -37,17 +37,17 @@ describe("placeWorktrees", () => {
   it("puts each worktree under its repository, indented, keeping the rest in order", () => {
     // The repository's row counts what is under it; each worktree knows the row it sits under.
     expect(placeWorktrees(rows)).toEqual([
-      { item: rows[0], depth: 0, parent: null, trees: 2 },
-      { item: rows[2], depth: 1, parent: rows[0], trees: 0 },
-      { item: rows[3], depth: 1, parent: rows[0], trees: 0 },
-      { item: rows[1], depth: 0, parent: null, trees: 0 },
+      { item: rows[0], depth: 0, parent: null, trees: 2, open: true, worktrees: false },
+      { item: rows[2], depth: 1, parent: rows[0], trees: 0, open: false, worktrees: false },
+      { item: rows[3], depth: 1, parent: rows[0], trees: 0, open: false, worktrees: false },
+      { item: rows[1], depth: 0, parent: null, trees: 0, open: false, worktrees: false },
     ]);
   });
 
   it("leaves a worktree where it was when its repository is not in the list", () => {
     // The repository may be a folder Claude Code has never opened, so it has no row to sit under.
     const orphan = [{ dir: "app-feature", parentDir: "app" }];
-    expect(placeWorktrees(orphan)).toEqual([{ item: orphan[0], depth: 0, parent: null, trees: 0 }]);
+    expect(placeWorktrees(orphan)).toEqual([{ item: orphan[0], depth: 0, parent: null, trees: 0, open: false, worktrees: false }]);
   });
 
   it("counts only the worktrees that made it into the list, as a search narrows it", () => {
@@ -64,7 +64,25 @@ describe("placeWorktrees", () => {
 
   it("ignores a row that claims itself as its own parent", () => {
     const odd = [{ dir: "app", parentDir: "app" }];
-    expect(placeWorktrees(odd)).toEqual([{ item: odd[0], depth: 0, parent: null, trees: 0 }]);
+    expect(placeWorktrees(odd)).toEqual([{ item: odd[0], depth: 0, parent: null, trees: 0, open: false, worktrees: false }]);
+  });
+
+  it("goes as deep as the links go, and a loop of links loses no row", () => {
+    const deep = [{ dir: "a", parentDir: null }, { dir: "b", parentDir: "a" }, { dir: "c", parentDir: "b" }];
+    expect(placeWorktrees(deep).map((p) => [p.item.dir, p.depth])).toEqual([["a", 0], ["b", 1], ["c", 2]]);
+    const loop = [{ dir: "x", parentDir: "y" }, { dir: "y", parentDir: "x" }];
+    expect(placeWorktrees(loop).map((p) => p.item.dir).sort()).toEqual(["x", "y"]);
+  });
+
+  it("folds a row's children when it is closed, and opens worktrees but not runs by default", () => {
+    const list = [
+      { dir: "app", parentDir: null }, { dir: "app-wt", parentDir: "app", worktree: true },
+      { dir: "main", parentDir: null }, { dir: "run1", parentDir: "main" }, { dir: "run2", parentDir: "main" },
+    ];
+    const placed = placeWorktrees(list, (_item, byDefault) => byDefault);
+    expect(placed.map((p) => [p.item.dir, p.trees, p.open])).toEqual([
+      ["app", 1, true], ["app-wt", 0, false], ["main", 2, false],
+    ]);
   });
 });
 

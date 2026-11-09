@@ -708,6 +708,21 @@ export class Dock {
   }
 
   /**
+   * The shell work in flight: apply, release and resizeTo run one at a time, in the order asked.
+   *
+   * Each awaits the shell for the best part of a second. A release that arrived while an apply was
+   * still on its way found nothing reserved yet and did nothing, and the apply then reserved the
+   * edge anyway: minimised again right after a restore, the band kept its space (reported).
+   */
+  private queue: Promise<unknown> = Promise.resolve();
+
+  private serial<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(work, work);
+    this.queue = next.catch(() => undefined);
+    return next;
+  }
+
+  /**
    * The display's work area as if we were not docked to it.
    *
    * `display.workArea` already excludes our own band, so sizing a band from it shrinks the band
@@ -736,7 +751,11 @@ export class Dock {
   }
 
   /** Place the window in its band and reserve that space; returns what actually happened. */
-  async apply(config: DockConfig): Promise<DockPlacement> {
+  apply(config: DockConfig): Promise<DockPlacement> {
+    return this.serial(() => this.applyNow(config));
+  }
+
+  private async applyNow(config: DockConfig): Promise<DockPlacement> {
     const { display, missing } = pickDisplay(config.device);
     // Before anything is moved or reserved: a band belongs on the monitor it was chosen for.
     const refusal = refusesToDock(config.device, missing);
@@ -837,7 +856,11 @@ export class Dock {
    * visibly jumped once, at the end of every resize. One percent of a tall screen is twenty pixels.
    * The shell only needs to be told the new extent; the window is already correct.
    */
-  async resizeTo(thickness: number): Promise<void> {
+  resizeTo(thickness: number): Promise<void> {
+    return this.serial(() => this.resizeNow(thickness));
+  }
+
+  private async resizeNow(thickness: number): Promise<void> {
     const config = this.current;
     this.dragging = false;                        // the hand is off; re-asserting may resume
     if (!config?.enabled) return;
@@ -899,7 +922,11 @@ export class Dock {
   }
 
   /** Give the space back; safe to call when nothing was reserved. */
-  async release(): Promise<void> {
+  release(): Promise<void> {
+    return this.serial(() => this.releaseNow());
+  }
+
+  private async releaseNow(): Promise<void> {
     if (process.platform === "win32") {
       const api = this.registered ? loadWin32() : null;
       if (api) {
