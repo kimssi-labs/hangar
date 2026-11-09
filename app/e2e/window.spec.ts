@@ -1357,16 +1357,18 @@ test("minimised again right after a restore, the band still gives its edge back"
   const { app, page } = await launch(fixture({ theme: "dark", keepIcons: true }));
   try {
     test.skip(process.platform !== "win32", "an appbar is Windows' own");
+    // Electron's figures only, never a koffi call of the test's own: one made while the dock's shell
+    // call is in flight kills the process (chrome.ts, `shell`), and a minimise starts one.
     const primary = (await monitors(page)).find((d) => d.primary)!;
-    const undocked = await nativeWorkArea(app, primary.id);
+    const undocked = await workAreaOf(app, primary.id);
     await page.evaluate((device) => window.hangar.applyDock({ enabled: true, device, edge: "right", percent: 15 }), primary.id);
     await page.waitForTimeout(1700);
-    const docked = await nativeWorkArea(app, primary.id);
+    const docked = await workAreaOf(app, primary.id);
     expect(docked.width, "docked").toBeLessThan(undocked.width);
     const minimise = page.getByRole("button", { name: "Minimise" });
     for (const gap of [0, 300, 600]) {
       await minimise.click();
-      await expect.poll(async () => (await nativeWorkArea(app, primary.id)).width, { timeout: 5000 }).toBe(undocked.width);
+      await expect.poll(async () => (await workAreaOf(app, primary.id)).width, { timeout: 5000 }).toBe(undocked.width);
       // Long enough for the icons to have been put back, so the re-dock reads them again: that read
       // is what keeps it in flight.
       await page.waitForTimeout(2500);
@@ -1375,11 +1377,13 @@ test("minimised again right after a restore, the band still gives its edge back"
       await page.waitForTimeout(gap);
       await minimise.click();
       await page.waitForTimeout(3000);                        // past any re-dock that was in flight
-      expect((await iconicRect(app))?.iconic, `minimised ${gap} ms after the restore`).toBe(true);
-      expect((await nativeWorkArea(app, primary.id)).width, `no edge held, minimised ${gap} ms after the restore`).toBe(undocked.width);
+      expect(await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.isMinimized()),
+      `minimised ${gap} ms after the restore`).toBe(true);
+      expect((await workAreaOf(app, primary.id)).width, `no edge held, minimised ${gap} ms after the restore`).toBe(undocked.width);
       await app.evaluate(({ BrowserWindow }) =>
         BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.restore());
-      await expect.poll(async () => (await nativeWorkArea(app, primary.id)).width, { timeout: 8000, message: "docked again" }).toBe(docked.width);
+      await expect.poll(async () => (await workAreaOf(app, primary.id)).width, { timeout: 8000, message: "docked again" }).toBe(docked.width);
     }
   } finally {
     await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
