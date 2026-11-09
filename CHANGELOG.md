@@ -24,6 +24,8 @@ notes. Add the section **before** tagging.
   inside a native call made koffi abort the process (exit code 134, seen in a crash dump). The way
   out now waits for the sampler to end, the exit watchdog covers one that never does, and nothing
   starts the sampler again once the app is leaving.
+- **A gauge at 0 % is empty.** The bars kept a sliver so a small figure still shows, and drew it at
+  0 % too, so an unused window looked used.
 
 ## v2.24.0
 

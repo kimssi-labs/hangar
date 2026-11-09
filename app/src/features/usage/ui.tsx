@@ -15,7 +15,7 @@ import { api } from "../../renderer/api";
 import { fitsUpright, isNarrow, UprightBar, useElementWidth } from "../../renderer/components/Chart";
 import { Choice } from "../../renderer/components/SettingsCard";
 import { Truncated } from "../../renderer/components/Truncated";
-import { formatClock, formatPercent, formatTime, resetLabel, resetRemaining, sinceParts, usageTone } from "../../renderer/format";
+import { barFill, formatClock, formatPercent, formatTime, resetLabel, resetRemaining, sinceParts, usageTone } from "../../renderer/format";
 import { useText } from "../../renderer/useText";
 import type { UsageState } from "./contract";
 
@@ -135,7 +135,7 @@ export function UsageCard({ window: usage, className = "", compact = false }: {
         </span>
       </div>
       <div className={`${compact ? "mt-1" : "mt-2"} h-2.5 rounded-full bg-ink-600 overflow-hidden`}>
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(2, Math.min(100, usage.usedPercent))}%` }} />
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${barFill(usage.usedPercent, 2)}%` }} />
       </div>
       {reset ? (
         <Truncated testId="usage-reset" className={`${compact ? "mt-0.5" : "mt-1"} text-[11px] text-bone-400 tabular-nums`}>

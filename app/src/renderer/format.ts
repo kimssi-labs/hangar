@@ -93,6 +93,14 @@ export function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
 }
 
+/**
+ * How much of a gauge bar to fill: at least `floor` percent so a small figure still shows, but
+ * nothing at all while the figure reads 0 %, or an empty gauge looked used.
+ */
+export function barFill(value: number, floor: number): number {
+  return Math.round(value) <= 0 ? 0 : Math.max(floor, Math.min(100, value));
+}
+
 /** Colour for a usage percentage, matching what the status line used to say with colour. */
 export function usageTone(percent: number): string {
   if (percent >= 80) return "text-bad";
