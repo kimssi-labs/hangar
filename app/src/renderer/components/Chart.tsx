@@ -15,6 +15,7 @@ import type { MetricSample } from "@core/types";
 
 import { useText } from "../useText";
 import { Truncated } from "./Truncated";
+import { barFill } from "../format";
 
 const ACCENT = "#d97757";
 const ACCENT_SOFT = "rgba(217, 119, 87, 0.18)";
@@ -250,7 +251,7 @@ export function UprightBar({ percent, tone }: { percent: number; tone: string })
   return (
     <div className="mt-1 flex-1 min-h-14 flex justify-center items-stretch">
       <div className="w-3 rounded-full bg-ink-600 overflow-hidden flex items-end">
-        <div className={`w-full rounded-full ${tone}`} style={{ height: `${Math.max(3, Math.min(100, percent))}%` }} />
+        <div className={`w-full rounded-full ${tone}`} style={{ height: `${barFill(percent, 3)}%` }} />
       </div>
     </div>
   );
