@@ -3,6 +3,28 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.25.0
+
+- **Projects a session started fold under it.** A script that prepares folders and runs `claude -p`
+  in each used to leave a project per folder at the top of the list. A project whose sessions are
+  all headless now sits under the project whose running session named its folder just before the
+  first run, whatever the folder is called or wherever it is. Only the half hour before that run is
+  read, found by a binary search on the transcript's timestamps, so a long conversation costs a few
+  small reads.
+- **Rows under rows fold.** A row with rows under it carries a `▸ N` switch, and → / ← open and
+  fold it from the keyboard. Worktrees start open, runs a session started start folded, a search
+  opens every match, and the choice is remembered.
+- **Headless sessions fold at the end of a session list** behind one `▸ N headless runs` line, when
+  the project also has sessions a person opened.
+- **A docked band gives its edge back when minimised again right after a restore.** The re-dock
+  that a restore starts took up to a second, and a minimise inside it released nothing; the re-dock
+  then reserved the edge for a minimised window. Dock operations now run one at a time, and a
+  re-dock that finishes on a minimised window gives the edge straight back.
+- **Quitting no longer can abort the process.** Leaving while the CPU and memory sampler was still
+  inside a native call made koffi abort the process (exit code 134, seen in a crash dump). The way
+  out now waits for the sampler to end, the exit watchdog covers one that never does, and nothing
+  starts the sampler again once the app is leaving.
+
 ## v2.24.0
 
 - **The search box finds sessions too.** A query matches a session's title or its first prompt (still

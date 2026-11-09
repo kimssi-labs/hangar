@@ -122,7 +122,7 @@ function scanTitles(bytes: Buffer, base: number): { title: string | null; at: nu
 }
 
 /** `length` bytes of a file from `position` — fewer if it is shorter, none if it cannot be read. */
-function readBytes(file: string, position: number, length: number): Buffer {
+export function readBytes(file: string, position: number, length: number): Buffer {
   if (length <= 0) return Buffer.alloc(0);
   let handle: number | null = null;
   try {
@@ -590,6 +590,7 @@ export class Store {
         pinned: pins.sessions.includes(id),
         folded: [],
         continues: 0,
+        headless: facts.headless,
         startedByClear: facts.startedByClear,
         carriedTitle: facts.carriedTitle,
         carriedFrom: facts.carriedFrom,

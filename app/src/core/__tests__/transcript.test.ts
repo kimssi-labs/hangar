@@ -72,7 +72,7 @@ describe("factsFrom", () => {
   });
 
   it("has nothing to say about an empty file", () => {
-    expect(factsFrom("", "", true)).toEqual({ aiTitle: null, firstPrompt: null, conversation: false, startedByClear: false, carriedTitle: null });
+    expect(factsFrom("", "", true)).toEqual({ aiTitle: null, firstPrompt: null, conversation: false, startedByClear: false, carriedTitle: null, headless: false });
   });
 });
 
@@ -141,5 +141,23 @@ describe("previousSession", () => {
     const window = JSON.stringify({ type: "attachment", sessionId: own, session_id: own });
     expect(previousSession(window, own)).toBeNull();
     expect(previousSession("", own)).toBeNull();
+  });
+});
+
+describe("headless", () => {
+  const spoken = (entrypoint: string) => [
+    line({ type: "attachment", entrypoint }),
+    line({ type: "user", entrypoint, message: { content: "Record: docs/a.md" } }),
+  ].join("");
+
+  it("marks a session `claude -p` or the SDK started, by its first spoken entry", () => {
+    expect(factsFrom(spoken("sdk-cli"), "", true).headless).toBe(true);
+    expect(factsFrom(spoken("sdk-ts"), "", true).headless).toBe(true);
+    expect(factsFrom(spoken("cli"), "", true).headless).toBe(false);
+  });
+
+  it("keeps a run a run when a terminal resumes it later", () => {
+    const resumed = spoken("sdk-cli") + line({ type: "user", entrypoint: "cli", message: { content: "and now?" } });
+    expect(factsFrom(resumed, "", true).headless).toBe(true);
   });
 });

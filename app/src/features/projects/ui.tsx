@@ -7,7 +7,7 @@
  * the keyboard drives it — and hands over what an action needs: a dialog, a toast, a rescan, and
  * the two things only the shell can do, changing screen and opening the rename box.
  */
-import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { MENU_SEPARATOR, PERMISSION_MODES, SHELL_CHOICES } from "@core/constants";
 import { PERMISSION_ARGS } from "@core/launcher";
@@ -43,15 +43,19 @@ export function useProjects() {
 
 import { filterSessions } from "@core/search";
 
-export { filterProjects, filterSessions } from "@core/search";
+export { filterProjects, filterSessions, foldHeadless } from "@core/search";
 
 /**
  * Where `dir` sits in a freshly scanned list — through the same placement it is drawn with. The
  * raw scan order is not what is on screen once a worktree has been tucked under its repository,
  * and selecting by the wrong index lands on a different row.
  */
-export function indexOf(dir: string, scanned: ProjectInfo[]): number {
-  return Math.max(0, placeWorktrees(scanned).findIndex((row) => row.item.dir === dir));
+export function indexOf(
+  dir: string,
+  scanned: ProjectInfo[],
+  isOpen?: (item: ProjectInfo, byDefault: boolean) => boolean,
+): number {
+  return Math.max(0, placeWorktrees(scanned, isOpen).findIndex((row) => row.item.dir === dir));
 }
 
 // ---- actions on a row ----------------------------------------------------------------------------
@@ -290,7 +294,7 @@ export function ProjectSearch({ query, onQuery, searchRef, onAdd, onDown }: {
 
 /** The project rows — the pane the window is navigated from. */
 export function ProjectPane({
-  placed, query, editing, editRef, onRename, onCancelEdit, isSelected, onSelect, onOpen, onContextMenu, tight,
+  placed, query, editing, editRef, onRename, onCancelEdit, isSelected, onSelect, onOpen, onContextMenu, onToggle, tight,
 }: {
   placed: Placed<ProjectInfo>[];
   /** The search, so a row can say how many of its sessions it was kept for. */
@@ -305,6 +309,8 @@ export function ProjectPane({
   onSelect(index: number): void;
   onOpen(dir: string): void;
   onContextMenu(item: ProjectInfo, index: number): void;
+  /** Show or fold the rows tucked under a row. */
+  onToggle(item: ProjectInfo, index: number): void;
   /** A thin window: less padding around everything. */
   tight: boolean;
 }) {
@@ -312,7 +318,7 @@ export function ProjectPane({
   return (
     <>
       <div className={`flex-1 overflow-auto space-y-0.5 ${tight ? "p-1" : "p-2"}`}>
-        {placed.map(({ item, depth, parent, trees }, index) => (
+        {placed.map(({ item, depth, parent, trees, open, worktrees }, index) => (
           editing === item.dir ? (
             <RenameInput key={item.dir} inputRef={editRef} defaultValue={item.alias ?? item.name} onCommit={onRename} onCancel={onCancelEdit} />
           ) : (
@@ -322,6 +328,9 @@ export function ProjectPane({
               depth={depth}
               parent={parent}
               trees={trees}
+              open={open}
+              worktrees={worktrees}
+              onToggle={() => onToggle(item, index)}
               matched={query.trim() ? filterSessions(item, query).length : null}
               selected={isSelected(item, index)}
               onSelect={() => onSelect(index)}
@@ -338,9 +347,11 @@ export function ProjectPane({
 
 /** The sessions screen: one project's sessions, with the selected row and the rename box. */
 export function SessionList({
-  sessions, selected, editing, editRef, onRename, onCancelEdit, onSelect, onOpen, onContextMenu,
+  sessions, runs, selected, editing, editRef, onRename, onCancelEdit, onSelect, onOpen, onContextMenu,
 }: {
   sessions: SessionInfo[];
+  /** The folded headless runs' switch, drawn after the rows. */
+  runs: ReactNode;
   selected: number;
   /** The id of the session being renamed, if any. */
   editing: string | null;
@@ -367,14 +378,17 @@ export function SessionList({
           />
         )
       ))}
+      {runs}
     </>
   );
 }
 
 /** The projects screen's glimpse of the selected project: its first sessions, and a way to the rest. */
-export function SessionPreview({ sessions, onEnter, onContextMenu }: {
+export function SessionPreview({ sessions, runs, onEnter, onContextMenu }: {
   /** The project's sessions the search keeps: the same list the sessions screen opens on. */
   sessions: SessionInfo[];
+  /** The folded headless runs' switch, drawn after the rows. */
+  runs: ReactNode;
   /** Any click lands on the sessions screen; the preview is a doorway, not a list to select from. */
   onEnter(): void;
   onContextMenu(item: SessionInfo, index: number): void;
@@ -393,6 +407,7 @@ export function SessionPreview({ sessions, onEnter, onContextMenu }: {
           onContextMenu={() => onContextMenu(item, index)}
         />
       ))}
+      {runs}
     </>
   );
 }

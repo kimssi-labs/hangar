@@ -26,6 +26,7 @@ function session(over: Partial<SessionWithOrigin> & { id: string }): SessionWith
     pinned: false,
     continues: 0,
     folded: [],
+    headless: false,
     startedByClear: false,
     carriedTitle: null,
     carriedFrom: null,

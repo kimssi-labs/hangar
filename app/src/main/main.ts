@@ -484,8 +484,6 @@ app.on("render-process-gone", (_event, _contents, details) =>
 app.on("child-process-gone", (_event, details) =>
   console.error("[hangar] child gone:", details.type, details.reason, details.exitCode));
 
-/** How long the sampler may take to finish the sample in flight before the app leaves without it. */
-const SAMPLER_STOP_CAP_MS = 5000;
 /** How long a process may take to be gone after its window closed; the watchdog kills it after that. */
 const EXIT_GRACE_MS = 10_000;
 
@@ -522,17 +520,21 @@ let leaving: Promise<void> | null = null;
  * The one way out on Windows, whichever door was used: the window's close button, an `app.quit()`
  * (turned into a window close by `before-quit` below), an update installing itself.
  *
- * Own cleanup first — the sampler finishes the sample in flight (MetricsFeature.stop says why),
- * capped so a stuck sampler cannot hold us — then `app.exit(0)` rather than the quit rounds:
+ * Own cleanup first — the sampler finishes the sample in flight (MetricsFeature.stop says why) —
+ * then `app.exit(0)` rather than the quit rounds:
  * everything of ours is released by then, and Windows reclaims the reservation of a dead process.
- * The watchdog covers whatever teardown may still wait on.
+ * The watchdog covers whatever teardown may still wait on, a stuck sampler included.
+ *
+ * No time limit on the sampler here: leaving while it is still inside a native call is exactly what
+ * aborts the process (koffi throws into the terminating isolate, exit 134: a crash dump from an e2e
+ * run on a busy desk, while this wait was capped at five seconds). A sampler that never ends is the
+ * watchdog's, which kills the process from outside, where no teardown runs and nothing can abort.
  */
 function leave(): Promise<void> {
   if (leaving) return leaving;
   armExitWatchdog();
   const asked = Date.now();
-  const sampler = Promise.race([metricsFeature.stop(), new Promise<void>((resolve) => setTimeout(resolve, SAMPLER_STOP_CAP_MS))]);
-  leaving = sampler.then(() => {
+  leaving = metricsFeature.shutdown().then(() => {
     console.log(`[hangar] leaving, ${Date.now() - asked} ms after the window closed`);
     clipboardFeature.dispose();
     app.exit(0);
@@ -548,7 +550,7 @@ app.on("window-all-closed", () => {
     void leave();                               // under way already when the window's `close` ran
     return;
   }
-  void metricsFeature.stop();
+  void metricsFeature.shutdown();
   dockFeature.releaseSync();
   app.quit();                                   // X11 struts need the quit events (`before-quit`)
 });

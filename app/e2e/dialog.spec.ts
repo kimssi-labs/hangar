@@ -119,7 +119,8 @@ test("the app asks in its own dialog, and a worktree becomes a project", async (
     await expect(childRow.getByTestId("project-git")).toHaveCount(0);
     const repoRow = page.locator(".row").filter({ has: page.getByTestId("project-git") });
     const count = repoRow.getByTitle("1 worktree(s)");
-    await expect(count).toHaveText("1");
+    // Open by default (worktrees are worth seeing), and the chip is the switch that folds them.
+    await expect(count).toHaveText("▾1");
     await expect(count.getByRole("img", { name: "worktree" })).toBeVisible();
 
     // And the detail panel lists both checkouts of the repository.

@@ -6,11 +6,11 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { listAction, nextIndex, PAGE_ROWS } from "@core/keymap";
+import { foldKey, listAction, nextIndex, PAGE_ROWS } from "@core/keymap";
 import type { Language } from "@core/i18n";
 import { gitMenuItems, isGitAction, runGitAction, useDirtyPatch, useGit } from "../features/git/ui";
 import {
-  deleteProject, deleteSession, filterProjects, filterSessions, indexOf, isProjectAction, isSessionAction, openSession,
+  deleteProject, deleteSession, filterProjects, filterSessions, foldHeadless, indexOf, isProjectAction, isSessionAction, openSession,
   ProjectPane, ProjectSearch, projectMenuItems, rename, runProjectAction, runSessionAction, SessionList, sessionMenuItems, SessionPreview,
   useProjects,
 } from "../features/projects/ui";
@@ -26,7 +26,7 @@ import { MENU_SEPARATOR, SIDE_PANE_TABS } from "@core/constants";
 import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
 import { chosenMonitor } from "../features/dock/contract";
 import { DockButton, DockGrip, useDock } from "../features/dock/ui";
-import { ProjectDetail, ProjectTitle, projectRowId, SessionDetail, sessionRowId } from "./components/Lists";
+import { ProjectDetail, ProjectTitle, projectRowId, RunsRow, SessionDetail, sessionRowId } from "./components/Lists";
 import { SettingsView } from "./components/Settings";
 import { Modal, type Ask, type AskResult } from "./components/Modal";
 import { TitleBar } from "./components/TitleBar";
@@ -212,7 +212,12 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
 
   // The list as it is drawn — one array for both the drawing and the keyboard, or the arrow keys
   // would walk a different list from the one on screen.
-  const placed = useMemo(() => filterProjects(projects, query), [projects, query]);
+  // Which rows show the rows tucked under them, kept with the side pane's open groups (`ui.paneOpen`):
+  // `tree:<dir>` marks a row turned from its default (worktrees open, runs folded), `runs:<dir>` a
+  // project whose headless sessions are shown.
+  const paneOpen = usePaneOpen(settings?.ui.paneOpen);
+  const treeOpen = useCallback((item: ProjectInfo, byDefault: boolean) => byDefault !== paneOpen.isOpen(`tree:${item.dir}`), [paneOpen]);
+  const placed = useMemo(() => filterProjects(projects, query, treeOpen), [projects, query, treeOpen]);
   const filtered = useMemo(() => placed.map((row) => row.item), [placed]);
 
   const project = filtered[Math.min(projectIndex, Math.max(0, filtered.length - 1))] ?? null;
@@ -227,9 +232,14 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     patchDirty,
   );
   const openProjectInfo = projects.find((p) => p.dir === openProject) ?? null;
-  const sessions = useMemo(() => filterSessions(openProjectInfo, query), [openProjectInfo, query]);
+  // A search shows the runs it matched; otherwise they wait behind their switch at the end.
+  const runsOpen = useCallback((dir: string | undefined) => Boolean(query.trim()) || paneOpen.isOpen(`runs:${dir}`), [query, paneOpen]);
+  const matchedSessions = useMemo(() => filterSessions(openProjectInfo, query), [openProjectInfo, query]);
+  const openFold = useMemo(() => foldHeadless(matchedSessions, runsOpen(openProject ?? undefined)), [matchedSessions, runsOpen, openProject]);
+  const sessions = openFold.rows;
   const session = sessions[Math.min(sessionIndex, Math.max(0, sessions.length - 1))] ?? null;
-  const previewSessions = useMemo(() => filterSessions(project, query), [project, query]);
+  const previewFold = useMemo(() => foldHeadless(filterSessions(project, query), runsOpen(project?.dir)), [project, query, runsOpen]);
+  const previewSessions = previewFold.rows;
   // The project row drawn as selected, which the project list's keys move from: the selection on
   // the projects screen, the open project beside its sessions, none on the settings screen.
   const projectCursor = screen === "projects" ? projectIndex
@@ -238,8 +248,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   // What the key handlers read. Kept in a ref because a key can arrive before React has
   // re-rendered with the new state, and acting on the previous screen is how F2 renamed the wrong
   // thing. The ref is written during render, so it is never behind.
-  const latest = useRef({ screen, project, projectCursor, session, sessions, filtered, openProject });
-  latest.current = { screen, project, projectCursor, session, sessions, filtered, openProject };
+  const latest = useRef({ screen, project, projectCursor, session, sessions, filtered, placed, openProject, paneOpen });
+  latest.current = { screen, project, projectCursor, session, sessions, filtered, placed, openProject, paneOpen };
 
   /**
    * Ask in the app's own dialog rather than the system's.
@@ -289,8 +299,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     const scanned = await refresh();
     setQuery("");                                       // a filter could hide the row just added
     setScreen("projects");
-    setProjectIndex(indexOf(result.dir, scanned));
-  }, [notify, refresh]);
+    setProjectIndex(indexOf(result.dir, scanned, treeOpen));
+  }, [notify, refresh, treeOpen]);
 
   const enterSessions = useCallback((dir: string) => {
     setOpenProject(dir);
@@ -313,8 +323,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const landOn = useCallback((dir: string, scanned: ProjectInfo[]) => {
     setQuery("");
     setScreen("projects");
-    setProjectIndex(indexOf(dir, scanned));
-  }, []);
+    setProjectIndex(indexOf(dir, scanned, treeOpen));
+  }, [treeOpen]);
 
   /** The right-click menu of a project row: the projects feature's entries with git's slotted in. */
   const projectMenu = useCallback(async (target: ProjectInfo, index: number) => {
@@ -415,11 +425,21 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
    */
   const projectKeys = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
     if (event.target !== event.currentTarget) return;           // the rename box inside has its own
+    const now = latest.current;
+    const cursor = Math.max(0, now.projectCursor);
+    // → shows the rows tucked under the selected one, ← folds them or goes up to the row above it.
+    const fold = foldKey(event);
+    const row = now.placed[cursor];
+    if (fold && row) {
+      event.preventDefault();
+      if (fold === "open" ? row.trees > 0 && !row.open : row.open) now.paneOpen.toggle(`tree:${row.item.dir}`);
+      else if (fold === "close" && row.parent) setProjectIndex(now.filtered.indexOf(row.parent));
+      setScreen((screen) => (screen === "settings" ? screen : "projects"));
+      return;
+    }
     const action = listAction(event);
     if (!action) return;
     event.preventDefault();
-    const now = latest.current;
-    const cursor = Math.max(0, now.projectCursor);
     const target = now.filtered[cursor];
     switch (action) {
       // The session list takes it from here: the focus arriving there is what enters the project.
@@ -515,7 +535,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const filesCwd = (screen === "sessions" ? openProjectInfo?.cwd : project?.cwd) ?? null;
   const skills = useSkills(filesCwd, showPane && activeTab === "skills");
   const artifacts = useArtifacts(showPane && activeTab === "artifacts");
-  const paneOpen = usePaneOpen(settings?.ui.paneOpen);
   const band = mode === "band";
   const column = mode === "column";
   const showDetail = mode === "full";
@@ -606,12 +625,17 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       onSelect={(index) => { setProjectIndex(index); setScreen("projects"); }}
       onOpen={enterSessions}
       onContextMenu={(item, index) => void projectMenu(item, index)}
+      onToggle={(item) => paneOpen.toggle(`tree:${item.dir}`)}
       tight={tight}
     />
   );
+  const runsRow = (dir: string | null, fold: { rows: SessionInfo[]; headless: number }) => (fold.headless && dir ? (
+    <RunsRow count={fold.headless} open={fold.rows.some((s) => s.headless)} onToggle={() => paneOpen.toggle(`runs:${dir}`)} />
+  ) : null);
   const sessionRows = screen === "sessions" ? (
     <SessionList
       sessions={sessions}
+      runs={runsRow(openProject, openFold)}
       selected={sessionIndex}
       editing={editing}
       editRef={editRef}
@@ -624,6 +648,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   ) : project ? (
     <SessionPreview
       sessions={previewSessions}
+      runs={runsRow(project.dir, previewFold)}
       onEnter={() => enterSessions(project.dir)}
       onContextMenu={(item, index) => void sessionMenu(project.dir, item, index)}
     />
@@ -749,7 +774,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
                   {screen === "sessions" && openProjectInfo ? <ProjectTitle project={openProjectInfo} projects={projects} /> : t("app.projects")}
                 </Truncated>
                 <span className="chip shrink-0 whitespace-nowrap">{screen === "sessions"
-                  ? t("app.sessions.count", { count: sessions.length })
+                  ? t("app.sessions.count", { count: matchedSessions.length })
                   : t("app.projects.count", { count: filtered.length })}</span>
                 </div>
                 <div className="flex flex-1 min-w-[min(16rem,100%)] items-center gap-2">

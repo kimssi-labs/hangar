@@ -34,6 +34,8 @@ export interface MetricsFeature {
   start(): void;
   /** Stop measuring. Resolves once the sampler thread has ended — see `stop` for why that is waited for. */
   stop(): Promise<void>;
+  /** Stop for good: the app is leaving, and nothing may start the sampler again. */
+  shutdown(): Promise<void>;
   /** The project rows changed; the running set may have with them. */
   retarget(): void;
 }
@@ -42,6 +44,11 @@ export function register(ctx: MainContext, wire: Wire, deps: MetricsDeps): Metri
   const history = new MetricsHistory();
   let worker: Worker | null = null;
   let inline: NodeJS.Timeout | null = null;
+  /**
+   * The app is leaving. A sampler started now would still be inside a native call when the process
+   * tears down, and koffi aborts the whole process throwing into the terminating isolate (exit 134).
+   */
+  let closed = false;
 
   wire.bind(metricsContract, {
     metrics: () => ({
@@ -100,7 +107,7 @@ export function register(ctx: MainContext, wire: Wire, deps: MetricsDeps): Metri
 
   // Runs only when the setting says so — the whole point of the setting is that off costs nothing.
   function start(): void {
-    if (worker || inline) return;
+    if (worker || inline || closed) return;
     if (!ctx.config.ui().monitor) return;
     try {
       worker = new Worker(WORKER_SCRIPT, { workerData: { intervalMs: SAMPLE_INTERVAL_MS } });
@@ -118,5 +125,10 @@ export function register(ctx: MainContext, wire: Wire, deps: MetricsDeps): Metri
     }
   }
 
-  return { start, stop, retarget };
+  function shutdown(): Promise<void> {
+    closed = true;
+    return stop();
+  }
+
+  return { start, stop, shutdown, retarget };
 }

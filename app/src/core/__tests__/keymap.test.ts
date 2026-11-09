@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { listAction, nextIndex } from "../keymap.js";
+import { foldKey, listAction, nextIndex } from "../keymap.js";
 
 describe("listAction", () => {
   it("moves with the arrows, a page at a time, and to either end", () => {
@@ -42,5 +42,14 @@ describe("nextIndex", () => {
 
   it("stays at zero for an empty list", () => {
     expect(nextIndex("moveDown", 0, 0, 10)).toBe(0);
+  });
+});
+
+describe("foldKey", () => {
+  it("opens with the right arrow and folds with the left, leaving modified keys to the system", () => {
+    expect(foldKey({ key: "ArrowRight" })).toBe("open");
+    expect(foldKey({ key: "ArrowLeft" })).toBe("close");
+    expect(foldKey({ key: "ArrowLeft", altKey: true })).toBeNull();
+    expect(foldKey({ key: "ArrowUp" })).toBeNull();
   });
 });

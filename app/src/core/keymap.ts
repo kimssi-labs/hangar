@@ -33,6 +33,15 @@ export const NAVIGATION: Record<string, Movement> = {
 const ACTIONS: Record<string, ListAction> = { Enter: "open", Escape: "back", F2: "rename", Delete: "delete" };
 
 /**
+ * → and ← in the project list: show the rows tucked under the selected row, or fold them. Kept
+ * apart from listAction because only the project list has rows under rows.
+ */
+export function foldKey(event: KeyEventLike): "open" | "close" | null {
+  if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return null;
+  return event.key === "ArrowRight" ? "open" : event.key === "ArrowLeft" ? "close" : null;
+}
+
+/**
  * The action a key means to a project or session list, or null.
  *
  * A modifier leaves the key to the system — Shift+F10 among them: the browser turns it, and the menu
