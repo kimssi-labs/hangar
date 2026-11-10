@@ -3,6 +3,16 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.25.2
+
+- **Reading the project list no longer stalls the window.** A scan opens the transcripts that
+  changed, and opening a file blocks the thread that asks: on a machine whose endpoint agent scans
+  a large, growing transcript on every open, one open took 1.4 to 2.4 s, and the window froze for
+  as long. The scan now runs on its own worker with its own caches, sends the list across only
+  when it changed, and falls back to the main thread only if the worker cannot start or dies. A
+  scan asked for while one runs is answered by a scan that starts after it, so a rename or delete
+  is always in the list it gets back.
+
 ## v2.25.1
 
 - **The window no longer freezes every fifteen seconds.** Starting a process blocks the thread that
