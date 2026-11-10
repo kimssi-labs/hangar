@@ -222,7 +222,7 @@ const settingsFeature = registerSettings(context, wiring, {
   applied: (patch) => {
     if (patch.dock) dockFeature.save(patch.dock);
     if (patch.git) {
-      projectsFeature.scan();                      // the rows gain or lose their git line at once
+      void projectsFeature.scan();                 // the rows gain or lose their git line at once
       gitFeature.restartSweep();                   // and the timer starts, stops or re-arms with it
     }
     if (patch.updates) updatesFeature.setConfig(patch.updates);   // the timer starts, stops or re-arms with it
@@ -409,8 +409,9 @@ const REGISTRY_WATCH_MS = 10_000;
 let registryTimer: NodeJS.Timeout | null = null;
 
 function watchRegistry(): void {
-  context.store.watchRegistry();
-  registryTimer = setInterval(() => context.store.watchRegistry(), REGISTRY_WATCH_MS);
+  // Where the scan runs, which owns the links file: two writers of it would undo each other.
+  projectsFeature.watchRegistry();
+  registryTimer = setInterval(() => projectsFeature.watchRegistry(), REGISTRY_WATCH_MS);
 }
 
 /** Start-up, once the platform is ready: splash, scan, window, monitor. */
@@ -427,7 +428,7 @@ async function start(): Promise<void> {
   splashSays("Reading settings…");
   registerIpc();
   splashSays("Scanning projects…");
-  const found = projectsFeature.scan().length;
+  const found = (await projectsFeature.scan()).length;
   splashSays(`Opening ${found} project${found === 1 ? "" : "s"}…`);
   await createWindow();
   splashSays("Starting the monitor…");

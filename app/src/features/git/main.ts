@@ -24,7 +24,7 @@ export interface GitDeps {
   /** The project row for a directory, from the last scan. */
   findProject(dir: string): ProjectInfo | undefined;
   /** Read the rows again — a branch, or what is uncommitted, may have moved — and return them. */
-  rescan(): ProjectInfo[];
+  rescan(): Promise<ProjectInfo[]>;
   /** Where an executable is, or null when it is not on PATH. */
   which(exe: string): string | null;
 }
@@ -61,7 +61,7 @@ export function register(ctx: MainContext, wire: Wire, deps: GitDeps): GitFeatur
       if (!project?.cwd || !project.exists) return { ok: false, message: "Folder is not available." };
       const git = ctx.config.git();
       const outcome = await updateFromBase(project.cwd, { strategy: git.strategy, base: git.base });
-      rescan();                                      // the branch, and what is uncommitted, may have moved
+      await rescan();                                // the branch, and what is uncommitted, may have moved
       if (!outcome.ok) return { ok: false, message: outcome.message };
       return {
         ok: true,
@@ -84,7 +84,7 @@ export function register(ctx: MainContext, wire: Wire, deps: GitDeps): GitFeatur
       const created = await createWorktree(project.cwd, branch, ctx.config.git().base);
       if (!created.ok) return { ok: false, message: created.message };
       const added = ctx.store.addProject(created.path as string);
-      rescan();
+      await rescan();
       return { ok: true, dir: added, message: `Worktree at ${created.path}` };
     },
 
@@ -95,7 +95,7 @@ export function register(ctx: MainContext, wire: Wire, deps: GitDeps): GitFeatur
       const outcome = await dropWorktree(project.cwd, project.cwd, force);
       if (!outcome.ok) return { ok: false, message: outcome.message };
       ctx.store.deleteProject(project);
-      rescan();
+      await rescan();
       return { ok: true, message: "Worktree removed." };
     },
   });
@@ -115,7 +115,7 @@ export function register(ctx: MainContext, wire: Wire, deps: GitDeps): GitFeatur
     const updated: string[] = [];
     let failed = 0;
     try {
-      const plan = autoPlan(rescan(), { mode: git.auto.mode, strategy: git.strategy });
+      const plan = autoPlan(await rescan(), { mode: git.auto.mode, strategy: git.strategy });
       for (const item of plan.run) {
         const project = findProject(item.dir);
         if (!project?.cwd) continue;
@@ -126,7 +126,7 @@ export function register(ctx: MainContext, wire: Wire, deps: GitDeps): GitFeatur
     } finally {
       sweeping = false;
     }
-    if (updated.length) rescan();                  // the window's own refresh picks the branches up
+    if (updated.length) await rescan();            // the window's own refresh picks the branches up
     const summary = sweepSummary(updated, failed);
     if (summary) ctx.notify(summary);
   }
