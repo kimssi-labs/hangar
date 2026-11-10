@@ -6,7 +6,6 @@
  * `git status` run for the selected project only, cached, and never waited on: the row shows the
  * branch immediately and gains the count when it arrives.
  */
-import { execFile } from "node:child_process";
 import { access, existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
@@ -22,6 +21,7 @@ import {
   addArgs, classifyWorktree, cleanBranchName, gitdirOf, mainRepoFrom, parseWorktrees, removeArgs,
   suggestPath, type Worktree, type WorktreeOutcome,
 } from "../core/worktree.js";
+import { execFileOffThread } from "./offThread.js";
 
 /** Give up rather than hold anything up; a huge repository is not worth a stalled row. */
 const STATUS_TIMEOUT_MS = 4_000;
@@ -126,7 +126,7 @@ function porcelain(cwd: string, done: (counted: Counted | null) => void): void {
   waiting.set(cwd, [done]);
   // No existsSync first: on an unreachable share it waited out the SMB timeout on the window's
   // thread. git fails on a missing folder by itself, asynchronously, and the check moves there.
-  execFile(
+  execFileOffThread(
     "git",
     ["--no-optional-locks", "status", "--porcelain", "--untracked-files=normal"],
     { cwd, timeout: STATUS_TIMEOUT_MS, windowsHide: true, maxBuffer: GIT_MAX_BUFFER },
@@ -175,7 +175,7 @@ export function changedPaths(cwd: string, done: (statuses: Map<string, FileStatu
  */
 function git(cwd: string, args: string[], timeout: number): Promise<{ code: number; stdout: string; output: string }> {
   return new Promise((resolve) => {
-    execFile("git", args, { cwd, timeout, windowsHide: true, maxBuffer: GIT_MAX_BUFFER }, (error, stdout, stderr) => resolve({
+    execFileOffThread("git", args, { cwd, timeout, windowsHide: true, maxBuffer: GIT_MAX_BUFFER }, (error, stdout, stderr) => resolve({
       code: error ? ((error as { code?: number }).code ?? 1) : 0,
       stdout,
       output: `${stdout}\n${stderr}`.trim(),
