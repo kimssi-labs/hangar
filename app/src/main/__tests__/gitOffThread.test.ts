@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { countChanges } from "../gitStatus.js";
+import { execFileOffThread } from "../offThread.js";
 
 vi.mock("node:child_process", async (original) => {
   const real = await original<typeof childProcess>();
@@ -28,6 +29,14 @@ describe("git status", () => {
     writeFileSync(join(repo, "new.txt"), "x");
     const dirty = await new Promise<number>((done) => countChanges(repo, done));
     expect(dirty).toBe(1);
+    expect(childProcess.execFile).not.toHaveBeenCalled();
+  });
+
+  it("hands the program its stdin there too, as the desktop icon helper needs", async () => {
+    const echo = "process.stdin.pipe(process.stdout)";
+    const out = await new Promise<string>((done) =>
+      execFileOffThread(process.execPath, ["-e", echo], { windowsHide: true }, (_e, stdout) => done(stdout), "icons"));
+    expect(out).toBe("icons");
     expect(childProcess.execFile).not.toHaveBeenCalled();
   });
 });
