@@ -9,24 +9,20 @@
  * a plain module; whoever measures the running set is told it may have changed and looks itself.
  */
 import { spawn } from "node:child_process";
-import { realpathSync } from "node:fs";
 import { dirname } from "node:path";
 import { dialog, shell } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
 import { launchCommand, sessionEnvironment, WT_EXE } from "../../core/launcher.js";
-import { linkSpawned, MentionIndex } from "../../core/spawned.js";
-import { scanSignature } from "../../core/store.js";
 import type { ProjectInfo } from "../../core/types.js";
-import { linkWorktrees } from "../../core/worktree.js";
 import { claudeExecutable, detectLinuxTerminal, which } from "../../main/executables.js";
-import { headOf, isLinkedWorktree, mainCheckoutOf } from "../../main/gitStatus.js";
 import { helperExecutable, helpersDir } from "../../main/helpers.js";
 import { FOCUS_HELPER, focusSession, stopSession } from "../../main/liveSession.js";
 import type { ActionResult, AddProjectResult } from "../../main/ipc.js";
 import type { SessionTarget } from "../../main/sampler.js";
 import { projectsContract, type OpenSessionResult, type ScanAnswer } from "./contract.js";
+import { scanHost } from "./scanHost.js";
 
 /** A scan slower than this is worth a line in the log. */
 const SLOW_SCAN_MS = 200;
@@ -41,8 +37,10 @@ export interface ProjectsDeps {
 
 /** What the rest of main may do with this feature once it is registered. */
 export interface ProjectsFeature {
-  /** Read everything again. The list handed back is the one every later answer is about. */
-  scan(): ProjectInfo[];
+  /** Read everything again, off the main thread. The list handed back is the one every later answer is about. */
+  scan(): Promise<ProjectInfo[]>;
+  /** Note a session that changed hands, where the scan runs (scanHost.ts). */
+  watchRegistry(): void;
   find(dir: string): ProjectInfo | undefined;
   /** Sessions worth measuring right now: the running ones, from the last scan. */
   liveTargets(): SessionTarget[];
@@ -54,56 +52,15 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
   if (process.platform === "win32") setTimeout(() => void helperExecutable(helpersDir(), FOCUS_HELPER), HELPER_WARMUP_MS).unref();
 
   const find = (dir: string): ProjectInfo | undefined => projects.find((p) => p.dir === dir);
-  /** Resolved real paths, per folder — dropped whenever the store reads everything again. */
-  const realPaths = new Map<string, string>();
-  /** Whether a session's transcript named a folder just before a run began there (core/spawned.ts). */
-  const mentionIndex = new MentionIndex();
+  /** The scan runs on a worker (scanHost.ts); what is kept here is its last answer. */
+  const host = scanHost(ctx.store, ctx.config);
+  let signature = "";
 
-  function scan(): ProjectInfo[] {
-    const t0 = Date.now();
-    projects = ctx.store.scan();
-    // The head line is three small reads per project; the change count is a git process, so it is
-    // asked for separately and only for the row in front of the user.
-    if (ctx.config.git().enabled) {
-      for (const project of projects) {
-        if (project.cwd && project.exists) {
-          project.git = headOf(project.cwd);
-          project.worktree = Boolean(project.git) && isLinkedWorktree(project.cwd);
-        }
-      }
-      // Second pass: a worktree points at a folder, and the list is keyed by project. Match the two so
-      // the window can show each worktree under the repository it came from, and name that
-      // repository even when it is not listed (the folder read here is kept as `mainRepo`).
-      // Compared with separators and case normalised: the pointer file writes forward slashes where
-      // a transcript's cwd on Windows has backslashes, and the two would never match as written.
-      //
-      // Only when there is a worktree to place at all, only for a folder that is there, and once per
-      // folder: resolving a path on an unreachable share waits out the SMB timeout on this thread,
-      // and its answer is "fall back to what was written" anyway.
-      if (ctx.store.lastScanFull) realPaths.clear();
-      const key = (path: string, present: boolean): string => {
-        let real = present ? realPaths.get(path) : path;
-        if (real === undefined) {
-          real = path;
-          try {
-            // 8.3 short names are the one that actually bit: TEMP reads C:\Users\EXAMPL~1 in a
-            // transcript's cwd and C:/Users/ExampleUser in git's own pointer file. Only resolving
-            // the real path makes those the same folder.
-            real = realpathSync.native(path);
-          } catch {
-            /* gone, or unreachable: fall back to what was written */
-          }
-          realPaths.set(path, real);
-        }
-        return real.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-      };
-      linkWorktrees(projects, mainCheckoutOf, key);
-    }
-    // After the worktrees, which keep their repository: a folder of headless runs goes under the
-    // project whose session started them (core/spawned.ts). It does not wait for git.
-    linkSpawned(projects, (file, cwd, time) => mentionIndex.names(file, cwd, time));
-    const ms = Date.now() - t0;
-    if (ms > SLOW_SCAN_MS) console.log(`[hangar] scan took ${ms} ms for ${projects.length} projects`);
+  async function scan(): Promise<ProjectInfo[]> {
+    const result = await host.scan();
+    projects = result.projects;
+    signature = result.signature;
+    if (result.ms > SLOW_SCAN_MS) console.log(`[hangar] scan took ${result.ms} ms for ${projects.length} projects`);
     deps.scanned();                                 // the running set may have changed
     return projects;
   }
@@ -114,9 +71,8 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
    * The page asks every fifteen seconds and the list rarely changes between two asks; sending it
    * anyway cloned every row across the process boundary and re-ran everything drawn from it.
    */
-  function answer(since: string | null): ScanAnswer {
-    const list = scan();
-    const signature = scanSignature(list);
+  async function answer(since: string | null): Promise<ScanAnswer> {
+    const list = await scan();
     return signature === since ? { signature } : { signature, projects: list };
   }
 
@@ -190,40 +146,40 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
       }
     },
 
-    renameSession: (request): ActionResult => {
+    renameSession: async (request): Promise<ActionResult> => {
       const project = find(request.projectDir);
       const session = project?.sessions.find((s) => s.id === request.sessionId);
       if (!session) return { ok: false, message: "Session not found." };
       ctx.store.renameSession(session, request.title);
-      scan();
+      await scan();
       return { ok: true };
     },
 
-    renameProject: (request): ActionResult => {
+    renameProject: async (request): Promise<ActionResult> => {
       const project = find(request.projectDir);
       if (!project) return { ok: false, message: "Project not found." };
       ctx.store.renameProject(project, request.title);
-      scan();
+      await scan();
       return { ok: true };
     },
 
     // The window asks first, in its own dialog; nothing reaches these without that answer.
-    deleteSession: (request): ActionResult => {
+    deleteSession: async (request): Promise<ActionResult> => {
       const project = find(request.projectDir);
       const session = project?.sessions.find((s) => s.id === request.sessionId);
       if (!session) return { ok: false, message: "Session not found." };
       if (session.live) return { ok: false, message: "That session is running." };
       ctx.store.deleteSession(session);
-      scan();
+      await scan();
       return { ok: true, message: "Session deleted." };
     },
 
-    deleteProject: (request): ActionResult => {
+    deleteProject: async (request): Promise<ActionResult> => {
       const project = find(request.projectDir);
       if (!project) return { ok: false, message: "Project not found." };
       if (project.liveCount) return { ok: false, message: "A session in this project is running." };
       ctx.store.deleteProject(project);
-      scan();
+      await scan();
       return { ok: true, message: "Project deleted." };
     },
 
@@ -253,19 +209,20 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
       const folder = picked.filePaths[0];
       if (picked.canceled || !folder) return { ok: false };
       const dir = ctx.store.addProject(folder);
-      scan();
+      await scan();
       return { ok: true, dir, message: `Added ${folder}` };
     },
 
-    togglePin: (request): ActionResult => {
+    togglePin: async (request): Promise<ActionResult> => {
       const pinned = ctx.config.togglePin(request.kind, request.key);
-      scan();
+      await scan();
       return { ok: true, message: pinned ? "Pinned to the top." : "Unpinned." };
     },
   });
 
   return {
     scan,
+    watchRegistry: host.watchRegistry,
     find,
     liveTargets: () => projects.flatMap((project) =>
       project.sessions.filter((s) => s.live && s.pid).map((s) => ({ sessionId: s.id, pid: s.pid as number }))),
