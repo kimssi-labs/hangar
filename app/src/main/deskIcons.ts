@@ -11,13 +11,14 @@
  * one a shell extension would use — through a small C# helper built on first use like the focus
  * helper. "Auto arrange" makes Explorer ignore positions, so with it on nothing is touched.
  */
-import { execFile, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { rmSync } from "node:fs";
 
 import { type Box, type DeskIcon, movedByUser, placeAround } from "../core/deskIcons.js";
 import { readJson, writeJson } from "../core/json.js";
 import type { DockEdge } from "../core/types.js";
 import { helperExecutable, type HelperSpec } from "./helpers.js";
+import { execFileOffThread } from "./offThread.js";
 
 /** How long Explorer is given to finish re-flowing after a reservation changes (measured: < 2.5 s). */
 const SETTLE_MS = 1500;
@@ -337,18 +338,13 @@ export class IconKeeper {
     const pending = this.helper();
     const exe = wait ? await pending : this.exe;
     if (!exe) return null;
+    // On a worker: the helper is started on dock and undock, and a process start held the window for
+    // 0.7 s on a machine whose endpoint agent inspects every start (main/offThread.ts).
     return new Promise((resolve) => {
-      try {
-        const child = execFile(exe, [command], { windowsHide: true, timeout: RUN_TIMEOUT_MS }, (error, stdout, stderr) => {
-          if (error) console.error(`[hangar] desktop icons (${command}):`, String(stderr || error.message).trim().slice(0, 200));
-          resolve(error ? null : parseRead(String(stdout)));
-        });
-        child.stdin?.on("error", () => undefined);
-        child.stdin?.end(input);
-      } catch (error) {
-        console.error(`[hangar] desktop icons (${command}):`, (error as Error).message);
-        resolve(null);
-      }
+      execFileOffThread(exe, [command], { windowsHide: true, timeout: RUN_TIMEOUT_MS }, (error, stdout, stderr) => {
+        if (error) console.error(`[hangar] desktop icons (${command}):`, String(stderr || error.message).trim().slice(0, 200));
+        resolve(error ? null : parseRead(stdout));
+      }, input);
     });
   }
 

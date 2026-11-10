@@ -19,13 +19,22 @@ const IDLE_MS = 60_000;
 const WORKER_SOURCE = `
 const { parentPort } = require("node:worker_threads");
 const { execFile } = require("node:child_process");
-parentPort.on("message", ({ id, file, args, options }) => {
-  execFile(file, args, options, (error, stdout, stderr) => parentPort.postMessage({
-    id,
-    error: error ? { message: error.message, code: error.code, killed: error.killed, signal: error.signal } : null,
-    stdout: String(stdout),
-    stderr: String(stderr),
-  }));
+const reply = (id, error, stdout, stderr) => parentPort.postMessage({
+  id,
+  error: error ? { message: error.message, code: error.code, killed: error.killed, signal: error.signal } : null,
+  stdout: String(stdout),
+  stderr: String(stderr),
+});
+parentPort.on("message", ({ id, file, args, options, input }) => {
+  try {
+    const child = execFile(file, args, options, (error, stdout, stderr) => reply(id, error, stdout, stderr));
+    if (input !== undefined) {
+      child.stdin?.on("error", () => undefined);
+      child.stdin?.end(input);
+    }
+  } catch (error) {
+    reply(id, error, "", "");
+  }
 });`;
 
 type Done = (error: (Error & { code?: number | string | null; killed?: boolean }) | null, stdout: string, stderr: string) => void;
@@ -82,15 +91,26 @@ function restartIdleClock(): void {
   idle.unref();
 }
 
-/** Like `execFile` with a callback; falls back to the real thing if no worker can be started. */
-export function execFileOffThread(file: string, args: string[], options: ExecFileOptions, done: Done): void {
+/**
+ * Like `execFile` with a callback, plus `input` written to the program's stdin. Falls back to the
+ * real thing if no worker can be started.
+ */
+export function execFileOffThread(file: string, args: string[], options: ExecFileOptions, done: Done, input?: string): void {
   const running = start();
   if (!running) {
-    execFile(file, args, options, (error, stdout, stderr) => done(error, String(stdout), String(stderr)));
+    try {
+      const child = execFile(file, args, options, (error, stdout, stderr) => done(error, String(stdout), String(stderr)));
+      if (input !== undefined) {
+        child.stdin?.on("error", () => undefined);
+        child.stdin?.end(input);
+      }
+    } catch (error) {
+      done(error as Error, "", "");
+    }
     return;
   }
   const id = ++nextId;
   pending.set(id, done);
-  running.postMessage({ id, file, args, options });
+  running.postMessage({ id, file, args, options, input });
   restartIdleClock();
 }
