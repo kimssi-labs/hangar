@@ -3,6 +3,17 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.25.1
+
+- **The window no longer freezes every fifteen seconds.** Starting a process blocks the thread that
+  starts it until the OS has made it, and on a machine whose endpoint agent inspects every process
+  start that took 0.2 s each and up to 1.9 s. The file panel and the change count ran `git status`
+  on every refresh from the thread that draws the window, so it stalled every fifteen seconds and
+  Windows marked it Not Responding. git now runs on a worker thread that ends itself when idle.
+- **No process start on the window's thread at all.** Looking up git, claude and Windows Terminal
+  read PATH in place instead of starting `where` (0.6 s while settings loaded), and the desktop
+  icon helper that runs on dock and undock starts on the same worker (0.7 s each time).
+
 ## v2.25.0
 
 - **Projects a session started fold under it.** A script that prepares folders and runs `claude -p`
