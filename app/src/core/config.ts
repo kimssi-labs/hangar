@@ -7,13 +7,13 @@
 import { statSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, SIDE_PANE_TABS, STACK_BELOW, THEME_MODES } from "./constants.js";
+import { DEFAULT_PASTE_HOTKEY, DOCK_EDGES, DOCK_PERCENT, EDGE_AXIS, FILES_VIEWS, LAYOUT_MODES, PERMISSION_MODES, SHELL_CHOICES, SIDE_PANE_TABS, STACK_BELOW, THEME_MODES } from "./constants.js";
 import { AUTO_DEFAULTS, AUTO_MODES, type AutoConfig } from "./gitAuto.js";
 import { MERGE_STRATEGIES, SYNC_DEFAULTS } from "./gitSync.js";
 import { LANGUAGES, type Language } from "./i18n.js";
 import { readJson, writeJson } from "./json.js";
 import { homePaths } from "./paths.js";
-import type { DockConfig, DockEdge, GitConfig, LaunchConfig, LayoutMode, PermissionMode, ShellChoice, SidePaneTab, StatusConfig, ThemeMode, UiConfig, UpdateConfig } from "./types.js";
+import type { DockConfig, DockEdge, FilesView, GitConfig, LaunchConfig, LayoutMode, PermissionMode, ShellChoice, SidePaneTab, StatusConfig, ThemeMode, UiConfig, UpdateConfig } from "./types.js";
 import { ARTIFACT_SCOPES, type ArtifactScope } from "./artifactOrigins.js";
 
 export const SECTION = { dock: "dock", status: "status", launch: "launch", ui: "ui", projects: "projects", pins: "pins", updates: "updates", git: "git" } as const;
@@ -273,6 +273,7 @@ export class ConfigStore {
       paneOpen: Array.isArray(raw["paneOpen"])
         ? (raw["paneOpen"] as unknown[]).filter((key): key is string => typeof key === "string").slice(0, PANE_OPEN_MAX)
         : [],
+      filesView: FILES_VIEWS.includes(raw["filesView"] as FilesView) ? (raw["filesView"] as FilesView) : null,
       artifactScope: ARTIFACT_SCOPES.includes(raw["artifactScope"] as ArtifactScope) ? (raw["artifactScope"] as ArtifactScope) : "all",
       layout: LAYOUT_MODES.includes(raw["layout"] as LayoutMode) ? (raw["layout"] as LayoutMode) : "auto",
       stackBelow: Number.isFinite(Number(raw["stackBelow"])) && Number(raw["stackBelow"]) > 0

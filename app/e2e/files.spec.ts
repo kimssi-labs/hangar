@@ -155,6 +155,41 @@ test("a narrow panel can still be asked for the whole folder, and asked back", a
   }
 });
 
+test("the view chosen by hand is still the view after a restart, either way", async () => {
+  test.setTimeout(180_000);                            // three launches of the app
+  const { home } = fixture("vertical");
+  let { app, page } = await launch(home, 700, 900);
+  try {
+    // Narrow, the panel would open on what changed; the whole folder is asked for instead.
+    await page.getByTestId("files-section").getByRole("button", { name: "All" }).click();
+    await expect(page.getByTestId("files-section").getByRole("button").filter({ hasText: "package.json" })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+
+  ({ app, page } = await launch(home, 700, 900));
+  try {
+    const section = page.getByTestId("files-section");
+    await expect(section.getByRole("button").filter({ hasText: "package.json" })).toBeVisible();
+    // And back: "changed" chosen by hand is remembered too.
+    await section.getByRole("button", { name: "Changed" }).click();
+    await expect(section.getByText("package.json")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  ({ app, page } = await launch(home, 1400, 900));
+  try {
+    // Even with room for a tree, the window opens on the list that was chosen last.
+    const column = page.getByTestId("files-column");
+    await expect.poll(async () => (await column.innerText()).replace(/\s+/g, " "), { timeout: 8000 })
+      .toMatch(/src\/core\/status\.ts.*docs\/new\.md/);
+    await expect(column.getByText("package.json")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
 test("turning the folder off in settings stops it being drawn at all", async () => {
   const { app, page } = await launch(fixture("vertical").home, 1400, 900);
   try {
