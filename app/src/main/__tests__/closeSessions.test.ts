@@ -15,3 +15,11 @@ describe("the close helper", () => {
     expect(await closeSessions([], "unused")).toEqual({ ended: 0, closed: 0 });
   });
 });
+
+describe("gone", () => {
+  it("is false for a process that runs, true for a pid that does not", async () => {
+    const { gone } = await import("../closeSessions.js");
+    expect(gone(process.pid)).toBe(false);
+    expect(gone(2 ** 22 + 12345)).toBe(true);
+  });
+});

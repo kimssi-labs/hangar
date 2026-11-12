@@ -20,7 +20,7 @@ import { sessionPrompt } from "../../core/sessionPrompt.js";
 import type { OpenTarget, ProjectInfo, SessionInfo } from "../../core/types.js";
 import { claudeExecutable, detectLinuxTerminal, which } from "../../main/executables.js";
 import { helperExecutable, helpersDir } from "../../main/helpers.js";
-import { CLOSE_HELPER, closeSessions } from "../../main/closeSessions.js";
+import { CLOSE_HELPER, closeSessions, gone } from "../../main/closeSessions.js";
 import { FOCUS_HELPER, focusSession, stopSession } from "../../main/liveSession.js";
 import type { ActionResult, AddProjectResult } from "../../main/ipc.js";
 import type { SessionTarget } from "../../main/sampler.js";
@@ -291,7 +291,9 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
         closingNow = true;
         try {
           const outcome = await closeSessions(running.map((s) => s.pid), helpersDir());
-          const left = runningInTerminals().filter((s) => running.some((r) => r.pid === s.pid));
+          // Asked of the processes themselves: a session just ended on Linux is a zombie for a moment,
+          // which the registry's liveness check still counts as running.
+          const left = running.filter((s) => !gone(s.pid));
           if (left.length) {
             return { ok: false, message: `${left.length} of ${running.length} sessions could not be closed (${outcome.ended} ended).` };
           }

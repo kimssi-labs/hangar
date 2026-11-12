@@ -21,13 +21,17 @@ const CLOSE_TIMEOUT_MS = 30_000;
 const TERM_GRACE_MS = 5_000;
 const GONE_POLL_MS = 100;
 
-/** Whether the process is gone: no such pid, or a zombie only its parent has yet to reap. */
-function gone(pid: number): boolean {
+/**
+ * Whether the process is gone: no such pid, or on Linux a zombie only its parent has yet to reap.
+ * A zombie answers a signal check, so the closing must ask this, not whether the pid is alive.
+ */
+export function gone(pid: number): boolean {
   try {
     process.kill(pid, 0);
   } catch {
     return true;
   }
+  if (process.platform !== "linux") return false;
   try {
     return readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1]?.startsWith("Z") ?? false;
   } catch {
