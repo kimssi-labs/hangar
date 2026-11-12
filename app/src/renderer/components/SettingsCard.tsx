@@ -18,9 +18,10 @@ export function Card({
 }) {
   return (
     <section className="card p-4 transition-colors focus-within:ring-1 focus-within:ring-accent/50">
-      <div className="flex items-baseline justify-between mb-3">
-        <h3 className="text-sm font-medium text-bone-100">{title}</h3>
-        {hint ? <span className="text-[11px] text-bone-500">{hint}</span> : null}
+      <div className="flex items-baseline justify-between gap-3 mb-3">
+        {/* The title never wraps: a long hint beside it wraps instead. */}
+        <h3 className="shrink-0 whitespace-nowrap text-sm font-medium text-bone-100">{title}</h3>
+        {hint ? <span className="min-w-0 text-right text-[11px] text-bone-500">{hint}</span> : null}
       </div>
       <div className={body}>{children}</div>
     </section>

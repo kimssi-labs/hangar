@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { LAYOUT_MODES, THEME_MODES } from "@core/constants";
 import { LANGUAGES, resolveLanguage } from "@core/i18n";
-import { ZOOM_LEVELS } from "@core/zoom";
+import { DEFAULT_ZOOM, parseZoom, stepZoom, zoomLabel } from "@core/zoom";
 
 import { PasteSettings } from "../../features/clipboard/ui";
 import { DockSettings, KeepIconsSetting } from "../../features/dock/ui";
@@ -88,22 +88,7 @@ export function SettingsView({ settings, displays, onChange, onApplyDock, onOpen
       </Card>
 
       <Card title={t("settings.zoom")} hint={t("settings.zoom.hint")}>
-        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label={t("settings.zoom")}>
-          {ZOOM_LEVELS.map((zoom) => (
-            <button
-              key={zoom}
-              type="button"
-              role="radio"
-              aria-checked={draft.ui.zoom === zoom}
-              data-testid={`zoom-${Math.round(zoom * 100)}`}
-              onClick={() => section("ui")({ ...draft.ui, zoom })}
-              className={`px-2 py-0.5 rounded-lg text-xs border ${draft.ui.zoom === zoom
-                ? "border-accent/60 bg-accent/15 text-bone-100" : "border-ink-600 text-bone-400 hover:text-bone-100 hover:bg-ink-700/60"}`}
-            >
-              {Math.round(zoom * 100)}%
-            </button>
-          ))}
-        </div>
+        <ZoomControl zoom={draft.ui.zoom} onChange={(zoom) => section("ui")({ ...draft.ui, zoom })} />
       </Card>
 
       <Card title={t("settings.language")} hint={t("settings.language.hint")}>
@@ -185,6 +170,50 @@ export function SettingsView({ settings, displays, onChange, onApplyDock, onOpen
       <Card title={t("settings.permissions")}>
         <PermissionSettings launch={draft.launch} onChange={section("launch")} />
       </Card>
+    </div>
+  );
+}
+
+/**
+ * The text size as a browser shows it: the percentage, − and +, and a way back to 100 %.
+ *
+ * The percentage is a field: any whole number from 50 to 200 can be typed, taken on Enter or when
+ * the field is left; anything else puts back the size in force. − and + move between the steps.
+ */
+function ZoomControl({ zoom, onChange }: { zoom: number; onChange(zoom: number): void }) {
+  const t = useText();
+  const [typed, setTyped] = useState<string | null>(null);
+  const take = (): void => {
+    const next = typed === null ? null : parseZoom(typed);
+    setTyped(null);
+    if (next !== null && next !== zoom) onChange(next);
+  };
+  const button = "w-7 h-7 rounded-full text-base leading-none text-bone-200 hover:bg-ink-700/60 disabled:opacity-40";
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="text"
+        inputMode="numeric"
+        spellCheck={false}
+        aria-label={t("settings.zoom")}
+        data-testid="zoom-value"
+        value={typed ?? zoomLabel(zoom)}
+        onFocus={(event) => { setTyped(zoomLabel(zoom)); event.currentTarget.select(); }}
+        onChange={(event) => setTyped(event.target.value)}
+        onBlur={take}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") { setTyped(null); event.currentTarget.blur(); }
+        }}
+        className="w-16 bg-transparent border border-transparent hover:border-ink-600 focus:border-accent/60 rounded-lg px-1.5 py-0.5 text-sm text-bone-100"
+      />
+      <div className="flex-1" />
+      <button type="button" className={button} aria-label={t("settings.zoom.out")} title={t("settings.zoom.out")}
+        data-testid="zoom-out" disabled={stepZoom(zoom, -1) === zoom} onClick={() => onChange(stepZoom(zoom, -1))}>−</button>
+      <button type="button" className={button} aria-label={t("settings.zoom.in")} title={t("settings.zoom.in")}
+        data-testid="zoom-in" disabled={stepZoom(zoom, 1) === zoom} onClick={() => onChange(stepZoom(zoom, 1))}>+</button>
+      <button type="button" className="btn shrink-0" data-testid="zoom-reset" disabled={zoom === DEFAULT_ZOOM}
+        onClick={() => onChange(DEFAULT_ZOOM)}>{t("settings.zoom.reset")}</button>
     </div>
   );
 }

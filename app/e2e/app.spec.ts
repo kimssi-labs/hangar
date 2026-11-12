@@ -170,12 +170,24 @@ test("Ctrl + and the text size setting zoom the window, and the size survives a 
     await expect.poll(() => zoomOf(first.app)).toBe(1.25);
     await first.page.keyboard.press("Control+-");
     await expect.poll(() => zoomOf(first.app)).toBe(1.1);
-    // The settings screen shows the step the keys chose, and choosing there zooms too.
+    // The settings screen shows the size the keys chose; − + and Reset move it, and a typed size is taken.
     await first.page.getByRole("button", { name: "Settings" }).click();
-    await expect(first.page.getByTestId("zoom-110")).toHaveAttribute("aria-checked", "true");
-    await first.page.getByTestId("zoom-125").click();
+    const value = first.page.getByTestId("zoom-value");
+    await expect(value).toHaveValue("110%");
+    await first.page.getByTestId("zoom-in").click();
     await expect.poll(() => zoomOf(first.app)).toBe(1.25);
-    await expect.poll(saved).toBe(1.25);
+    await first.page.getByTestId("zoom-out").click();
+    await expect.poll(() => zoomOf(first.app)).toBe(1.1);
+    await first.page.getByTestId("zoom-reset").click();
+    await expect.poll(() => zoomOf(first.app)).toBe(1);
+    await value.fill("115");
+    await value.press("Enter");
+    await expect.poll(() => zoomOf(first.app)).toBe(1.15);
+    await expect(value).toHaveValue("115%");
+    await value.fill("999");                            // out of range: the size in force stays
+    await value.press("Enter");
+    await expect(value).toHaveValue("115%");
+    await expect.poll(saved).toBe(1.15);
   } finally {
     await first.app.close();
   }
@@ -183,7 +195,7 @@ test("Ctrl + and the text size setting zoom the window, and the size survives a 
   const second = await launch(home);
   try {
     await expect(second.page.getByText("workspace", { exact: false }).first()).toBeVisible();
-    expect(await zoomOf(second.app)).toBe(1.25);
+    expect(await zoomOf(second.app)).toBe(1.15);
     await second.page.keyboard.press("Control+0");
     await expect.poll(() => zoomOf(second.app)).toBe(1);
   } finally {
