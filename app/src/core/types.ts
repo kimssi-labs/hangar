@@ -117,6 +117,11 @@ export interface LaunchConfig {
    * terminal takes the path, an image editor takes the picture. Nobody's keys are intercepted.
    */
   autoClipPath: boolean;
+  /**
+   * Whether a session opened from Hangar is asked to name local files as links (core/sessionPrompt.ts),
+   * so an output it wrote opens with Ctrl+click instead of being a path to copy.
+   */
+  fileLinks: boolean;
   shell: ShellChoice;
   permission: PermissionMode;
   /** Terminal command used on Linux; empty means "detect". */

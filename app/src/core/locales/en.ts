@@ -145,6 +145,8 @@ export const en = {
   "settings.launch.programPlaceholder": "C:\\tools\\my-terminal.exe   (or a name on PATH)",
   "settings.launch.noPath": "Without a path this behaves as Auto, so a session still opens.",
   "settings.launch.paste": "Paste a screenshot into a session",
+  "settings.launch.fileLinks": "Show file paths as links",
+  "settings.launch.fileLinksNote": "A session opened from here is asked to write every local file it names as a link, so Ctrl+click opens it in its default app. Applies from the next session opened.",
   "settings.launch.autoPath": "Give copied screenshots a path",
   "settings.launch.autoPathNote": "No shortcut of its own — plain Ctrl+V is the whole gesture. Copy a screenshot and the clipboard is left holding the picture and the file it was written to, so a terminal pastes the path and an image editor still pastes the image.",
   "settings.launch.fallback": "Fallback shortcut — only for a clipboard that already carries text",

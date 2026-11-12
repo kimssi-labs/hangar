@@ -15,6 +15,7 @@ import { dialog, shell } from "electron";
 import type { Wire } from "../../bridge/build.js";
 import type { MainContext } from "../../bridge/context.js";
 import { launchCommand, sessionEnvironment, WT_EXE } from "../../core/launcher.js";
+import { sessionPrompt } from "../../core/sessionPrompt.js";
 import type { ProjectInfo } from "../../core/types.js";
 import { claudeExecutable, detectLinuxTerminal, which } from "../../main/executables.js";
 import { helperExecutable, helpersDir } from "../../main/helpers.js";
@@ -115,6 +116,7 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
         // conversation grows, and this app now reads it rather than competing with it. The same
         // name titles the tab; an unnamed session's tab is Claude Code's to name.
         displayName: session?.named ? session.title : null,
+        appendPrompt: launch.fileLinks ? sessionPrompt(process.platform) : null,
         config: launch,
         target: request.target,
         platform: process.platform,

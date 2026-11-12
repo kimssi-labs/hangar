@@ -6,6 +6,7 @@ import {
   CURRENT_WINDOW, NAME_FLAG, NEW_WINDOW, SESSION_MARKERS, SESSIONS_WINDOW, WT_EXE,
 } from "../launcher.js";
 import type { LaunchRequest } from "../launcher.js";
+import { sessionPrompt } from "../sessionPrompt.js";
 import type { LaunchConfig as Config } from "../types.js";
 
 const CLAUDE = "C:\\Users\\me\\.local\\bin\\claude.EXE";
@@ -13,7 +14,7 @@ const SESSION = "abc123";
 
 function request(overrides: Partial<LaunchRequest> = {}): LaunchRequest {
   const config: Config = {
-    shell: "auto", permission: "default", terminal: "", customShell: "", pasteHotkey: "", autoClipPath: true,
+    shell: "auto", permission: "default", terminal: "", customShell: "", pasteHotkey: "", autoClipPath: true, fileLinks: true,
   };
   return {
     cwd: "C:\\proj",
@@ -29,7 +30,7 @@ function request(overrides: Partial<LaunchRequest> = {}): LaunchRequest {
 }
 
 function withConfig(overrides: Partial<Config>): Config {
-  return { shell: "auto", permission: "default", terminal: "", customShell: "", pasteHotkey: "", autoClipPath: true, ...overrides };
+  return { shell: "auto", permission: "default", terminal: "", customShell: "", pasteHotkey: "", autoClipPath: true, fileLinks: true, ...overrides };
 }
 
 describe("claude argv", () => {
@@ -48,6 +49,21 @@ describe("claude argv", () => {
     expect(claudeArgv(request({ displayName: "새 제목" })))
       .toEqual([CLAUDE, "--resume", SESSION, "--name", "새 제목"]);
     expect(claudeArgv(request({ sessionId: null }))).toEqual([CLAUDE]);
+  });
+
+  it("appends Hangar's instructions to the system prompt when there are any, and nothing otherwise", () => {
+    const ask = "Write local files as links.";
+    expect(claudeArgv(request({ appendPrompt: ask })))
+      .toEqual([CLAUDE, "--resume", SESSION, "--append-system-prompt", ask]);
+    expect(claudeArgv(request({ appendPrompt: null }))).toEqual([CLAUDE, "--resume", SESSION]);
+  });
+
+  it("hands the instructions through PowerShell and cmd as one intact argument", () => {
+    const ask = sessionPrompt("win32");
+    const pwsh = launchCommand(request({ appendPrompt: ask, config: withConfig({ shell: "powershell" }) }), () => true);
+    expect(Buffer.from(pwsh.args.at(-1) as string, "base64").toString("utf16le")).toContain(psQuote(ask));
+    const cmd = launchCommand(request({ appendPrompt: ask, config: withConfig({ shell: "cmd" }) }), () => true);
+    expect(cmd.args.at(-1)).toContain(cmdQuote(ask));
   });
 });
 
