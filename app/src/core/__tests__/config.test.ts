@@ -34,7 +34,7 @@ describe("ConfigStore", () => {
     config.saveStatus({ enabled: true });
     config.saveLaunch({ shell: "cmd", permission: "bypass", terminal: "", customShell: "", pasteHotkey: "", autoClipPath: true, fileLinks: true });
     config.saveUi({ project: "C--Users-Terry", cursor: 4, theme: "dark", language: "system", monitor: true,
-      files: true, keepIcons: true, skills: true, alwaysOnTop: false, updateSnoozeUntil: 0, artifacts: true, sidePane: "files", paneOpen: [], filesView: null, artifactScope: "all", layout: "auto", stackBelow: 520, window: null, navWidth: 0, asideWidth: 0, stackTop: 0, stackPane: 0 });
+      files: true, keepIcons: true, skills: true, alwaysOnTop: false, updateSnoozeUntil: 0, artifacts: true, sidePane: "files", paneOpen: [], zoom: 1, filesView: null, artifactScope: "all", layout: "auto", stackBelow: 520, window: null, navWidth: 0, asideWidth: 0, stackTop: 0, stackPane: 0 });
     const written = JSON.parse(readFileSync(join(home, "config", "manager.json"), "utf8"));
     expect(Object.keys(written).sort()).toEqual(["dock", "launch", "status", "ui"]);
   });
@@ -86,7 +86,7 @@ describe("ConfigStore", () => {
     expect(config.dock().edge).toBe("top");
     expect(config.launch()).toEqual({ shell: "auto", permission: "default", terminal: "", customShell: "", pasteHotkey: DEFAULT_PASTE_HOTKEY, autoClipPath: true, fileLinks: true });
     expect(config.status()).toEqual({ enabled: true });
-    expect(config.ui()).toEqual({ project: null, cursor: 0, theme: "system", language: "system", monitor: true, files: true, keepIcons: true, skills: true, alwaysOnTop: false, updateSnoozeUntil: 0, artifacts: true, sidePane: "files", paneOpen: [], filesView: null, artifactScope: "all", layout: "auto", stackBelow: 520, window: null, navWidth: 0, asideWidth: 0, stackTop: 0, stackPane: 0 });
+    expect(config.ui()).toEqual({ project: null, cursor: 0, theme: "system", language: "system", monitor: true, files: true, keepIcons: true, skills: true, alwaysOnTop: false, updateSnoozeUntil: 0, artifacts: true, sidePane: "files", paneOpen: [], zoom: 1, filesView: null, artifactScope: "all", layout: "auto", stackBelow: 520, window: null, navWidth: 0, asideWidth: 0, stackTop: 0, stackPane: 0 });
   });
 
   it("reads an older file's list of usage windows as the switch it became", () => {
@@ -107,6 +107,13 @@ describe("ConfigStore", () => {
     expect(config.ui().filesView).toBe("changed");
     config.saveSection("ui", { filesView: "grid" });
     expect(config.ui().filesView).toBeNull();
+  });
+
+  it("keeps a zoom step it knows, and draws at 1 for any other", () => {
+    config.saveSection("ui", { zoom: 1.25 });
+    expect(config.ui().zoom).toBe(1.25);
+    config.saveSection("ui", { zoom: 3 });
+    expect(config.ui().zoom).toBe(1);
   });
 
   it("rejects a launch setting it does not recognise", () => {

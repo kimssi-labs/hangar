@@ -5,31 +5,40 @@
  * because the list is the disk. A double-click — or Enter on the row — copies `/name`, ready to paste
  * into a session.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { type SkillGroup, skillMatches } from "@core/skills";
+import { type SkillGroup, type SkillInfo, skillMatches } from "@core/skills";
 
 import { api } from "../../renderer/api";
+import type { Ask, AskResult } from "../../renderer/components/Modal";
 import { ExpandAll, type PaneOpen, useRovingRows } from "../../renderer/components/SidePane";
 import { useText } from "../../renderer/useText";
 
-/** The skills for `cwd`, read while `active`; null until the first answer. */
-export function useSkills(cwd: string | null, active: boolean): SkillGroup[] | null {
+/** The skills for `cwd`, read while `active`; null until the first answer. `reload` reads them again. */
+export function useSkills(cwd: string | null, active: boolean): { groups: SkillGroup[] | null; reload(): void } {
   const [groups, setGroups] = useState<SkillGroup[] | null>(null);
+  const [round, setRound] = useState(0);
   useEffect(() => {
     if (!active) return;
     let current = true;
     void api.listSkills(cwd).then((answer) => { if (current) setGroups(answer); });
     return () => { current = false; };
-  }, [cwd, active]);
-  return groups;
+  }, [cwd, active, round]);
+  const reload = useCallback(() => setRound((n) => n + 1), []);
+  return { groups, reload };
 }
 
-export function SkillsPane({ groups, open, notify }: {
+/** What the menu of a project's own skill offers: the same skill for every project, kept or taken out of this one. */
+const PROMOTE_ACTIONS = ["copyGlobal", "moveGlobal"] as const;
+
+export function SkillsPane({ groups, open, notify, askUser, reload }: {
   groups: SkillGroup[] | null;
   /** Which groups are open — remembered across runs; everything starts closed. */
   open: PaneOpen;
   notify(result: { ok: boolean; message?: string }): void;
+  askUser(ask: Ask): Promise<AskResult>;
+  /** Read the list again, after a skill moved. */
+  reload(): void;
 }) {
   const t = useText();
   const [query, setQuery] = useState("");
@@ -44,6 +53,23 @@ export function SkillsPane({ groups, open, notify }: {
 
   const copy = (command: string): void => {
     void navigator.clipboard.writeText(`/${command}`).then(() => notify({ ok: true, message: t("skills.copied", { name: `/${command}` }) }));
+  };
+  // A project's own skill can be made global: copied (it stays here too) or moved (it leaves this
+  // project). Moving asks first, because a skill kept in the repository leaves it for everyone.
+  const promoteMenu = async (skill: SkillInfo): Promise<void> => {
+    const choice = await api.contextMenu(PROMOTE_ACTIONS.map((id) => ({ id, label: t(`menu.skill.${id}` as const) })));
+    if (choice !== "copyGlobal" && choice !== "moveGlobal") return;
+    if (choice === "moveGlobal") {
+      const yes = await askUser({
+        title: t("dialog.moveSkill", { name: skill.name }),
+        detail: t("dialog.moveSkill.detail"),
+        confirm: t("dialog.moveSkill.confirm"),
+      });
+      if (!yes) return;
+    }
+    const result = await api.promoteSkill({ file: skill.file, mode: choice === "moveGlobal" ? "move" : "copy" });
+    notify(result);
+    if (result.ok) reload();
   };
   const heading = (group: SkillGroup): string =>
     group.source === "plugin" ? t("skills.group.plugin", { name: group.plugin }) : t(`skills.group.${group.source}` as "skills.group.user");
@@ -61,6 +87,7 @@ export function SkillsPane({ groups, open, notify }: {
       className="group flex items-start gap-1 pl-6 pr-2 py-0.5 hover:bg-ink-700/60 cursor-default"
       title={skill.description}
       onDoubleClick={() => copy(skill.command)}
+      onContextMenu={group.source === "project" ? (event) => { event.preventDefault(); void promoteMenu(skill); } : undefined}
       onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) copy(skill.command); }}
     >
       <div className="flex-1 min-w-0">

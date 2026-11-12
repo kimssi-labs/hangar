@@ -21,6 +21,7 @@ import { UsageGauges, useUsage } from "../features/usage/ui";
 import { MachineGauges, useMetrics } from "../features/metrics/ui";
 import { usePasteResults } from "../features/clipboard/ui";
 import type { FilesView, ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
+import { DEFAULT_ZOOM, stepZoom, zoomKey } from "@core/zoom";
 import { MENU_SEPARATOR, SIDE_PANE_TABS } from "@core/constants";
 
 import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
@@ -108,6 +109,20 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   // The payload is the settings feature's; the screen it is edited on is opened from here.
   const { settings, setSettings, load: loadSettings, save: saveSettings } = useSettings();
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
+  // Ctrl + / Ctrl - / Ctrl 0, as in a browser, wherever the focus is. There is no application menu
+  // to carry these accelerators; the step is saved like any setting, and main applies it.
+  const zoomNow = useRef(DEFAULT_ZOOM);
+  zoomNow.current = settings?.ui.zoom ?? DEFAULT_ZOOM;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const step = zoomKey({ control: event.ctrlKey, meta: event.metaKey, alt: event.altKey, key: event.key });
+      if (step === null) return;
+      event.preventDefault();
+      void saveSettings({ ui: { zoom: stepZoom(zoomNow.current, step) } });
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [saveSettings]);
   const updates = useUpdates(info?.version);
   /** The update question has had its answer this run; it is asked once a run at most. */
   const [updateAsked, setUpdateAsked] = useState(false);
@@ -592,7 +607,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   }), [placeProject, placeSessions, projects]);
   const sidePane = (
     <SidePane tabs={paneTabs} active={activeTab} compact={mode === "band"} onPick={pickTab}>
-      {activeTab === "skills" ? <SkillsPane groups={skills} open={paneOpen} notify={notify} />
+      {activeTab === "skills" ? <SkillsPane groups={skills.groups} reload={skills.reload} open={paneOpen} notify={notify} askUser={askUser} />
         : activeTab === "artifacts" ? (
           <ArtifactsPane artifacts={artifacts} place={artifactPlace} scope={artifactScope ?? settings?.ui.artifactScope ?? "all"}
             onScope={pickScope} open={paneOpen} notify={notify} />
