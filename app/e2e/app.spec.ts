@@ -5,6 +5,7 @@
  * Every run gets its own CLAUDE_HOME fixture, so the test sees a known set of projects and can
  * assert on what a rename actually wrote to disk.
  */
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -236,6 +237,51 @@ test("the sessions open last time are offered once on start-up, and reopened or 
     await expect.poll(() => JSON.parse(readFileSync(openFile, "utf8")).sessions).toEqual([]);
   } finally {
     await second.app.close();
+  }
+});
+
+test("closing Hangar while a session runs asks: stay, close Hangar only, or close the session too", async () => {
+  test.setTimeout(180_000);                            // three launches, and the close helper's first build
+  const { home } = fixture();
+  // A process standing in for a running claude, registered the way Claude Code registers one.
+  // Node, named claude on its command line: the close helper ends only a claude (or node) process.
+  const stand = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)", "claude-stand-in"], { stdio: "ignore" });
+  const alive = (): boolean => { try { process.kill(stand.pid as number, 0); return true; } catch { return false; } };
+  writeFileSync(join(home, "sessions", `${stand.pid}.json`), JSON.stringify({ pid: stand.pid, sessionId: SESSION_ONE }));
+  const closeWindow = (app: ElectronApplication) => app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.close());
+  const exited = (app: ElectronApplication) => new Promise<void>((resolve) => {
+    if (app.process().exitCode !== null) resolve();
+    else app.process().once("exit", () => resolve());
+  });
+  const question = "1 sessions are running. Close them with Hangar?";
+  try {
+    // Asked, and staying is an answer: the window is still there.
+    let { app, page } = await launch(home);
+    await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
+    await closeWindow(app);
+    await expect(page.getByText(question)).toBeVisible();
+    await expect(page.getByText("· 프롬프트 1")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText(question)).toHaveCount(0);
+    expect(app.process().exitCode).toBeNull();
+
+    // Hangar only: it leaves, the session keeps running.
+    await closeWindow(app);
+    await page.getByRole("button", { name: "Close Hangar only" }).click();
+    await exited(app);
+    expect(alive()).toBe(true);
+
+    // Close all: the session ends with Hangar, and is kept for the next start to offer.
+    ({ app, page } = await launch(home));
+    await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
+    await closeWindow(app);
+    await page.getByRole("button", { name: "Close all and keep them" }).click();
+    await exited(app);
+    await expect.poll(alive, { timeout: 30_000 }).toBe(false);
+    expect(JSON.parse(readFileSync(join(home, "cache", "hangar-open-sessions.json"), "utf8")).sessions).toContain(SESSION_ONE);
+  } finally {
+    if (alive()) stand.kill();
   }
 });
 

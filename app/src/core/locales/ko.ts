@@ -108,6 +108,12 @@ export const ko: Dictionary = {
   "settings.back": "뒤로",
   "settings.back.title": "뒤로 (Esc)",
 
+  "closing.title": "실행 중인 세션이 {count}개 있습니다. Hangar와 함께 닫을까요?",
+  "closing.detail": "함께 닫으면 세션 목록을 저장해 두었다가, 다음에 Hangar를 켤 때 다시 열 수 있습니다.",
+  "closing.busy": "작업 중",
+  "closing.all": "저장하고 함께 닫기",
+  "closing.hangar": "Hangar만 닫기",
+  "closing.working": "세션을 닫는 중…",
   "restore.title": "지난번에 열려 있던 세션 {count}개를 다시 열까요?",
   "restore.more": "외 {count}개",
   "restore.open": "모두 열기",

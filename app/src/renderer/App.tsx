@@ -301,6 +301,23 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     })();
   }, [projects, askUser, notify, t]);
 
+  // Hangar is being closed while sessions run in terminals: close them too (written down, so the
+  // next start offers them back), close Hangar alone and leave them running, or stay.
+  useEffect(() => api.onClosing((running) => {
+    void (async () => {
+      const names = running.slice(0, RESTORE_LISTED_MAX).map((item) => `· ${item.title}${item.busy ? ` (${t("closing.busy")})` : ""}`);
+      if (running.length > RESTORE_LISTED_MAX) names.push(t("restore.more", { count: running.length - RESTORE_LISTED_MAX }));
+      const answer = await askUser({
+        title: t("closing.title", { count: running.length }),
+        detail: `${names.join("\n")}\n\n${t("closing.detail")}`,
+        confirm: t("closing.all"),
+        secondary: t("closing.hangar"),
+      });
+      if (answer === true) notify({ ok: true, message: t("closing.working") });
+      void api.answerClosing(answer === true ? "all" : answer === false ? "hangar" : "cancel");
+    })();
+  }), [askUser, notify, t]);
+
   /** What an action on a row needs from this window; the features do the rest themselves. */
   const rowUi = useMemo(() => ({ askUser, notify, refresh, t }), [askUser, notify, refresh, t]);
 

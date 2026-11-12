@@ -1,5 +1,5 @@
 /** What the page may ask about projects and their sessions: the list, and what is done to a row. */
-import { invoke } from "../../bridge/contract.js";
+import { event, invoke } from "../../bridge/contract.js";
 import type { RestorableSession } from "../../core/openSessions.js";
 import type { ProjectInfo } from "../../core/types.js";
 import type { ActionResult, AddProjectResult } from "../../main/ipc.js";
@@ -42,6 +42,12 @@ export interface ScanAnswer {
   projects?: ProjectInfo[];
 }
 
+/** A session running in a terminal, as the question on closing Hangar names it. */
+export interface ClosingSession { sessionId: string; title: string; busy: boolean }
+
+/** What to do with the running sessions when Hangar closes. */
+export type CloseChoice = "all" | "hangar" | "cancel";
+
 export const projectsContract = {
   /** Every project with its sessions, read again from disk. Pass the last signature, or null for the full list. */
   scan: invoke<string | null, ScanAnswer>("projects:scan"),
@@ -60,4 +66,8 @@ export const projectsContract = {
   restorable: invoke<void, RestorableSession[]>("sessions:restorable"),
   /** Open them all again (true), or let them go (false); either way they are not offered again this run. */
   restoreSessions: invoke<boolean, ActionResult>("sessions:restore"),
+  /** Hangar is being closed while sessions run: the page asks what to do with them. */
+  onClosing: event<ClosingSession[]>("app:closing"),
+  /** The answer: close them too (kept for the next start), close Hangar alone, or stay open. */
+  answerClosing: invoke<CloseChoice, ActionResult>("app:closing-answer"),
 } as const;
