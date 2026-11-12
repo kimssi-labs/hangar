@@ -1,5 +1,6 @@
 /** What the page may ask about projects and their sessions: the list, and what is done to a row. */
 import { invoke } from "../../bridge/contract.js";
+import type { RestorableSession } from "../../core/openSessions.js";
 import type { ProjectInfo } from "../../core/types.js";
 import type { ActionResult, AddProjectResult } from "../../main/ipc.js";
 
@@ -55,4 +56,8 @@ export const projectsContract = {
   /** Opens the folder picker; resolves with the new project's dir, or ok:false when nothing was chosen. */
   addProject: invoke<void, AddProjectResult>("project:add"),
   togglePin: invoke<PinRequest, ActionResult>("pin:toggle"),
+  /** The sessions the last run had open that are not running now, asked once a run at most. */
+  restorable: invoke<void, RestorableSession[]>("sessions:restorable"),
+  /** Open them all again (true), or let them go (false); either way they are not offered again this run. */
+  restoreSessions: invoke<boolean, ActionResult>("sessions:restore"),
 } as const;

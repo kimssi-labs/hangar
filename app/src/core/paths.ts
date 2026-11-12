@@ -37,6 +37,8 @@ export interface HomePaths {
   hangarDeskIcons: string;
   /** The last Artifacts list fetched from claude.ai, shown at once on the next start — core/artifacts.ts. */
   hangarArtifacts: string;
+  /** The sessions that were running, for the next start to offer — core/openSessions.ts. */
+  hangarOpenSessions: string;
   /** Which transcript published which Artifact, by file and its size and time — core/artifactOrigins.ts. */
   hangarArtifactOrigins: string;
   /** Claude Code's record of the installed plugins, read to find their skills. */
@@ -65,6 +67,7 @@ export function homePaths(root = claudeHome()): HomePaths {
     hangarUpdateLog: join(root, "cache", "hangar-update.log"),
     hangarDeskIcons: join(root, "cache", "hangar-desk-icons.json"),
     hangarArtifacts: join(root, "cache", "hangar-artifacts.json"),
+    hangarOpenSessions: join(root, "cache", "hangar-open-sessions.json"),
     hangarArtifactOrigins: join(root, "cache", "hangar-artifact-origins.json"),
     installedPlugins: join(root, "plugins", "installed_plugins.json"),
     skills: join(root, "skills"),
