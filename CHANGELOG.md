@@ -3,6 +3,31 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.26.0
+
+- **Hangar asks what to do with running sessions when it closes.** Closing the window while
+  sessions run in terminals offers three answers: close them too, close Hangar only, or stay.
+  Closing them writes the list down first, then a small helper ends each `claude` and types `exit`
+  into its shell, which closes the tab the way a person would (Windows Terminal keeps a tab whose
+  shell was ended by force, measured). Windows Terminal itself is never touched, a pid that no
+  longer belongs to a claude is left alone, and the window waits, covered, until they have ended.
+  An app quit, an update or a Windows shutdown closes without asking.
+- **The sessions open last time are offered back on start.** The running sessions are kept in
+  `cache/hangar-open-sessions.json`; one that stops is dropped only after a minute on a running
+  desk, so a reboot leaves the list whole. The next start asks once, and Open all resumes each in
+  the sessions window.
+- **Text size.** A Settings card shows the size as a browser does: a percentage you can type
+  (50 to 200), − and +, and Reset. Ctrl + / Ctrl - / Ctrl 0 work anywhere in the window, and the
+  size is kept across restarts.
+- **Sessions opened from Hangar name local files as links.** A launch appends a one-line
+  instruction to the session's system prompt, so the files it names open with Ctrl+click; on
+  Windows a path with spaces or non-ASCII characters is linked by its 8.3 short path. A Launch
+  setting turns it off.
+- **A project's own skill can be copied or moved to the global skills** from its menu in the
+  Skills tab. A move asks first; a global skill of the same name is never replaced.
+- **The files panel remembers All or Changed** across restarts once chosen by hand.
+- A settings card's title no longer wraps beside a long hint.
+
 ## v2.25.2
 
 - **Reading the project list no longer stalls the window.** A scan opens the transcripts that
