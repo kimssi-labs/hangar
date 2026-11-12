@@ -87,7 +87,7 @@ export function SettingsView({ settings, displays, onChange, onApplyDock, onOpen
         ))}
       </Card>
 
-      <Card title={t("settings.zoom")} hint={t("settings.zoom.hint")}>
+      <Card title={t("settings.zoom")}>
         <ZoomControl zoom={draft.ui.zoom} onChange={(zoom) => section("ui")({ ...draft.ui, zoom })} />
       </Card>
 
