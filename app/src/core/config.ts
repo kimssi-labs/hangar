@@ -15,6 +15,7 @@ import { readJson, writeJson } from "./json.js";
 import { homePaths } from "./paths.js";
 import type { DockConfig, DockEdge, FilesView, GitConfig, LaunchConfig, LayoutMode, PermissionMode, ShellChoice, SidePaneTab, StatusConfig, ThemeMode, UiConfig, UpdateConfig } from "./types.js";
 import { ARTIFACT_SCOPES, type ArtifactScope } from "./artifactOrigins.js";
+import { zoomFrom } from "./zoom.js";
 
 export const SECTION = { dock: "dock", status: "status", launch: "launch", ui: "ui", projects: "projects", pins: "pins", updates: "updates", git: "git" } as const;
 export const DOCK_MONITORS_KEY = "monitors";
@@ -273,6 +274,7 @@ export class ConfigStore {
       paneOpen: Array.isArray(raw["paneOpen"])
         ? (raw["paneOpen"] as unknown[]).filter((key): key is string => typeof key === "string").slice(0, PANE_OPEN_MAX)
         : [],
+      zoom: zoomFrom(raw["zoom"]),
       filesView: FILES_VIEWS.includes(raw["filesView"] as FilesView) ? (raw["filesView"] as FilesView) : null,
       artifactScope: ARTIFACT_SCOPES.includes(raw["artifactScope"] as ArtifactScope) ? (raw["artifactScope"] as ArtifactScope) : "all",
       layout: LAYOUT_MODES.includes(raw["layout"] as LayoutMode) ? (raw["layout"] as LayoutMode) : "auto",

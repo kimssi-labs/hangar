@@ -155,6 +155,42 @@ test("settings save to config/manager.json and survive a restart", async () => {
   }
 });
 
+test("Ctrl + and the text size setting zoom the window, and the size survives a restart", async () => {
+  test.setTimeout(120_000);                            // two launches of the app
+  const { home } = fixture();
+  const zoomOf = (app: ElectronApplication) => app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.webContents.getZoomFactor());
+  const saved = () => JSON.parse(readFileSync(join(home, "config", "manager.json"), "utf8")).ui?.zoom;
+  const first = await launch(home);
+  try {
+    await expect(first.page.getByText("workspace", { exact: false }).first()).toBeVisible();
+    await first.page.keyboard.press("Control+=");
+    await expect.poll(() => zoomOf(first.app)).toBe(1.1);
+    await first.page.keyboard.press("Control+=");
+    await expect.poll(() => zoomOf(first.app)).toBe(1.25);
+    await first.page.keyboard.press("Control+-");
+    await expect.poll(() => zoomOf(first.app)).toBe(1.1);
+    // The settings screen shows the step the keys chose, and choosing there zooms too.
+    await first.page.getByRole("button", { name: "Settings" }).click();
+    await expect(first.page.getByTestId("zoom-110")).toHaveAttribute("aria-checked", "true");
+    await first.page.getByTestId("zoom-125").click();
+    await expect.poll(() => zoomOf(first.app)).toBe(1.25);
+    await expect.poll(saved).toBe(1.25);
+  } finally {
+    await first.app.close();
+  }
+
+  const second = await launch(home);
+  try {
+    await expect(second.page.getByText("workspace", { exact: false }).first()).toBeVisible();
+    expect(await zoomOf(second.app)).toBe(1.25);
+    await second.page.keyboard.press("Control+0");
+    await expect.poll(() => zoomOf(second.app)).toBe(1);
+  } finally {
+    await second.app.close();
+  }
+});
+
 test("a screenshot on the clipboard becomes a file, with its path ready to paste", async () => {
   const { home } = fixture();
   const { app, page } = await launch(home);

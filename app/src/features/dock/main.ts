@@ -215,8 +215,10 @@ export function register(ctx: MainContext, wire: Wire, deps: DockDeps): DockFeat
     // takes the resize cursor off the three sides that are against the screen — so the one side
     // that may be dragged is a handle in the page. Each step only moves the window, which is cheap;
     // the shell is told once, at the end, because reserving costs the best part of half a second.
-    dragDock: ({ thickness, done }) => {
+    dragDock: ({ thickness: drawn, done }) => {
       if (!dock?.isDocked) return;
+      // The page measures in its own pixels, which a zoom other than 1 makes unlike the window's.
+      const thickness = Math.round(drawn * (ctx.window()?.webContents.getZoomFactor() ?? 1));
       if (!done) {
         dock.preview(thickness);
         return;

@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { LAYOUT_MODES, THEME_MODES } from "@core/constants";
 import { LANGUAGES, resolveLanguage } from "@core/i18n";
+import { ZOOM_LEVELS } from "@core/zoom";
 
 import { PasteSettings } from "../../features/clipboard/ui";
 import { DockSettings, KeepIconsSetting } from "../../features/dock/ui";
@@ -84,6 +85,25 @@ export function SettingsView({ settings, displays, onChange, onApplyDock, onOpen
             onSelect={() => section("ui")({ ...draft.ui, theme })}
           />
         ))}
+      </Card>
+
+      <Card title={t("settings.zoom")} hint={t("settings.zoom.hint")}>
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label={t("settings.zoom")}>
+          {ZOOM_LEVELS.map((zoom) => (
+            <button
+              key={zoom}
+              type="button"
+              role="radio"
+              aria-checked={draft.ui.zoom === zoom}
+              data-testid={`zoom-${Math.round(zoom * 100)}`}
+              onClick={() => section("ui")({ ...draft.ui, zoom })}
+              className={`px-2 py-0.5 rounded-lg text-xs border ${draft.ui.zoom === zoom
+                ? "border-accent/60 bg-accent/15 text-bone-100" : "border-ink-600 text-bone-400 hover:text-bone-100 hover:bg-ink-700/60"}`}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+          ))}
+        </div>
       </Card>
 
       <Card title={t("settings.language")} hint={t("settings.language.hint")}>

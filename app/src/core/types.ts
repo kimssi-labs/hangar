@@ -182,6 +182,8 @@ export interface UiConfig {
   sidePane: SidePaneTab;
   /** The side pane's groups left open — skills and Artifacts alike; everything else starts closed. */
   paneOpen: string[];
+  /** How large the window draws everything, one of core/zoom.ts's steps; 1 is as designed. */
+  zoom: number;
   /** The files panel's view as last chosen by hand, or null to follow the room it has. */
   filesView: FilesView | null;
   /** Which Artifacts the tab lists: all of them, the project's, or the session's. */

@@ -228,6 +228,7 @@ const settingsFeature = registerSettings(context, wiring, {
     if (patch.updates) updatesFeature.setConfig(patch.updates);   // the timer starts, stops or re-arms with it
     if (patch.launch) clipboardFeature.rearm();   // the shortcut, and the automatic path, may have changed
     if (patch.ui) {
+      window?.webContents.setZoomFactor(config.ui().zoom);
       if (config.ui().monitor) metricsFeature.start();
       else void metricsFeature.stop();
       chrome?.theme(config.ui().theme);            // Chromium's frame and a band's border follow the page
@@ -283,6 +284,7 @@ async function createWindow(): Promise<void> {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      zoomFactor: config.ui().zoom,                 // the size chosen last run, from the first paint
     },
   });
   // Restored with the same call that measured them. Passing a saved rectangle as constructor

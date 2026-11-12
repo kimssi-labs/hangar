@@ -114,6 +114,7 @@ describe("the surface the page can reach", () => {
       trashFile: "invoke files:trash",
       listSkills: "invoke skills:list",
       openSkill: "invoke skills:open",
+      promoteSkill: "invoke skills:promote",
       artifactsState: "invoke artifacts:state",
       refreshArtifacts: "invoke artifacts:refresh",
       artifactOrigins: "invoke artifacts:origins",

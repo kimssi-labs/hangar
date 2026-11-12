@@ -6,7 +6,7 @@
  * switched off, which must not show). The fixture home has no login, so the Artifacts tab says so
  * and nothing is asked of claude.ai — the suite never touches the network.
  */
-import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
@@ -104,6 +104,48 @@ test("a group opened by hand is still open after a restart, and the rest stay cl
     const list = page.getByTestId("skills-list");
     await expect(list).toContainText("deploy-here");
     await expect(list).not.toContainText("Your skills");          // inside the global section, still closed
+  } finally {
+    await app.close();
+  }
+});
+
+test("a project's own skill is copied or moved to the global skills from its menu", async () => {
+  const home = fixture({ sidePane: "skills", paneOpen: ["skills:project", "skills:global", "skills:user:"] });
+  const projectSkills = join(home, "..", "workspace", ".claude", "skills");
+  skill(projectSkills, "tidy-up", "Cleans the tree");
+  const { app, page } = await launch(home);
+  // The menu is the OS's own: the stand-in picks the item by its label, where the menu is built.
+  const pick = (label: string) => app.evaluate(({ Menu }, wanted) => {
+    type Item = { label?: string; click?: () => void };
+    (Menu as unknown as { buildFromTemplate: (t: Item[]) => unknown }).buildFromTemplate =
+      (template: Item[]) => ({ popup: () => template.find((item) => item.label === wanted)?.click?.() });
+  }, label);
+  try {
+    const list = page.getByTestId("skills-list");
+    await expect(list).toContainText("tidy-up");
+    await expect(list).toContainText("Your skills (1)");
+
+    // Copy: global gains it, the project keeps it.
+    await pick("Copy to global skills");
+    await list.getByText("deploy-here", { exact: true }).click({ button: "right" });
+    await expect(list).toContainText("Your skills (2)");
+    expect(existsSync(join(home, "skills", "deploy-here", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(projectSkills, "deploy-here", "SKILL.md"))).toBe(true);
+
+    // Move: asked first, then the project no longer has it.
+    await pick("Move to global skills");
+    await list.getByText("tidy-up", { exact: true }).click({ button: "right" });
+    await page.getByRole("button", { name: "Move", exact: true }).click();
+    await expect(list).toContainText("Your skills (3)");
+    expect(existsSync(join(home, "skills", "tidy-up", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(projectSkills, "tidy-up"))).toBe(false);
+
+    // A global skill of the same name is never replaced.
+    await pick("Move to global skills");
+    await list.getByText("deploy-here", { exact: true }).first().click({ button: "right" });
+    await page.getByRole("button", { name: "Move", exact: true }).click();
+    await expect(page.getByText("A global skill named deploy-here already exists.")).toBeVisible();
+    expect(existsSync(join(projectSkills, "deploy-here", "SKILL.md"))).toBe(true);
   } finally {
     await app.close();
   }
