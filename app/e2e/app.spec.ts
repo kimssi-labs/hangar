@@ -203,6 +203,42 @@ test("Ctrl + and the text size setting zoom the window, and the size survives a 
   }
 });
 
+test("the sessions open last time are offered once on start-up, and reopened or let go", async () => {
+  test.setTimeout(120_000);                            // two launches of the app
+  const { home } = fixture();
+  // The last run had one session open; nothing runs it now (there is no registry entry for it).
+  // The terminal is a program that only prints a name, so nothing appears on the desk.
+  mkdirSync(join(home, "cache"), { recursive: true });
+  mkdirSync(join(home, "config"), { recursive: true });
+  const openFile = join(home, "cache", "hangar-open-sessions.json");
+  writeFileSync(openFile, JSON.stringify({ sessions: [SESSION_ONE] }));
+  writeFileSync(join(home, "config", "manager.json"), JSON.stringify({
+    launch: { shell: "custom", customShell: "C:\\Windows\\System32\\whoami.exe" },
+  }));
+
+  const first = await launch(home);
+  try {
+    await expect(first.page.getByText("Reopen the sessions open last time (1)?")).toBeVisible();
+    await expect(first.page.getByText("· 프롬프트 1")).toBeVisible();
+    await first.page.getByRole("button", { name: "Open all" }).click();
+    await expect(first.page.getByText("Reopened 1 session.")).toBeVisible();
+    // Asked once a run: nothing is offered again.
+    expect(await first.page.evaluate(() => window.hangar.restorable())).toEqual([]);
+  } finally {
+    await first.app.close();
+  }
+
+  // Said no to, it is let go: the next start does not ask.
+  const second = await launch(home);
+  try {
+    await expect(second.page.getByText("Reopen the sessions open last time (1)?")).toBeVisible();
+    await second.page.keyboard.press("Escape");
+    await expect.poll(() => JSON.parse(readFileSync(openFile, "utf8")).sessions).toEqual([]);
+  } finally {
+    await second.app.close();
+  }
+});
+
 test("a screenshot on the clipboard becomes a file, with its path ready to paste", async () => {
   const { home } = fixture();
   const { app, page } = await launch(home);

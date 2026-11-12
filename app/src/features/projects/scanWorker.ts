@@ -25,6 +25,9 @@ export type ScanReply =
   | { id: number; signature: string; projects?: ProjectInfo[]; full: boolean; ms: number }
   | { id: number; error: string };
 
+/** After a registry watch: the sessions running now, for the list the next start offers (core/openSessions.ts). */
+export interface LiveReply { live: string[] }
+
 export interface Scanner {
   store: Store;
   config: ConfigStore;
@@ -38,15 +41,15 @@ export function scanner(): Scanner {
   return { store: new Store(undefined, { config }), config, state: scanState(), held: null };
 }
 
-/** One command, answered; null when nothing is owed back. Never throws. */
-export function handle(command: ScanCommand, from: Scanner): ScanReply | null {
+/** One command, answered. Never throws. */
+export function handle(command: ScanCommand, from: Scanner): ScanReply | LiveReply {
   if (command.kind === "watch") {
     try {
       from.store.watchRegistry();
+      return { live: [...from.store.liveSessions().keys()] };
     } catch {
-      /* the next watch tries again */
+      return { live: [] };                          // the next watch tries again
     }
-    return null;
   }
   const started = Date.now();
   try {
@@ -64,7 +67,6 @@ if (parentPort && (workerData as Record<string, unknown> | null)?.[SCAN_WORKER_M
   const port = parentPort;
   const own = scanner();
   port.on("message", (command: ScanCommand) => {
-    const reply = handle(command, own);
-    if (reply) port.postMessage(reply);
+    port.postMessage(handle(command, own));
   });
 }

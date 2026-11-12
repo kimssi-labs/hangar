@@ -94,6 +94,8 @@ describe("the surface the page can reach", () => {
       revealProject: "invoke project:reveal",
       addProject: "invoke project:add",
       togglePin: "invoke pin:toggle",
+      restorable: "invoke sessions:restorable",
+      restoreSessions: "invoke sessions:restore",
       loadSettings: "invoke settings:load",
       saveSettings: "invoke settings:save",
       saveUi: "invoke ui:save",

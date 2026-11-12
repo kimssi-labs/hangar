@@ -27,6 +27,8 @@ export const LAYOUT_MODES: LayoutMode[] = ["auto", "horizontal", "vertical"];
 /** The side pane's tabs, in the order they are drawn. */
 export const SIDE_PANE_TABS: SidePaneTab[] = ["files", "skills", "artifacts"];
 export const FILES_VIEWS: FilesView[] = ["tree", "changed"];
+/** How many titles the start-up question about last run's sessions lists before it says how many more. */
+export const RESTORE_LISTED_MAX = 8;
 /** The id of a right-click menu entry that is drawn as a line rather than an item. */
 export const MENU_SEPARATOR = "-";
 /** Ctrl+Alt+V: near the paste it assists, and not a shortcut a terminal or editor already wants. */

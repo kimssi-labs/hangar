@@ -23,7 +23,8 @@ vi.mock("node:child_process", async (original) => {
 const repo = mkdtempSync(join(tmpdir(), "hangar-offthread-"));
 afterAll(() => rmSync(repo, { recursive: true, force: true }));
 
-describe("git status", () => {
+// Real git processes: a busy desk took 9 s for the first, past vitest's default limit.
+describe("git status", { timeout: 30_000 }, () => {
   it("is started on a worker thread, never on the window's thread", async () => {
     childProcess.spawnSync("git", ["init", "-q"], { cwd: repo, windowsHide: true });
     writeFileSync(join(repo, "new.txt"), "x");

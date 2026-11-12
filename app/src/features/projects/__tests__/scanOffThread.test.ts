@@ -6,7 +6,7 @@
  * and the window froze for as long. The worker is faked here so each answer is in the test's hands.
  */
 import { EventEmitter } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -42,11 +42,16 @@ const { register } = await import("../main.js");
 const { scanState } = await import("../scanAll.js");
 const { handle } = await import("../scanWorker.js");
 
+const scratch = mkdtempSync(join(tmpdir(), "hangar-scanhost-"));
+afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+let homes = 0;
+
 function feature() {
-  const store = { scan: vi.fn(() => []), watchRegistry: vi.fn() };
+  const openFile = join(scratch, `open-${homes++}.json`);
+  const store = { scan: vi.fn(() => []), watchRegistry: vi.fn(), paths: { hangarOpenSessions: openFile } };
   const ctx = { config: { git: () => ({ enabled: false }) }, store, window: () => null };
   const wire = { bind: () => undefined, emit: () => undefined };
-  return { store, projects: register(ctx as never, wire as never, { scanned: () => undefined }) };
+  return { store, openFile, projects: register(ctx as never, wire as never, { scanned: () => undefined }) };
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -64,6 +69,14 @@ describe("the project scan", () => {
     projects.watchRegistry();
     expect(workers[0]?.asked.at(-1)).toEqual({ kind: "watch" });
     expect(store.watchRegistry).not.toHaveBeenCalled();
+  });
+
+  it("writes down the sessions the worker reports running after a registry watch", async () => {
+    const { projects, openFile } = feature();
+    projects.watchRegistry();
+    await settle();
+    workers[0]?.emit("message", { live: ["s1", "s2"] });
+    expect(JSON.parse(readFileSync(openFile, "utf8")).sessions).toEqual(["s1", "s2"]);
   });
 
   it("asked while one runs, answers from a scan that started after it", async () => {

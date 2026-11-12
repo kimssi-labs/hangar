@@ -14,7 +14,7 @@ import type { ConfigStore } from "../../core/config.js";
 import type { Store } from "../../core/store.js";
 import type { ProjectInfo } from "../../core/types.js";
 import { scanState } from "./scanAll.js";
-import { handle, SCAN_WORKER_MARK, type ScanCommand, type Scanner, type ScanReply } from "./scanWorker.js";
+import { handle, type LiveReply, SCAN_WORKER_MARK, type ScanCommand, type Scanner, type ScanReply } from "./scanWorker.js";
 
 const WORKER_SCRIPT = join(__dirname, "scanWorker.js");
 
@@ -31,7 +31,13 @@ export interface ScanHost {
   watchRegistry(): void;
 }
 
-export function scanHost(store: Store, config: ConfigStore, script = WORKER_SCRIPT): ScanHost {
+export function scanHost(
+  store: Store,
+  config: ConfigStore,
+  /** Told the sessions running after each registry watch. */
+  onLive: (live: string[]) => void = () => undefined,
+  script = WORKER_SCRIPT,
+): ScanHost {
   const local: Scanner = { store, config, state: scanState(), held: null };
   let held: ScanResult = { projects: [], signature: "", full: false, ms: 0 };
   let worker: Worker | null = null;
@@ -52,7 +58,7 @@ export function scanHost(store: Store, config: ConfigStore, script = WORKER_SCRI
 
   function scanHere(): ScanResult {
     local.held = null;                              // the list always comes back from a scan here
-    return accept(handle({ kind: "scan", id: 0 }, local));
+    return accept(handle({ kind: "scan", id: 0 }, local) as ScanReply);
   }
 
   function lose(dead: Worker, why: string): void {
@@ -70,7 +76,11 @@ export function scanHost(store: Store, config: ConfigStore, script = WORKER_SCRI
     if (worker || failed) return worker;
     try {
       const started = new Worker(script, { workerData: { [SCAN_WORKER_MARK]: true } });
-      started.on("message", (reply: ScanReply) => {
+      started.on("message", (reply: ScanReply | LiveReply) => {
+        if ("live" in reply) {
+          onLive(reply.live);
+          return;
+        }
         const answer = pending.get(reply.id);
         pending.delete(reply.id);
         answer?.(reply);
@@ -112,7 +122,7 @@ export function scanHost(store: Store, config: ConfigStore, script = WORKER_SCRI
   function watchRegistry(): void {
     const on = start();
     if (on) on.postMessage({ kind: "watch" } satisfies ScanCommand);
-    else store.watchRegistry();
+    else onLive((handle({ kind: "watch" }, local) as LiveReply).live);
   }
 
   return { scan, watchRegistry };

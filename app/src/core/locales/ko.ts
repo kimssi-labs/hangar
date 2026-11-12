@@ -108,6 +108,9 @@ export const ko: Dictionary = {
   "settings.back": "뒤로",
   "settings.back.title": "뒤로 (Esc)",
 
+  "restore.title": "지난번에 열려 있던 세션 {count}개를 다시 열까요?",
+  "restore.more": "외 {count}개",
+  "restore.open": "모두 열기",
   "settings.zoom": "글자 크기",
   "settings.zoom.hint": "창 안의 모든 요소가 함께 커지고 작아집니다. 50~200 % 사이 숫자를 직접 입력하거나 Ctrl + / Ctrl - 로 조절하고, Ctrl 0 으로 100 %로 돌아갑니다.",
   "settings.zoom.in": "크게",

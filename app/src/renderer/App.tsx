@@ -22,7 +22,7 @@ import { MachineGauges, useMetrics } from "../features/metrics/ui";
 import { usePasteResults } from "../features/clipboard/ui";
 import type { FilesView, ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
 import { DEFAULT_ZOOM, stepZoom, zoomKey } from "@core/zoom";
-import { MENU_SEPARATOR, SIDE_PANE_TABS } from "@core/constants";
+import { MENU_SEPARATOR, RESTORE_LISTED_MAX, SIDE_PANE_TABS } from "@core/constants";
 
 import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
 import { chosenMonitor } from "../features/dock/contract";
@@ -283,6 +283,23 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     setToast({ text: result.message, tone: result.ok ? "ok" : "bad" });
     setTimeout(() => setToast(null), 4000);
   }, []);
+
+  // Once a run, as soon as the list is in: the sessions the last run had open that are not running
+  // now — after a reboot, all of them — offered back in one question.
+  const restoreAsked = useRef(false);
+  useEffect(() => {
+    if (restoreAsked.current || !projects.length) return;
+    restoreAsked.current = true;
+    void (async () => {
+      const offered = await api.restorable();
+      if (!offered.length) return;
+      const names = offered.slice(0, RESTORE_LISTED_MAX).map((item) => `· ${item.title}`);
+      if (offered.length > RESTORE_LISTED_MAX) names.push(t("restore.more", { count: offered.length - RESTORE_LISTED_MAX }));
+      const yes = (await askUser({ title: t("restore.title", { count: offered.length }), detail: names.join("\n"), confirm: t("restore.open") })) === true;
+      const result = await api.restoreSessions(yes);
+      if (yes) notify(result);
+    })();
+  }, [projects, askUser, notify, t]);
 
   /** What an action on a row needs from this window; the features do the rest themselves. */
   const rowUi = useMemo(() => ({ askUser, notify, refresh, t }), [askUser, notify, refresh, t]);
