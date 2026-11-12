@@ -21,6 +21,7 @@ import { Truncated } from "../../renderer/components/Truncated";
 import { useText } from "../../renderer/useText";
 import type { Ask, AskResult } from "../../renderer/components/Modal";
 import type { Translate } from "@core/i18n";
+import type { FilesView } from "@core/types";
 import type { ChangedFiles } from "./contract";
 
 /** How deep one level indents a row. Enough to read the shape, little enough to keep the name. */
@@ -44,7 +45,7 @@ const MARKS: Record<FileStatus, { mark: string; tone: string }> = {
 };
 
 /** The two things the panel can show: the whole folder, or only what git says changed. */
-export type FilesView = "tree" | "changed";
+export type { FilesView };
 
 export interface Files {
   /** The root listing and every expanded directory, keyed by path from the project's root. */
@@ -79,14 +80,28 @@ export interface Files {
  * appears without anyone pressing anything; and again at once whenever the panel comes back on
  * screen, so what it shows then is current rather than as it was when it left.
  */
-export function useFiles(cwd: string | null, enabled: boolean): Files {
+export function useFiles(
+  cwd: string | null,
+  enabled: boolean,
+  /** The view chosen by hand in an earlier run, from the settings; null follows the room. */
+  saved: FilesView | null = null,
+  /** Called with a view chosen by hand, so the next run opens on it. */
+  remember: (view: FilesView | null) => void = () => undefined,
+): Files {
   const [listings, setListings] = useState<Map<string, DirListing>>(new Map());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [changed, setChanged] = useState<ChangedFiles>({ items: [], hidden: 0 });
   const [loading, setLoading] = useState<Set<string>>(new Set());
   // Asked for by hand; null means "whatever the width suggests". Kept across a change of project:
-  // it is a preference about the panel, not something about one folder.
-  const [view, choose] = useState<FilesView | null>(null);
+  // it is a preference about the panel, not something about one folder, and across a restart: the
+  // settings arrive after the first paint, so until something is chosen in this run, what an
+  // earlier run chose stands.
+  const [picked, setPicked] = useState<FilesView | null | undefined>(undefined);
+  const view = picked === undefined ? saved : picked;
+  const choose = useCallback((next: FilesView | null) => {
+    setPicked(next);
+    remember(next);
+  }, [remember]);
   // What is open right now, for the refresh that runs on a timer: it must not re-run whenever the
   // set changes, or every expand would restart the timer.
   const openDirs = useRef<Set<string>>(new Set());

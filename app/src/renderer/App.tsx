@@ -20,7 +20,7 @@ import { shouldPrompt, UPDATE_SNOOZE_MS } from "@core/updates";
 import { UsageGauges, useUsage } from "../features/usage/ui";
 import { MachineGauges, useMetrics } from "../features/metrics/ui";
 import { usePasteResults } from "../features/clipboard/ui";
-import type { ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
+import type { FilesView, ProjectInfo, SessionInfo, SidePaneTab, ThemeMode } from "@core/types";
 import { MENU_SEPARATOR, SIDE_PANE_TABS } from "@core/constants";
 
 import { api, type AppInfo, type DisplayInfo, type SettingsPayload } from "./api";
@@ -543,7 +543,9 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   // while the setting is off, nothing while no project is selected — and turning back to the tab
   // reads it again at once (useFiles).
   const filesShown = showFiles && showPane && activeTab === "files" && (column || showDetail);
-  const files = useFiles(filesCwd, filesShown);
+  // The view chosen by hand is remembered, so the next run opens the panel the same way.
+  const rememberFilesView = useCallback((view: FilesView | null) => { void api.saveUi({ filesView: view }); }, []);
+  const files = useFiles(filesCwd, filesShown, settings?.ui.filesView ?? null, rememberFilesView);
   // The list refresh runs on a timer that must not restart whenever this callback is rebuilt, so
   // the tick reaches the panel through a ref rather than through the dependency list.
   filesRef.current = files.refresh;

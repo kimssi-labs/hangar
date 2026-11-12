@@ -4,7 +4,7 @@
  * Kept free of any `node:` import on purpose: the renderer bundles whatever it imports, and pulling
  * `fs` into the page is how a browser build breaks (and how a preload boundary gets blurred).
  */
-import type { DockEdge, LayoutMode, SidePaneTab, PermissionMode, ShellChoice, ThemeMode } from "./types.js";
+import type { DockEdge, FilesView, LayoutMode, PermissionMode, ShellChoice, SidePaneTab, ThemeMode } from "./types.js";
 
 export const DOCK_EDGES: DockEdge[] = ["left", "top", "right", "bottom"];
 export const DOCK_PERCENT = { min: 5, max: 60, default: 20 } as const;
@@ -26,6 +26,7 @@ export const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 export const LAYOUT_MODES: LayoutMode[] = ["auto", "horizontal", "vertical"];
 /** The side pane's tabs, in the order they are drawn. */
 export const SIDE_PANE_TABS: SidePaneTab[] = ["files", "skills", "artifacts"];
+export const FILES_VIEWS: FilesView[] = ["tree", "changed"];
 /** The id of a right-click menu entry that is drawn as a line rather than an item. */
 export const MENU_SEPARATOR = "-";
 /** Ctrl+Alt+V: near the paste it assists, and not a shortcut a terminal or editor already wants. */

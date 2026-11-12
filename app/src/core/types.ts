@@ -135,6 +135,9 @@ export type LayoutMode = "auto" | "horizontal" | "vertical";
 
 export type SidePaneTab = "files" | "skills" | "artifacts";
 
+/** What the files panel shows: the whole folder, or only what git says changed. */
+export type FilesView = "tree" | "changed";
+
 export interface UiConfig {
   /** What the window is written in; "system" follows the machine. */
   language: import("./i18n.js").Language;
@@ -179,6 +182,8 @@ export interface UiConfig {
   sidePane: SidePaneTab;
   /** The side pane's groups left open — skills and Artifacts alike; everything else starts closed. */
   paneOpen: string[];
+  /** The files panel's view as last chosen by hand, or null to follow the room it has. */
+  filesView: FilesView | null;
   /** Which Artifacts the tab lists: all of them, the project's, or the session's. */
   artifactScope: import("./artifactOrigins.js").ArtifactScope;
   project: string | null;
