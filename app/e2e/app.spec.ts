@@ -8,7 +8,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
 
 import { mainWindow } from "./appWindow.js";
@@ -214,10 +214,17 @@ test("the sessions open last time are offered once on start-up, and reopened or 
   const openFile = join(home, "cache", "hangar-open-sessions.json");
   writeFileSync(openFile, JSON.stringify({ sessions: [SESSION_ONE] }));
   writeFileSync(join(home, "config", "manager.json"), JSON.stringify({
-    launch: { shell: "custom", customShell: "C:\\Windows\\System32\\whoami.exe" },
+    launch: { shell: "custom", customShell: process.platform === "win32" ? "C:\\Windows\\System32\\whoami.exe" : "/usr/bin/whoami" },
   }));
+  // Hangar asks for claude on PATH before opening anything; a machine without Claude Code (CI) gets
+  // a stand-in it can find. It is never run: the custom program above is what starts.
+  const bin = join(home, "..", "bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, process.platform === "win32" ? "claude.cmd" : "claude"), "", { mode: 0o755 });
+  const pathKey = Object.keys(process.env).find((key) => key.toUpperCase() === "PATH") ?? "PATH";
+  const withClaude = { [pathKey]: `${bin}${delimiter}${process.env[pathKey] ?? ""}` };
 
-  const first = await launch(home);
+  const first = await launch(home, withClaude);
   try {
     await expect(first.page.getByText("Reopen the sessions open last time (1)?")).toBeVisible();
     await expect(first.page.getByText("· 프롬프트 1")).toBeVisible();
@@ -230,7 +237,7 @@ test("the sessions open last time are offered once on start-up, and reopened or 
   }
 
   // Said no to, it is let go: the next start does not ask.
-  const second = await launch(home);
+  const second = await launch(home, withClaude);
   try {
     await expect(second.page.getByText("Reopen the sessions open last time (1)?")).toBeVisible();
     await second.page.keyboard.press("Escape");

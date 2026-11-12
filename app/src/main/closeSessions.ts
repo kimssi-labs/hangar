@@ -17,6 +17,34 @@ import { helperExecutable, type HelperSpec } from "./helpers.js";
 import { execFileOffThread } from "./offThread.js";
 
 const CLOSE_TIMEOUT_MS = 30_000;
+/** Elsewhere than Windows: how long a session is given to end after SIGTERM, before SIGKILL. */
+const TERM_GRACE_MS = 5_000;
+const GONE_POLL_MS = 100;
+
+/** Whether the process is gone: no such pid, or a zombie only its parent has yet to reap. */
+function gone(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return true;
+  }
+  try {
+    return readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1]?.startsWith("Z") ?? false;
+  } catch {
+    return true;
+  }
+}
+
+/** Wait until every pid is gone, or the time is up; the ones still there are handed back. */
+async function waitGone(pids: number[], ms: number): Promise<number[]> {
+  const until = Date.now() + ms;
+  let left = pids.filter((pid) => !gone(pid));
+  while (left.length && Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, GONE_POLL_MS));
+    left = left.filter((pid) => !gone(pid));
+  }
+  return left;
+}
 
 /**
  * Arguments: the sessions' pids; output: one JSON line. C# 5 for the .NET Framework 4 compiler. The
@@ -151,18 +179,29 @@ export function parseClose(stdout: string): CloseOutcome {
 export async function closeSessions(pids: number[], cacheDir: string): Promise<CloseOutcome> {
   if (!pids.length) return { ended: 0, closed: 0 };
   if (process.platform !== "win32") {
-    let ended = 0;
-    for (const pid of pids) {
+    // Still a claude, as on Windows: not a pid the system has since handed to another program.
+    const targets = pids.filter((pid) => {
       try {
-        // Still a claude, as on Windows: not a pid the system has since handed to another program.
-        if (!readFileSync(`/proc/${pid}/cmdline`, "utf8").includes("claude")) continue;
-        process.kill(pid);
-        ended += 1;
+        return readFileSync(`/proc/${pid}/cmdline`, "utf8").includes("claude");
       } catch {
-        /* already gone */
+        return false;
       }
-    }
-    return { ended, closed: 0 };
+    });
+    const signal = (list: number[], name: NodeJS.Signals): void => {
+      for (const pid of list) {
+        try {
+          process.kill(pid, name);
+        } catch {
+          /* already gone */
+        }
+      }
+    };
+    // Waited for, as on Windows: a signal is only a request, and the answer is the process gone.
+    signal(targets, "SIGTERM");
+    const stubborn = await waitGone(targets, TERM_GRACE_MS);
+    signal(stubborn, "SIGKILL");
+    const left = await waitGone(stubborn, TERM_GRACE_MS);
+    return { ended: targets.length - left.length, closed: 0 };
   }
   const exe = await helperExecutable(cacheDir, CLOSE_HELPER);
   if (!exe) return { ended: 0, closed: 0 };
