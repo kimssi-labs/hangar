@@ -74,6 +74,8 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
   /** The scan runs on a worker (scanHost.ts); what is kept here is its last answer. */
   /** The sessions running as the registry is watched, kept so the next start can offer them again. */
   const openSessions = new OpenSessions(ctx.store.paths.hangarOpenSessions);
+  /** Sessions being closed with Hangar right now (answerClosing). */
+  let closingNow = false;
   /** The last run's sessions, until they are reopened or let go: offered once a run. */
   let offer: string[] = openSessions.before;
   const host = scanHost(ctx.store, ctx.config, (live) => openSessions.observe(live));
@@ -282,10 +284,20 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
       if (choice === "cancel") return { ok: true };
       if (choice === "all") {
         // Written down first: the next start offers them again (core/openSessions.ts), and a list
-        // already on disk survives whatever happens to the closing below.
+        // already on disk survives whatever happens to the closing below. Until the sessions have
+        // ended the window stays, covered by the page, and another close of it is not asked again.
         const running = runningInTerminals();
         openSessions.observe(running.map((s) => s.sessionId));
-        await closeSessions(running.map((s) => s.pid), helpersDir());
+        closingNow = true;
+        try {
+          const outcome = await closeSessions(running.map((s) => s.pid), helpersDir());
+          const left = runningInTerminals().filter((s) => running.some((r) => r.pid === s.pid));
+          if (left.length) {
+            return { ok: false, message: `${left.length} of ${running.length} sessions could not be closed (${outcome.ended} ended).` };
+          }
+        } finally {
+          closingNow = false;
+        }
       }
       deps.closeWindow();
       return { ok: true };
@@ -301,6 +313,7 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
   return {
     scan,
     askClosing: () => {
+      if (closingNow) return true;                  // under way: the window waits for it, unasked
       const running = runningInTerminals();
       if (!running.length) return false;
       wire.emit(projectsContract.onClosing, running.map(({ sessionId, title, busy }) => ({ sessionId, title, busy })));

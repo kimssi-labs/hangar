@@ -28,9 +28,11 @@ const CLOSE_TIMEOUT_MS = 30_000;
  */
 export const CLOSE_SOURCE = String.raw`
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 
 static class Program {
   [DllImport("kernel32.dll")] static extern bool FreeConsole();
@@ -68,12 +70,23 @@ static class Program {
     try { return Process.GetProcessById((int)pid).ProcessName.ToLowerInvariant(); } catch (Exception) { return ""; }
   }
 
-  // The process and everything it started, ended; then waited for, so the shell has its console back.
-  static void End(uint pid) {
-    var info = new ProcessStartInfo("taskkill", "/PID " + pid + " /T /F");
+  // The processes and everything they started, ended in one call; then waited for, together, so
+  // each shell has its console back before anything is typed into it.
+  static void End(List<uint> pids) {
+    var watched = new List<Process>();
+    var args = new StringBuilder("/T /F");
+    foreach (uint pid in pids) {
+      args.Append(" /PID ").Append(pid);
+      try { watched.Add(Process.GetProcessById((int)pid)); } catch (Exception) { }
+    }
+    var info = new ProcessStartInfo("taskkill", args.ToString());
     info.CreateNoWindow = true; info.UseShellExecute = false;
-    using (var p = Process.Start(info)) { p.WaitForExit(5000); }
-    try { Process.GetProcessById((int)pid).WaitForExit(3000); } catch (Exception) { }
+    using (var p = Process.Start(info)) { p.WaitForExit(10000); }
+    var until = DateTime.UtcNow.AddMilliseconds(5000);
+    foreach (var p in watched) {
+      int left = (int)Math.Max(0, (until - DateTime.UtcNow).TotalMilliseconds);
+      try { p.WaitForExit(left); } catch (Exception) { }
+    }
   }
 
   // Keys into the console the process runs in, as if typed there.
@@ -98,17 +111,20 @@ static class Program {
   static int Main(string[] args) {
     var stdout = new StreamWriter(Console.OpenStandardOutput());
     FreeConsole();                                  // ours, so that each shell's can be attached
-    int ended = 0, closed = 0;
+    var targets = new List<uint>();
+    var shells = new List<uint>();
     foreach (string arg in args) {
       uint pid;
       if (!uint.TryParse(arg, out pid)) continue;
       if (Array.IndexOf(CLAUDES, NameOf(pid)) < 0) continue;
+      targets.Add(pid);
       uint parent = ParentOf(pid);
-      string shell = parent == 0 ? "" : NameOf(parent);
-      End(pid);
-      ended++;
-      if (Array.IndexOf(SHELLS, shell) >= 0 && Type(parent, "exit\r")) closed++;
+      if (parent != 0 && Array.IndexOf(SHELLS, NameOf(parent)) >= 0) shells.Add(parent);
     }
+    if (targets.Count > 0) End(targets);
+    int closed = 0;
+    foreach (uint shell in shells) { if (Type(shell, "exit\r")) closed++; }
+    int ended = targets.Count;
     stdout.Write("{\"ended\":" + ended + ",\"closed\":" + closed + "}");
     stdout.Flush();
     return 0;

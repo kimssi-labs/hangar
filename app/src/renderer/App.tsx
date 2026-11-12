@@ -303,6 +303,8 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
 
   // Hangar is being closed while sessions run in terminals: close them too (written down, so the
   // next start offers them back), close Hangar alone and leave them running, or stay.
+  /** Sessions being closed with Hangar: the window waits, covered, until they are and it closes. */
+  const [closingCount, setClosingCount] = useState(0);
   useEffect(() => api.onClosing((running) => {
     void (async () => {
       const names = running.slice(0, RESTORE_LISTED_MAX).map((item) => `· ${item.title}${item.busy ? ` (${t("closing.busy")})` : ""}`);
@@ -313,10 +315,14 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
         confirm: t("closing.all"),
         secondary: t("closing.hangar"),
       });
-      if (answer === true) notify({ ok: true, message: t("closing.working") });
-      void api.answerClosing(answer === true ? "all" : answer === false ? "hangar" : "cancel");
+      if (answer === true) setClosingCount(running.length);
+      const result = await api.answerClosing(answer === true ? "all" : answer === false ? "hangar" : "cancel");
+      // Still here: the closing failed part way, and the window stays open to say so.
+      setClosingCount(0);
+      notify(result);
     })();
   }), [askUser, notify, t]);
+
 
   /** What an action on a row needs from this window; the features do the rest themselves. */
   const rowUi = useMemo(() => ({ askUser, notify, refresh, t }), [askUser, notify, refresh, t]);
@@ -759,7 +765,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
     now: Date.now(), snoozedUntil: settings.ui.updateSnoozeUntil, asked: updateAsked,
   });
   // While a question is on screen, nothing behind it takes a click, a key or the focus.
-  const behind = dialog || prompting ? { inert: "" } : {};
+  const behind = dialog || prompting || closingCount ? { inert: "" } : {};
 
   return (
     <div
@@ -1035,6 +1041,14 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       </div>
 
       {dialog ? <Modal ask={dialog.ask} onDone={dialog.settle} /> : null}
+      {closingCount ? (
+        <div role="status" aria-live="polite" data-testid="closing-sessions"
+          className="absolute inset-0 z-50 bg-ink-900/85 flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="h-6 w-6 rounded-full border-2 border-bone-500 border-t-accent animate-spin" />
+          <div className="text-sm text-bone-100">{t("closing.working", { count: closingCount })}</div>
+          <div className="text-[11px] text-bone-500">{t("closing.workingNote")}</div>
+        </div>
+      ) : null}
       {prompting ? <UpdatePrompt state={updates.state} onAnswer={answerUpdate} /> : null}
 
       {toast ? (

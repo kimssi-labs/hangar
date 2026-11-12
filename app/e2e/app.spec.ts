@@ -277,6 +277,8 @@ test("closing Hangar while a session runs asks: stay, close Hangar only, or clos
     await expect(page.getByText("workspace", { exact: false }).first()).toBeVisible();
     await closeWindow(app);
     await page.getByRole("button", { name: "Close all and keep them" }).click();
+    // The window waits, covered, until the sessions have ended (on Windows the helper takes a moment).
+    if (process.platform === "win32") await expect(page.getByTestId("closing-sessions")).toContainText("Closing 1 sessions");
     await exited(app);
     await expect.poll(alive, { timeout: 30_000 }).toBe(false);
     expect(JSON.parse(readFileSync(join(home, "cache", "hangar-open-sessions.json"), "utf8")).sessions).toContain(SESSION_ONE);
