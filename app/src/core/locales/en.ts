@@ -100,6 +100,12 @@ export const en = {
   "settings.back": "Back",
   "settings.back.title": "Back (Esc)",
 
+  "closing.title": "{count} sessions are running. Close them with Hangar?",
+  "closing.detail": "Closed with Hangar, they are kept, and the next start offers to open them again.",
+  "closing.busy": "working",
+  "closing.all": "Close all and keep them",
+  "closing.hangar": "Close Hangar only",
+  "closing.working": "Closing the sessions…",
   "restore.title": "Reopen the sessions open last time ({count})?",
   "restore.more": "and {count} more",
   "restore.open": "Open all",

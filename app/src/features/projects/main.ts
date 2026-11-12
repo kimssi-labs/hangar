@@ -20,10 +20,11 @@ import { sessionPrompt } from "../../core/sessionPrompt.js";
 import type { OpenTarget, ProjectInfo, SessionInfo } from "../../core/types.js";
 import { claudeExecutable, detectLinuxTerminal, which } from "../../main/executables.js";
 import { helperExecutable, helpersDir } from "../../main/helpers.js";
+import { CLOSE_HELPER, closeSessions } from "../../main/closeSessions.js";
 import { FOCUS_HELPER, focusSession, stopSession } from "../../main/liveSession.js";
 import type { ActionResult, AddProjectResult } from "../../main/ipc.js";
 import type { SessionTarget } from "../../main/sampler.js";
-import { projectsContract, type OpenSessionResult, type ScanAnswer } from "./contract.js";
+import { type ClosingSession, projectsContract, type OpenSessionResult, type ScanAnswer } from "./contract.js";
 import { scanHost } from "./scanHost.js";
 
 /**
@@ -40,6 +41,8 @@ const HELPER_WARMUP_MS = 10_000;
 export interface ProjectsDeps {
   /** The list was read again; whoever watches the running set should look at it. */
   scanned(): void;
+  /** Close the window for good, past the question about running sessions. */
+  closeWindow(): void;
 }
 
 /** What the rest of main may do with this feature once it is registered. */
@@ -51,12 +54,21 @@ export interface ProjectsFeature {
   find(dir: string): ProjectInfo | undefined;
   /** Sessions worth measuring right now: the running ones, from the last scan. */
   liveTargets(): SessionTarget[];
+  /**
+   * Hangar is being closed. False when no session runs in a terminal and it may close at once;
+   * true when the page has been asked what to do with them, and will answer (answerClosing).
+   */
+  askClosing(): boolean;
 }
 
 export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): ProjectsFeature {
   let projects: ProjectInfo[] = [];
   // Built once per version, a few seconds of compiler time: off the start-up path, before anyone asks.
-  if (process.platform === "win32") setTimeout(() => void helperExecutable(helpersDir(), FOCUS_HELPER), HELPER_WARMUP_MS).unref();
+  if (process.platform === "win32") {
+    setTimeout(() => {
+      void helperExecutable(helpersDir(), FOCUS_HELPER).then(() => helperExecutable(helpersDir(), CLOSE_HELPER));
+    }, HELPER_WARMUP_MS).unref();
+  }
 
   const find = (dir: string): ProjectInfo | undefined => projects.find((p) => p.dir === dir);
   /** The scan runs on a worker (scanHost.ts); what is kept here is its last answer. */
@@ -85,6 +97,20 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
   async function answer(since: string | null): Promise<ScanAnswer> {
     const list = await scan();
     return signature === since ? { signature } : { signature, projects: list };
+  }
+
+  /**
+   * The sessions running in a terminal right now, read from the registry rather than the last scan,
+   * which can be fifteen seconds old. A headless run has no terminal and is left alone.
+   */
+  function runningInTerminals(): (ClosingSession & { pid: number })[] {
+    const out: (ClosingSession & { pid: number })[] = [];
+    for (const [sessionId, { pid, status }] of ctx.store.liveSessions()) {
+      const session = projects.flatMap((p) => p.sessions).find((s) => s.id === sessionId || s.folded.includes(sessionId));
+      if (session?.headless) continue;
+      out.push({ sessionId, pid, title: session?.title ?? sessionId.slice(0, 8), busy: status === "busy" });
+    }
+    return out;
   }
 
   /** Start a session — `session` resumed, or a new one when null — in a terminal, as Settings says. */
@@ -252,6 +278,19 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
         : { ok: false, message: `Reopened ${opened} of ${wanted.length} sessions.` };
     },
 
+    answerClosing: async (choice): Promise<ActionResult> => {
+      if (choice === "cancel") return { ok: true };
+      if (choice === "all") {
+        // Written down first: the next start offers them again (core/openSessions.ts), and a list
+        // already on disk survives whatever happens to the closing below.
+        const running = runningInTerminals();
+        openSessions.observe(running.map((s) => s.sessionId));
+        await closeSessions(running.map((s) => s.pid), helpersDir());
+      }
+      deps.closeWindow();
+      return { ok: true };
+    },
+
     togglePin: async (request): Promise<ActionResult> => {
       const pinned = ctx.config.togglePin(request.kind, request.key);
       await scan();
@@ -261,6 +300,12 @@ export function register(ctx: MainContext, wire: Wire, deps: ProjectsDeps): Proj
 
   return {
     scan,
+    askClosing: () => {
+      const running = runningInTerminals();
+      if (!running.length) return false;
+      wire.emit(projectsContract.onClosing, running.map(({ sessionId, title, busy }) => ({ sessionId, title, busy })));
+      return true;
+    },
     watchRegistry: host.watchRegistry,
     find,
     liveTargets: () => projects.flatMap((project) =>

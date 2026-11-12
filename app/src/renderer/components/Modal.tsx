@@ -19,16 +19,19 @@ export interface Ask {
   /** Present when the dialog asks for a value rather than a yes or no. */
   input?: { placeholder?: string; initial?: string };
   confirm: string;
+  /** A second answer beside the confirm button, resolving with `false`: "this, not that". */
+  secondary?: string;
   /** Red confirm button, for a question whose yes cannot be taken back. */
   danger?: boolean;
 }
 
 /**
- * Resolves with the typed value, `true` for a plain confirmation, or null when dismissed.
+ * Resolves with the typed value, `true` for a plain confirmation, `false` for the second answer, or
+ * null when dismissed.
  *
  * One resolution type for both shapes keeps the caller to a single `if`.
  */
-export type AskResult = string | true | null;
+export type AskResult = string | true | false | null;
 
 /**
  * Puts the keyboard back where it was before a question took it, once the question is gone.
@@ -108,6 +111,7 @@ export function Modal({ ask, onDone }: { ask: Ask; onDone: (result: AskResult) =
         ) : null}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" className="btn" onClick={() => onDone(null)}>{t("dialog.cancel")}</button>
+          {ask.secondary ? <button type="button" className="btn" onClick={() => onDone(false)}>{ask.secondary}</button> : null}
           <button
             type="button"
             // On mount only: focused again on every render, a Tab to Cancel was undone by the next

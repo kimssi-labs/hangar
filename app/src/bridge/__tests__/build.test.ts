@@ -96,6 +96,8 @@ describe("the surface the page can reach", () => {
       togglePin: "invoke pin:toggle",
       restorable: "invoke sessions:restorable",
       restoreSessions: "invoke sessions:restore",
+      onClosing: "event app:closing",
+      answerClosing: "invoke app:closing-answer",
       loadSettings: "invoke settings:load",
       saveSettings: "invoke settings:save",
       saveUi: "invoke ui:save",

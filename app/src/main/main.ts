@@ -190,7 +190,13 @@ const usageFeature = registerUsage(context, wiring);
 // The list every other feature reads, registered first: metrics asks it which sessions run, git
 // asks it for rows. Its one dependency points the other way — "the running set may have changed" —
 // and goes through main, so projects never imports metrics. Called at scan time, once both exist.
-const projectsFeature = registerProjects(context, wiring, { scanned: () => metricsFeature.retarget() });
+const projectsFeature = registerProjects(context, wiring, {
+  scanned: () => metricsFeature.retarget(),
+  closeWindow: () => {
+    closeAnswered = true;
+    if (window && !window.isDestroyed()) window.close();
+  },
+});
 // Module level for the same reason: the monitor starts at ready and stops at quit, both outside
 // registerIpc. The sessions worth measuring are projects' knowledge, handed over as a function.
 const metricsFeature = registerMetrics(context, wiring, { targets: projectsFeature.liveTargets });
@@ -236,6 +242,13 @@ const settingsFeature = registerSettings(context, wiring, {
   },
 });
 let window: BrowserWindow | null = null;
+/**
+ * Whether a close may go ahead without asking about running sessions: the question was answered,
+ * or the app is quitting on its own (an update installing, `app.quit()`), or Windows is ending the
+ * session — a question then would hold up a shutdown nobody is there to answer.
+ */
+let closeAnswered = false;
+let windowsEnding = false;
 /** The window's frame — its look is kept by this, not by whoever last touched the window. */
 let chrome: WindowChrome | null = null;
 let splash: BrowserWindow | null = null;
@@ -304,7 +317,18 @@ async function createWindow(): Promise<void> {
   // `close` and not `closed`: the reservation is removed while the window still exists, and
   // without waiting, because nothing waits for us once the process starts shutting down. Closing the
   // window is leaving, and `leave` goes first so its watchdog covers a stall anywhere from here on.
-  window.on("close", () => {
+  window.on("query-session-end", () => { windowsEnding = true; });
+  window.on("close", (event) => {
+    // Closed by a person while sessions run in terminals: asked first whether to close them too
+    // (projects feature). The window is brought up for the question, which a close from the taskbar
+    // of a minimised window would otherwise ask out of sight.
+    if (!closeAnswered && !windowsEnding && window && projectsFeature.askClosing()) {
+      event.preventDefault();
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
+      return;
+    }
     if (process.platform === "win32") void leave();
     // Docked, the bounds are the band's, not the user's choice — do not remember those. Remembered
     // without the frame (see withoutFrame): measured otherwise, the window grew two DIP a launch at 125 %.
@@ -566,6 +590,7 @@ app.on("will-quit", () => {
 // sampler is never terminated mid-call. Elsewhere the dock decides whether the quit has to wait
 // (X11 struts need an `xprop` call); the shell only holds the door, and exactly once.
 app.on("before-quit", (event) => {
+  closeAnswered = true;                         // quitting on its own: nobody is asked
   if (process.platform === "win32") {
     event.preventDefault();
     if (window && !window.isDestroyed()) window.close();
