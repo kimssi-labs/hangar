@@ -111,14 +111,19 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
   // Ctrl + / Ctrl - / Ctrl 0, as in a browser, wherever the focus is. There is no application menu
   // to carry these accelerators; the step is saved like any setting, and main applies it.
+  // The size the last key chose, kept here at once: the saved settings come back a moment later, and
+  // a second key pressed before they do stepped from the size before the first (seen on CI: 125 %,
+  // then Ctrl - gave 100 %). Taken from the settings only when they change.
   const zoomNow = useRef(DEFAULT_ZOOM);
-  zoomNow.current = settings?.ui.zoom ?? DEFAULT_ZOOM;
+  const savedZoom = settings?.ui.zoom ?? DEFAULT_ZOOM;
+  useEffect(() => { zoomNow.current = savedZoom; }, [savedZoom]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       const step = zoomKey({ control: event.ctrlKey, meta: event.metaKey, alt: event.altKey, key: event.key });
       if (step === null) return;
       event.preventDefault();
-      void saveSettings({ ui: { zoom: stepZoom(zoomNow.current, step) } });
+      zoomNow.current = stepZoom(zoomNow.current, step);
+      void saveSettings({ ui: { zoom: zoomNow.current } });
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);

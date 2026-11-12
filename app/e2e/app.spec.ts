@@ -199,6 +199,9 @@ test("Ctrl + and the text size setting zoom the window, and the size survives a 
     expect(await zoomOf(second.app)).toBe(1.15);
     await second.page.keyboard.press("Control+0");
     await expect.poll(() => zoomOf(second.app)).toBe(1);
+    // Pressed in a row, each key steps from the one before, not from a size still being saved.
+    for (let i = 0; i < 3; i++) await second.page.keyboard.press("Control+=");
+    await expect.poll(() => zoomOf(second.app)).toBe(1.5);
   } finally {
     await second.app.close();
   }
