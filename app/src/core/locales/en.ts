@@ -104,7 +104,6 @@ export const en = {
   "restore.more": "and {count} more",
   "restore.open": "Open all",
   "settings.zoom": "Text size",
-  "settings.zoom.hint": "Everything in the window scales with it. Type a size from 50 to 200 %, or use Ctrl + and Ctrl -; Ctrl 0 goes back to 100 %.",
   "settings.zoom.in": "Larger",
   "settings.zoom.out": "Smaller",
   "settings.zoom.reset": "Reset",

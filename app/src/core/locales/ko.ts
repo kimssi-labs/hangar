@@ -112,7 +112,6 @@ export const ko: Dictionary = {
   "restore.more": "외 {count}개",
   "restore.open": "모두 열기",
   "settings.zoom": "글자 크기",
-  "settings.zoom.hint": "창 안의 모든 요소가 함께 커지고 작아집니다. 50~200 % 사이 숫자를 직접 입력하거나 Ctrl + / Ctrl - 로 조절하고, Ctrl 0 으로 100 %로 돌아갑니다.",
   "settings.zoom.in": "크게",
   "settings.zoom.out": "작게",
   "settings.zoom.reset": "초기화",
