@@ -17,6 +17,7 @@ import { placeWorktrees, type Placed } from "@core/worktree";
 import { api, type MenuItemSpec } from "../../renderer/api";
 import { ProjectRow, SessionRow } from "../../renderer/components/Lists";
 import { Choice } from "../../renderer/components/SettingsCard";
+import { Truncated } from "../../renderer/components/Truncated";
 import type { Ask, AskResult } from "../../renderer/components/Modal";
 import { useText } from "../../renderer/useText";
 import type { OpenSessionRequest } from "./contract";
@@ -450,6 +451,17 @@ export function LaunchSettings({ launch, onChange }: { launch: LaunchConfig; onC
       {launch.shell === "custom" && !launch.customShell.trim() ? (
         <div className="text-[11px] text-warn">{t("settings.launch.noPath")}</div>
       ) : null}
+      <label className="flex items-center gap-2 px-1 py-1 mt-2 rounded-lg hover:bg-ink-700/60">
+        <input
+          type="checkbox"
+          checked={launch.fileLinks}
+          onChange={() => set({ fileLinks: !launch.fileLinks })}
+          className="accent-accent"
+          data-testid="file-links"
+        />
+        <Truncated as="span" className="text-sm text-bone-100">{t("settings.launch.fileLinks")}</Truncated>
+      </label>
+      <div className="text-[11px] text-bone-500">{t("settings.launch.fileLinksNote")}</div>
     </>
   );
 }

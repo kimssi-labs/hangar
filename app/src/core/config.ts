@@ -243,6 +243,7 @@ export class ConfigStore {
         ? (raw["pasteHotkey"] as string)
         : DEFAULT_PASTE_HOTKEY,
       autoClipPath: raw["autoClipPath"] !== false,      // on unless it has been turned off
+      fileLinks: raw["fileLinks"] !== false,            // likewise
     };
   }
 

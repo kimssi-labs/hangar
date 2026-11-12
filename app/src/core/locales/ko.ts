@@ -153,6 +153,8 @@ export const ko: Dictionary = {
   "settings.launch.programPlaceholder": "C:\\tools\\my-terminal.exe   (또는 PATH에 있는 이름)",
   "settings.launch.noPath": "경로가 없으면 자동과 같이 동작하므로 세션은 그대로 열립니다.",
   "settings.launch.paste": "스크린샷을 세션에 붙여넣기",
+  "settings.launch.fileLinks": "파일 경로를 링크로 표시",
+  "settings.launch.fileLinksNote": "여기서 연 세션은 언급하는 로컬 파일을 모두 링크로 쓰도록 요청받습니다. Ctrl+클릭하면 기본 앱으로 열립니다. 다음에 여는 세션부터 적용됩니다.",
   "settings.launch.autoPath": "복사한 스크린샷에 파일 경로 붙이기",
   "settings.launch.autoPathNote": "별도 단축키가 없습니다. 그냥 Ctrl+V를 누르면 됩니다. 스크린샷을 복사하면 클립보드에 이미지와 저장된 파일 경로가 함께 담기므로, 터미널에는 경로가, 이미지 편집기에는 이미지가 붙습니다.",
   "settings.launch.fallback": "대체 단축키 — 클립보드에 이미 텍스트가 있을 때만 사용",

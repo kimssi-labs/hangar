@@ -4,6 +4,7 @@
  * Pure on purpose: the main process runs what this returns, and the tests assert the exact argv —
  * the permission flags and the resolved executable are the part that silently went wrong before.
  */
+import { APPEND_PROMPT_FLAG } from "./sessionPrompt.js";
 import type { LaunchConfig, OpenTarget, PermissionMode, ShellChoice } from "./types.js";
 
 export const CLAUDE_EXE = "claude";
@@ -43,6 +44,8 @@ export interface LaunchRequest {
    * Left null, Claude Code names the session from the conversation, its tab included.
    */
   displayName?: string | null;
+  /** Instructions appended to Claude Code's system prompt (core/sessionPrompt.ts), or none. */
+  appendPrompt?: string | null;
   config: LaunchConfig;
   target: OpenTarget;
   platform: NodeJS.Platform;
@@ -67,6 +70,7 @@ export function claudeArgv(request: LaunchRequest): string[] {
   const argv = [request.claudeExe, ...PERMISSION_ARGS[request.config.permission]];
   if (request.sessionId) argv.push(RESUME_FLAG, request.sessionId);
   if (request.displayName) argv.push(NAME_FLAG, request.displayName);
+  if (request.appendPrompt) argv.push(APPEND_PROMPT_FLAG, request.appendPrompt);
   return argv;
 }
 
