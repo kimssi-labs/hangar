@@ -265,7 +265,7 @@ async function runFileMenu(entry: DirEntry, files: Files, ui: FilesUi): Promise<
       notifyIfFailed(notify, await files.reveal(entry.path));
       break;
     case "copyPath":
-      await navigator.clipboard.writeText(entry.path);
+      await api.copyText(entry.path);
       notify({ ok: true, message: t("files.copied", { name: entry.path }) });
       break;
     case "rename": {

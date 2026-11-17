@@ -13,4 +13,9 @@ export const clipboardContract = {
   pasteImage: invoke<void, PastedImage>("clipboard:paste-image"),
   /** The system-wide shortcut did the same from another window; here is how it went. */
   onPasteResult: event<PastedImage>("clipboard:paste-result"),
+  /**
+   * Put text on the clipboard. From main, not the page's navigator.clipboard: a docked band takes no
+   * focus, and the page's clipboard refuses a document without it ("Document is not focused").
+   */
+  copyText: invoke<string, void>("clipboard:copy-text"),
 } as const;
