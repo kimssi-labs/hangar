@@ -104,6 +104,7 @@ export function register(ctx: MainContext, wire: Wire, deps: ClipboardDeps): Cli
 
   wire.bind(clipboardContract, {
     pasteImage: () => pasteClipboardImage(),
+    copyText: (text) => clipboard.writeText(text),
   });
 
   return {

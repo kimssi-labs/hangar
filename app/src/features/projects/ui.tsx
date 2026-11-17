@@ -218,7 +218,7 @@ export async function runSessionAction(action: SessionAction, projectDir: string
     case "pin": ui.notify(await api.togglePin({ kind: "sessions", key: target.id })); await ui.refresh(); break;
     case "rename": ui.startRename(target.id); break;
     case "copyId":
-      await navigator.clipboard.writeText(target.id);
+      await api.copyText(target.id);
       ui.notify({ ok: true, message: ui.t("sessions.idCopied", { id: target.id }) });
       break;
     case "delete": await deleteSession(projectDir, target, ui); break;

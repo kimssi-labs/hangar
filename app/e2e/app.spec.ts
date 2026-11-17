@@ -207,7 +207,7 @@ test("Ctrl + and the text size setting zoom the window, and the size survives a 
   }
 });
 
-test("a session's right-click menu copies its ID", async () => {
+test("a session's right-click menu copies its ID, even from a band that takes no focus", async () => {
   const { home } = fixture();
   const { app, page } = await launch(home);
   // The menu is the OS's own: the stand-in picks the item by its label, where the menu is built.
@@ -220,6 +220,13 @@ test("a session's right-click menu copies its ID", async () => {
     await expect(page.getByText("프롬프트 1").first()).toBeVisible();
     await page.keyboard.press("Enter");
     await expect(page.getByText("2 sessions").first()).toBeVisible();
+    // A docked band is unfocusable, and there the page's own clipboard refuses every write with
+    // "Document is not focused" (measured in Electron). Playwright tells the page it has the focus
+    // whatever the window says, so the refusal is put in by hand: the copy must not depend on it.
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = () => Promise.reject(new DOMException("Document is not focused.", "NotAllowedError"));
+    });
+    await app.evaluate(({ clipboard }) => clipboard.writeText("something copied before"));
     await page.getByText("프롬프트 2", { exact: true }).first().click({ button: "right" });
     await expect(page.getByText(`Copied session ID ${SESSION_TWO}`)).toBeVisible();
     expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe(SESSION_TWO);

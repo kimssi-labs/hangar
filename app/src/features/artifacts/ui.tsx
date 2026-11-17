@@ -146,7 +146,7 @@ export function ArtifactsPane({ artifacts, place, scope, onScope, open, notify, 
         aria-label={t("artifacts.copy")}
         onClick={(event) => {
           event.stopPropagation();
-          void navigator.clipboard.writeText(item.url).then(() => notify({ ok: true, message: t("artifacts.copied") }));
+          void api.copyText(item.url).then(() => notify({ ok: true, message: t("artifacts.copied") }));
         }}
       >
         ⧉

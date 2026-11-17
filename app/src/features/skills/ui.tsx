@@ -53,7 +53,7 @@ export function SkillsPane({ groups, open, notify, askUser, reload }: {
   const projectShown = project ? matching(project) : null;
 
   const copy = (command: string): void => {
-    void navigator.clipboard.writeText(`/${command}`).then(() => notify({ ok: true, message: t("skills.copied", { name: `/${command}` }) }));
+    void api.copyText(`/${command}`).then(() => notify({ ok: true, message: t("skills.copied", { name: `/${command}` }) }));
   };
   const renameSkill = async (skill: SkillInfo): Promise<void> => {
     const name = await askUser({

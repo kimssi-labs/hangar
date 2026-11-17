@@ -134,6 +134,7 @@ describe("the surface the page can reach", () => {
       onMetrics: "event metrics:push",
       pasteImage: "invoke clipboard:paste-image",
       onPasteResult: "event clipboard:paste-result",
+      copyText: "invoke clipboard:copy-text",
       displays: "invoke settings:displays",
       applyDock: "invoke dock:apply",
       dragDock: "send dock:drag",
