@@ -1255,11 +1255,10 @@ async function iconicRect(app: ElectronApplication): Promise<{ iconic: boolean; 
 }
 
 /**
- * A band takes no keyboard, and Electron drops the taskbar button with it; Windows then draws a
- * minimised window as a small stub in a corner of the screen (reported: a little black bar left
- * behind, and nothing on the taskbar to say Hangar runs). Minimised by any route — here the window
- * manager's own, not the caption button — it goes off the screen, and stays a band that takes no
- * keyboard throughout.
+ * A window without a taskbar button is drawn minimised as a small stub in a corner of the screen
+ * (reported while a band took no keyboard, which cost it the button: a little black bar left behind).
+ * Minimised by any route — here the window manager's own, not the caption button — a band goes off
+ * the screen.
  */
 test("minimising a docked band leaves nothing on the screen", async () => {
   const { app, page } = await launch(fixture({ theme: "dark" }, { enabled: true, edge: "right", percent: 15 }));
@@ -1277,9 +1276,6 @@ test("minimising a docked band leaves nothing on the screen", async () => {
     await expect.poll(async () => (await workAreaOf(app, primary.id)).width, { timeout: 8000 }).toBeGreaterThan(docked.width);
     const parked = await iconicRect(app);
     expect(parked?.x, "a minimised window is parked off the screen, not drawn as a stub").toBe(-32000);
-    expect(await app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.isFocusable()),
-    "and it never took the keyboard to get there").toBe(false);
 
     // Monitors coming and going while it is minimised: nothing is reserved for a window nobody sees.
     const before = await workAreaOf(app, primary.id);
@@ -1288,9 +1284,8 @@ test("minimising a docked band leaves nothing on the screen", async () => {
     expect(await workAreaOf(app, primary.id), "no edge is taken while minimised").toEqual(before);
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.restore());
-    await expect.poll(async () => app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("index.html"))?.isFocusable()), { timeout: 8000 })
-      .toBe(false);                                           // a band again, and the keyboard back with the terminal
+    await expect.poll(async () => (await workAreaOf(app, primary.id)).width, { timeout: 8000 })
+      .toBeLessThan(before.width);                            // a band again: the restore took its edge back
   } finally {
     await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
     await app.close();

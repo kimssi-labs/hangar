@@ -43,9 +43,6 @@ const SWP_NOACTIVATE = 0x0010;
 // Without this, Chromium sees WM_WINDOWPOSCHANGING and drags the window back inside the work
 // area — the very area the reservation just took away, so the band could never be filled.
 const SWP_NOSENDCHANGING = 0x0400;
-const GWL_EXSTYLE = -20;
-/** Gives a window a taskbar button whatever its other styles say — WS_EX_NOACTIVATE included. */
-const WS_EX_APPWINDOW = 0x00040000;
 
 /**
  * Told around every change to the reservation, so the desktop's icons can be kept where they were
@@ -384,8 +381,6 @@ interface Win32Api {
    */
   monitorAt: (point: { x: number; y: number }) => Rectangle | null;
   make: (hwnd: number, edge: number, rect?: Rectangle) => AppBarData;
-  /** Add WS_EX_APPWINDOW to the window's extended style. */
-  appWindow: (hwnd: number) => void;
 }
 
 /**
@@ -433,8 +428,6 @@ const loadWin32 = nativeBinding<Win32Api>("AppBar", (koffi) => {
   const GetMonitorInfoW = user32.func("__stdcall", "GetMonitorInfoW", "bool", [
     "intptr", koffi.inout(koffi.pointer(MONITORINFO)),
   ]);
-  const GetWindowLongPtrW = user32.func("__stdcall", "GetWindowLongPtrW", "intptr", ["intptr", "int"]);
-  const SetWindowLongPtrW = user32.func("__stdcall", "SetWindowLongPtrW", "intptr", ["intptr", "int", "intptr"]);
   return {
     SHAppBarMessage: (message, data) => Number(SHAppBarMessage(message, data)),
     SHAppBarMessageAsync: (message, data) => new Promise((resolve, reject) => {
@@ -474,10 +467,6 @@ const loadWin32 = nativeBinding<Win32Api>("AppBar", (koffi) => {
       };
       return GetMonitorInfoW(handle, info) ? fromRect(info.rcMonitor) : null;
     },
-    appWindow: (hwnd) => {
-      const style = Number(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
-      if (!(style & WS_EX_APPWINDOW)) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_APPWINDOW);
-    },
     make: (hwnd, edge, rect) => ({
       cbSize: koffi.sizeof(APPBARDATA),
       hWnd: hwnd,
@@ -488,24 +477,6 @@ const loadWin32 = nativeBinding<Win32Api>("AppBar", (koffi) => {
     }),
   };
 });
-
-/**
- * Keep the window's taskbar button while it takes no keyboard.
- *
- * A docked band is `setFocusable(false)` so a click on it leaves the keyboard with the terminal, and
- * Electron drops the taskbar button along with the focus. Without a button the taskbar no longer
- * shows Hangar running, and Windows draws the window, once minimised by any route — Win+M, the
- * taskbar, a change of monitors — as a 160 × 28 title-bar stub in a corner of the screen instead of
- * parking it off-screen (measured both: x = 0 / -1087 against -32000). WS_EX_APPWINDOW puts the
- * button back without giving the window the keyboard (measured: still WS_EX_NOACTIVATE, minimised to
- * -32000, restored to its band).
- */
-export function keepTaskbarButton(window: BrowserWindow): void {
-  if (process.platform !== "win32" || window.isDestroyed()) return;
-  window.setSkipTaskbar(false);
-  const api = loadWin32();
-  if (api) withNative(() => api.appWindow(nativeHandle(window)));
-}
 
 export class Dock {
   private registered = false;
