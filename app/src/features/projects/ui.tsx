@@ -148,7 +148,7 @@ export function isProjectAction(id: string | null): id is ProjectAction {
   return (PROJECT_ACTIONS as readonly string[]).includes(id ?? "");
 }
 
-export const SESSION_ACTIONS = ["resume", "resumeWindow", "pin", "rename", "delete"] as const;
+export const SESSION_ACTIONS = ["resume", "resumeWindow", "pin", "rename", "copyId", "delete"] as const;
 export type SessionAction = (typeof SESSION_ACTIONS)[number];
 export function isSessionAction(id: string | null): id is SessionAction {
   return (SESSION_ACTIONS as readonly string[]).includes(id ?? "");
@@ -181,6 +181,7 @@ export function sessionMenuItems(target: SessionInfo, t: Translate): MenuItemSpe
     { id: MENU_SEPARATOR, label: "" },
     { id: "pin", label: t("menu.pin"), checked: target.pinned },
     { id: "rename", label: t("menu.rename") },
+    { id: "copyId", label: t("menu.copySessionId") },
     { id: MENU_SEPARATOR, label: "" },
     { id: "delete", label: t("menu.delete"), enabled: !target.live },
   ];
@@ -216,6 +217,10 @@ export async function runSessionAction(action: SessionAction, projectDir: string
     case "resumeWindow": await openSession({ projectDir, sessionId: target.id, target: "newWindow" }, ui); break;
     case "pin": ui.notify(await api.togglePin({ kind: "sessions", key: target.id })); await ui.refresh(); break;
     case "rename": ui.startRename(target.id); break;
+    case "copyId":
+      await navigator.clipboard.writeText(target.id);
+      ui.notify({ ok: true, message: ui.t("sessions.idCopied", { id: target.id }) });
+      break;
     case "delete": await deleteSession(projectDir, target, ui); break;
   }
 }

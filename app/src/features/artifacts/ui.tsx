@@ -13,6 +13,7 @@ import { type ArtifactGroup, type ArtifactOrigins, type ArtifactScope, ARTIFACT_
 import { type ArtifactInfo, artifactMatches, type ArtifactsState, EMPTY_ARTIFACTS } from "@core/artifacts";
 
 import { api } from "../../renderer/api";
+import type { Ask, AskResult } from "../../renderer/components/Modal";
 import { ExpandAll, type PaneOpen, useRovingRows } from "../../renderer/components/SidePane";
 import { agoParts } from "../../renderer/format";
 import { useText } from "../../renderer/useText";
@@ -21,6 +22,8 @@ export interface Artifacts extends ArtifactsState {
   loading: boolean;
   origins: ArtifactOrigins;
   refresh(): void;
+  /** Show the cached list again, after a rename or delete changed it. */
+  reload(): void;
 }
 
 /**
@@ -46,7 +49,8 @@ export function useArtifacts(active: boolean): Artifacts {
     asked.current = true;
     refresh();
   }, [active, refresh, readOrigins]);
-  return { ...state, origins, loading, refresh };
+  const reload = useCallback(() => { void api.artifactsState().then(setState); }, []);
+  return { ...state, origins, loading, refresh, reload };
 }
 
 /** What the tab needs to know about the window: which project and session are picked, and their names. */
@@ -62,7 +66,7 @@ export interface ArtifactPlace {
 /** A small glyph for the kind of Artifact claude.ai says it is. */
 const ICONS: Record<string, string> = { chart: "▤", chat: "✉", map: "⌖", calendar: "▦", code: "‹›", doc: "▭", recipe: "✎" };
 
-export function ArtifactsPane({ artifacts, place, scope, onScope, open, notify }: {
+export function ArtifactsPane({ artifacts, place, scope, onScope, open, notify, askUser }: {
   artifacts: Artifacts;
   place: ArtifactPlace;
   scope: ArtifactScope;
@@ -70,6 +74,7 @@ export function ArtifactsPane({ artifacts, place, scope, onScope, open, notify }
   /** Which groups are open — remembered across runs; everything starts closed. */
   open: PaneOpen;
   notify(result: { ok: boolean; message?: string }): void;
+  askUser(ask: Ask): Promise<AskResult>;
 }) {
   const t = useText();
   const [query, setQuery] = useState("");
@@ -90,6 +95,32 @@ export function ArtifactsPane({ artifacts, place, scope, onScope, open, notify }
     return place.sessionTitle(group.key) ?? t("artifacts.unknownSession");
   };
 
+  // Only this account's own can be renamed or deleted; one shared here is its owner's.
+  const menu = async (item: ArtifactInfo): Promise<void> => {
+    const choice = await api.contextMenu([
+      { id: "rename", label: t("menu.rename"), enabled: !item.shared },
+      { id: "delete", label: t("menu.delete"), enabled: !item.shared },
+    ]);
+    if (choice === "rename") {
+      const title = await askUser({ title: t("dialog.renameArtifact", { name: item.title }), input: { initial: item.title }, confirm: t("dialog.rename") });
+      if (typeof title !== "string" || !title.trim() || title.trim() === item.title) return;
+      const result = await api.renameArtifact({ slug: item.slug, title });
+      if (!result.ok) notify(result);
+      artifacts.reload();
+    } else if (choice === "delete") {
+      const yes = await askUser({
+        title: t("dialog.deleteArtifact", { name: item.title }),
+        detail: t("dialog.deleteArtifact.detail"),
+        confirm: t("dialog.delete"),
+        danger: true,
+      });
+      if (!yes) return;
+      const result = await api.deleteArtifact(item.slug);
+      notify(result.ok ? { ok: true, message: t("artifacts.deleted", { name: item.title }) } : result);
+      artifacts.reload();
+    }
+  };
+
   const row = (item: ArtifactInfo) => (
     <div
       key={item.slug}
@@ -98,6 +129,7 @@ export function ArtifactsPane({ artifacts, place, scope, onScope, open, notify }
       className={`group flex items-center gap-1.5 ${flat ? "pl-2" : "pl-5"} pr-2 py-0.5 hover:bg-ink-700/60 cursor-pointer`}
       title={item.description || item.title}
       onClick={() => void api.openArtifact(item.url).then((result) => { if (!result.ok) notify(result); })}
+      onContextMenu={(event) => { event.preventDefault(); void menu(item); }}
       // Enter opens it, as the click does; on the copy button inside, Enter is that button's.
       onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) event.currentTarget.click(); }}
     >

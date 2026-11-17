@@ -6,7 +6,7 @@
  * switched off, which must not show). The fixture home has no login, so the Artifacts tab says so
  * and nothing is asked of claude.ai — the suite never touches the network.
  */
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
@@ -146,6 +146,76 @@ test("a project's own skill is copied or moved to the global skills from its men
     await page.getByRole("button", { name: "Move", exact: true }).click();
     await expect(page.getByText("A global skill named deploy-here already exists.")).toBeVisible();
     expect(existsSync(join(projectSkills, "deploy-here", "SKILL.md"))).toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a skill of the user's is renamed and deleted from its menu; a plugin's has no menu", async () => {
+  const home = fixture({ sidePane: "skills", paneOpen: ["skills:global", "skills:user:", "skills:plugin:helper"] });
+  const { app, page } = await launch(home);
+  const pick = (label: string) => app.evaluate(({ Menu }, wanted) => {
+    type Item = { label?: string; click?: () => void };
+    (Menu as unknown as { buildFromTemplate: (t: Item[]) => unknown }).buildFromTemplate =
+      (template: Item[]) => ({ popup: () => template.find((item) => item.label === wanted)?.click?.() });
+  }, label);
+  try {
+    const list = page.getByTestId("skills-list");
+    await expect(list).toContainText("my-report");
+
+    // Rename: the folder and the name typed after the slash both change.
+    await pick("Rename…");
+    await list.getByText("my-report", { exact: true }).click({ button: "right" });
+    await page.getByRole("dialog").getByRole("textbox").fill("monthly-report");
+    await page.getByRole("dialog").getByRole("button", { name: "Rename" }).click();
+    await expect(list).toContainText("monthly-report");
+    expect(readFileSync(join(home, "skills", "monthly-report", "SKILL.md"), "utf8")).toContain("name: monthly-report");
+    expect(existsSync(join(home, "skills", "my-report"))).toBe(false);
+
+    // A name Claude Code would not take is refused, and nothing changes.
+    await list.getByText("monthly-report", { exact: true }).click({ button: "right" });
+    await page.getByRole("dialog").getByRole("textbox").fill("Monthly Report");
+    await page.getByRole("dialog").getByRole("button", { name: "Rename" }).click();
+    await expect(page.getByText("Monthly Report is not a skill name")).toBeVisible();
+
+    // Delete: asked first, then the folder is gone.
+    await pick("Delete…");
+    await list.getByText("monthly-report", { exact: true }).click({ button: "right" });
+    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+    await expect(list).not.toContainText("monthly-report");
+    expect(existsSync(join(home, "skills", "monthly-report"))).toBe(false);
+
+    // A plugin's skill keeps its plugin's copy: right-clicking it opens no menu at all.
+    await pick("Delete…");
+    await list.getByText("helper:brainstorm", { exact: true }).click({ button: "right" });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+/** Deleting an Artifact asks first and goes to claude.ai; with no login here it says so and keeps the row. */
+test("an Artifact's menu deletes it only after asking", async () => {
+  const home = fixture({ sidePane: "artifacts" });
+  const slug = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  mkdirSync(join(home, "cache"), { recursive: true });
+  writeFileSync(join(home, "cache", "hangar-artifacts.json"), JSON.stringify({ fetchedAt: Date.now(), failure: null, items: [
+    { slug, title: "Made on the web", description: "", icon: "doc", shared: false, updatedAt: new Date().toISOString(), url: `https://claude.ai/code/artifact/${slug}` },
+  ] }));
+  const { app, page } = await launch(home);
+  await app.evaluate(({ Menu }) => {
+    type Item = { label?: string; click?: () => void };
+    (Menu as unknown as { buildFromTemplate: (t: Item[]) => unknown }).buildFromTemplate =
+      (template: Item[]) => ({ popup: () => template.find((item) => item.label === "Delete…")?.click?.() });
+  });
+  try {
+    await page.getByTestId("pane-expand-all").click();
+    const list = page.getByTestId("artifacts-list");
+    await list.getByText("Made on the web").click({ button: "right" });
+    await expect(page.getByRole("dialog")).toContainText("deleted on claude.ai for good");
+    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText("Could not delete it: Sign in to Claude Code first.")).toBeVisible();
+    await expect(list).toContainText("Made on the web");
   } finally {
     await app.close();
   }

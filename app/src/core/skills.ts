@@ -52,6 +52,22 @@ export function parseSkill(text: string): { name: string; description: string } 
   return { name, description: frontValue(lines, "description") ?? "" };
 }
 
+/** What Claude Code takes as a skill's name: lowercase letters, digits and hyphens, at most 64. */
+export const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/**
+ * The SKILL.md text with its front matter's `name:` set to `name` (any folded continuation lines of
+ * the old value go with it); null when the text has no front matter naming the skill.
+ */
+export function withSkillName(text: string, name: string): string | null {
+  const front = /^(\uFEFF?---\r?\n)([\s\S]*?)(\r?\n---)/.exec(text);
+  if (!front) return null;
+  const line = /^name:[^\r\n]*(?:\r?\n[ \t]+[^\r\n]*)*/m;
+  if (!line.test(front[2]!)) return null;
+  const head = front[1]! + front[2]!.replace(line, `name: ${name}`) + front[3]!;
+  return head + text.slice(front[0].length);
+}
+
 /** The plugins `settings.json` switches on, by name: `"superpowers@claude-plugins-official": true`. */
 export function enabledPlugins(settings: unknown): Set<string> {
   const table = (settings as { enabledPlugins?: Record<string, unknown> } | null)?.enabledPlugins ?? {};

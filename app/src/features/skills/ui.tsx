@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { MENU_SEPARATOR } from "@core/constants";
 import { type SkillGroup, type SkillInfo, skillMatches } from "@core/skills";
 
 import { api } from "../../renderer/api";
@@ -37,7 +38,7 @@ export function SkillsPane({ groups, open, notify, askUser, reload }: {
   open: PaneOpen;
   notify(result: { ok: boolean; message?: string }): void;
   askUser(ask: Ask): Promise<AskResult>;
-  /** Read the list again, after a skill moved. */
+  /** Read the list again, after a skill moved, was renamed or deleted. */
   reload(): void;
 }) {
   const t = useText();
@@ -54,10 +55,44 @@ export function SkillsPane({ groups, open, notify, askUser, reload }: {
   const copy = (command: string): void => {
     void navigator.clipboard.writeText(`/${command}`).then(() => notify({ ok: true, message: t("skills.copied", { name: `/${command}` }) }));
   };
-  // A project's own skill can be made global: copied (it stays here too) or moved (it leaves this
-  // project). Moving asks first, because a skill kept in the repository leaves it for everyone.
-  const promoteMenu = async (skill: SkillInfo): Promise<void> => {
-    const choice = await api.contextMenu(PROMOTE_ACTIONS.map((id) => ({ id, label: t(`menu.skill.${id}` as const) })));
+  const renameSkill = async (skill: SkillInfo): Promise<void> => {
+    const name = await askUser({
+      title: t("dialog.renameSkill", { name: skill.name }),
+      detail: t("dialog.renameSkill.detail"),
+      input: { initial: skill.name },
+      confirm: t("dialog.rename"),
+    });
+    if (typeof name !== "string" || !name.trim() || name.trim() === skill.name) return;
+    const result = await api.renameSkill({ file: skill.file, name });
+    notify(result);
+    if (result.ok) reload();
+  };
+  const deleteSkill = async (skill: SkillInfo): Promise<void> => {
+    const yes = await askUser({
+      title: t("dialog.deleteSkill", { name: skill.name }),
+      detail: t("dialog.deleteSkill.detail"),
+      confirm: t("dialog.delete"),
+      danger: true,
+    });
+    if (!yes) return;
+    const result = await api.deleteSkill(skill.file);
+    notify(result);
+    if (result.ok) reload();
+  };
+  // A project's own skill can also be made global: copied (it stays here too) or moved (it leaves
+  // this project). Moving asks first, because a skill kept in the repository leaves it for everyone.
+  // A plugin's skills have no menu: the plugin keeps them, and its next update would undo a change.
+  const skillMenu = async (skill: SkillInfo, own: boolean): Promise<void> => {
+    const choice = await api.contextMenu([
+      ...(own ? [
+        ...PROMOTE_ACTIONS.map((id) => ({ id, label: t(`menu.skill.${id}` as const) })),
+        { id: MENU_SEPARATOR, label: "" },
+      ] : []),
+      { id: "rename", label: t("menu.rename") },
+      { id: "delete", label: t("menu.delete") },
+    ]);
+    if (choice === "rename") return renameSkill(skill);
+    if (choice === "delete") return deleteSkill(skill);
     if (choice !== "copyGlobal" && choice !== "moveGlobal") return;
     if (choice === "moveGlobal") {
       const yes = await askUser({
@@ -87,7 +122,7 @@ export function SkillsPane({ groups, open, notify, askUser, reload }: {
       className="group flex items-start gap-1 pl-6 pr-2 py-0.5 hover:bg-ink-700/60 cursor-default"
       title={skill.description}
       onDoubleClick={() => copy(skill.command)}
-      onContextMenu={group.source === "project" ? (event) => { event.preventDefault(); void promoteMenu(skill); } : undefined}
+      onContextMenu={group.source === "plugin" ? undefined : (event) => { event.preventDefault(); void skillMenu(skill, group.source === "project"); }}
       onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) copy(skill.command); }}
     >
       <div className="flex-1 min-w-0">

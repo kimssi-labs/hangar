@@ -3,13 +3,13 @@
  * each SKILL.md). Disk only, nothing cached: a list is a few dozen small reads, and a skill added a
  * minute ago should be there the next time the tab is opened.
  */
-import { cpSync, existsSync, lstatSync, readdirSync, readFileSync, renameSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { shell } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
 import { homePaths } from "../../core/paths.js";
-import { enabledPlugins, parseSkill, pluginInstalls, sameDir, type SkillGroup, type SkillInfo, sortSkills } from "../../core/skills.js";
+import { enabledPlugins, parseSkill, pluginInstalls, sameDir, SKILL_NAME, type SkillGroup, type SkillInfo, sortSkills, withSkillName } from "../../core/skills.js";
 import { readJson } from "../../core/json.js";
 import type { ActionResult } from "../../main/ipc.js";
 import { skillsContract, type PromoteMode } from "./contract.js";
@@ -92,17 +92,78 @@ export async function promote(
   }
 }
 
+/**
+ * Give a skill a new name: its folder and the `name:` in its SKILL.md, which is what `/name` types.
+ *
+ * Refused over another folder, and for a link: renaming through one would edit the SKILL.md kept
+ * wherever the link points, for everything else that reads it there. The file is written first and
+ * put back if the folder cannot be renamed, so a failure leaves the skill as it was.
+ */
+export function renameSkill(skillDir: string, name: string): ActionResult {
+  const old = basename(skillDir);
+  if (!SKILL_NAME.test(name)) return { ok: false, message: `${name} is not a skill name: lowercase letters, digits and hyphens only.` };
+  const target = join(dirname(skillDir), name);
+  const file = join(skillDir, "SKILL.md");
+  try {
+    if (lstatSync(skillDir).isSymbolicLink()) return { ok: false, message: `${old} is a link to a folder elsewhere; rename it there.` };
+    if (name !== old && existsSync(target)) return { ok: false, message: `A skill folder named ${name} is already there.` };
+    const before = readFileSync(file, "utf8");
+    const after = withSkillName(before, name);
+    if (after === null) return { ok: false, message: `${old}'s SKILL.md does not name the skill in its front matter.` };
+    writeFileSync(file, after);
+    if (name !== old) {
+      try {
+        renameSync(skillDir, target);
+      } catch (error) {
+        writeFileSync(file, before);
+        throw error;
+      }
+    }
+    return { ok: true, message: `Renamed ${old} to ${name}.` };
+  } catch (error) {
+    return { ok: false, message: `Could not rename ${old}: ${(error as Error).message}` };
+  }
+}
+
+/**
+ * Delete a skill: its folder goes to the recycle bin. A link is taken away by itself and the folder
+ * it points to stays, since that folder is someone else's to keep.
+ */
+export async function deleteSkill(skillDir: string, trash: (path: string) => Promise<void>): Promise<ActionResult> {
+  const name = basename(skillDir);
+  try {
+    if (lstatSync(skillDir).isSymbolicLink()) unlinkSync(skillDir);
+    else await trash(skillDir);
+    return { ok: true, message: `Deleted ${name}.` };
+  } catch (error) {
+    return { ok: false, message: `Could not delete ${name}: ${(error as Error).message}` };
+  }
+}
+
 export function register(wire: Wire): void {
   /** What the last list named: only those files are opened, whatever the page asks for. */
   let listed = new Set<string>();
   /** Of those, the project's own: the only ones that can be made global. */
   let ownSkills = new Set<string>();
+  /** The project's own and the user's: plugins keep theirs, and an update would bring a change back. */
+  let editable = new Set<string>();
   wire.bind(skillsContract, {
     listSkills: (cwd) => {
       const groups = listSkills(cwd);
-      listed = new Set(groups.flatMap((group) => group.skills.map((skill) => skill.file)));
-      ownSkills = new Set(groups.filter((group) => group.source === "project").flatMap((group) => group.skills.map((skill) => skill.file)));
+      const files = (wanted: (group: SkillGroup) => boolean) =>
+        new Set(groups.filter(wanted).flatMap((group) => group.skills.map((skill) => skill.file)));
+      listed = files(() => true);
+      ownSkills = files((group) => group.source === "project");
+      editable = files((group) => group.source !== "plugin");
       return groups;
+    },
+    renameSkill: ({ file, name }) => {
+      if (!editable.has(file)) return { ok: false, message: "That skill cannot be renamed here." };
+      return renameSkill(dirname(file), name.trim());
+    },
+    deleteSkill: (file) => {
+      if (!editable.has(file)) return Promise.resolve({ ok: false, message: "That skill cannot be deleted here." });
+      return deleteSkill(dirname(file), (path) => shell.trashItem(path));
     },
     openSkill: async (file): Promise<ActionResult> => {
       if (!listed.has(file)) return { ok: false, message: "That skill is not in the list." };

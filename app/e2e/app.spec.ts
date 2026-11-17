@@ -207,6 +207,27 @@ test("Ctrl + and the text size setting zoom the window, and the size survives a 
   }
 });
 
+test("a session's right-click menu copies its ID", async () => {
+  const { home } = fixture();
+  const { app, page } = await launch(home);
+  // The menu is the OS's own: the stand-in picks the item by its label, where the menu is built.
+  await app.evaluate(({ Menu }) => {
+    type Item = { label?: string; click?: () => void };
+    (Menu as unknown as { buildFromTemplate: (t: Item[]) => unknown }).buildFromTemplate =
+      (template: Item[]) => ({ popup: () => template.find((item) => item.label === "Copy session ID")?.click?.() });
+  });
+  try {
+    await expect(page.getByText("프롬프트 1").first()).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("2 sessions").first()).toBeVisible();
+    await page.getByText("프롬프트 2", { exact: true }).first().click({ button: "right" });
+    await expect(page.getByText(`Copied session ID ${SESSION_TWO}`)).toBeVisible();
+    expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe(SESSION_TWO);
+  } finally {
+    await app.close();
+  }
+});
+
 test("the sessions open last time are offered once on start-up, and reopened or let go", async () => {
   test.setTimeout(120_000);                            // two launches of the app
   const { home } = fixture();

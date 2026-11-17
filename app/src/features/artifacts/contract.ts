@@ -13,4 +13,8 @@ export const artifactsContract = {
   artifactOrigins: invoke<void, ArtifactOrigins>("artifacts:origins"),
   /** Open one in the browser — only an Artifact page on claude.ai. */
   openArtifact: invoke<string, ActionResult>("artifacts:open"),
+  /** Give one of this account's Artifacts a new title on claude.ai; the cached list follows. */
+  renameArtifact: invoke<{ slug: string; title: string }, ActionResult>("artifacts:rename"),
+  /** Delete one of this account's Artifacts on claude.ai, for good; the cached list follows. */
+  deleteArtifact: invoke<string, ActionResult>("artifacts:delete"),
 } as const;
