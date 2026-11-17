@@ -1,10 +1,11 @@
 /**
  * End-to-end: the keyboard — Tab between the areas, the arrow keys inside each list, and a docked
- * band that does not take the keyboard away from the terminal.
+ * band that takes the keyboard when clicked, as any window does.
  *
- * Reported on 2.17.1: clicking the band turned the taskbar's input indicator into an X and Korean
- * keystrokes meant for the terminal went nowhere. The band answers the mouse, so it does not need
- * the keyboard — except while the page has a field open, a search box included.
+ * 2.17.2 to 2.27 kept the keyboard off a band, after a report that Korean typed into the terminal went
+ * nowhere once the band was clicked; the keys had gone to the band, which held the focus. A band that
+ * takes no keyboard needed its own rules for every field and for the clipboard, so a band is an
+ * ordinary window again: clicking it takes the keyboard, clicking the terminal gives it back.
  */
 import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -70,60 +71,19 @@ async function dock(page: Page): Promise<void> {
   await page.waitForTimeout(600);
 }
 
-test("the band gives the keyboard back, and asks for it only while a field is open", async () => {
+test("a docked band takes the keyboard like any other window", async () => {
   const { home } = fixture();
   const { app, page } = await launch(home);
   try {
     expect(await focusable(app), "an undocked window is an ordinary window").toBe(true);
     await dock(page);
-    expect(await focusable(app), "a docked band still takes the keyboard").toBe(false);
-
-    // Settings has fields in it; the band must take the keyboard back for as long as it is open.
-    await page.evaluate(() => window.hangar.holdKeyboard(true));
-    await page.waitForTimeout(300);
-    expect(await focusable(app), "the band did not take the keyboard for a field").toBe(true);
-
-    await page.evaluate(() => window.hangar.holdKeyboard(false));
-    await page.waitForTimeout(300);
-    expect(await focusable(app), "the band kept the keyboard after the field closed").toBe(false);
-
-    await page.evaluate(() => window.hangar.releaseDock());
-    await page.waitForTimeout(600);
-    expect(await focusable(app), "an undocked window must be focusable again").toBe(true);
-  } finally {
-    await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
-    await app.close();
-    rmSync(home, { recursive: true, force: true, maxRetries: 3 });
-  }
-});
-
-test("a search box takes the keyboard in a band, and gives it back when it is left", async () => {
-  const { home } = fixture();
-  const { app, page } = await launch(home);
-  try {
-    // Every hold the page asks for, as main receives it: the side pane's searches ask as the
-    // project search does, wherever the window is.
-    await app.evaluate(({ ipcMain }) => {
-      const seen = globalThis as unknown as { holds: boolean[] };
-      seen.holds = [];
-      ipcMain.on("dock:keyboard", (_event, wanted: boolean) => seen.holds.push(wanted));
-    });
-    const lastHold = () => app.evaluate(() => (globalThis as unknown as { holds: boolean[] }).holds.at(-1));
-    await page.getByTestId("pane-tab-skills").click();
-    await page.getByLabel("Search skills").click();
-    await expect.poll(lastHold).toBe(true);
-    await page.getByRole("listbox", { name: "Projects" }).focus();
-    await expect.poll(lastHold).toBe(false);
-
-    await dock(page);
-    expect(await focusable(app)).toBe(false);
+    expect(await focusable(app), "a docked band must take the keyboard when clicked").toBe(true);
     const search = page.getByPlaceholder("Search projects");
     await search.click();
-    await expect.poll(() => focusable(app), { message: "the band did not take the keyboard for the search box" }).toBe(true);
     await page.keyboard.type("work");
     await expect(search).toHaveValue("work");
     await search.press("Escape");                        // clears the box and leaves it
-    await expect.poll(() => focusable(app), { message: "the band kept the keyboard after the search box was left" }).toBe(false);
+    expect(await focusable(app), "leaving a field keeps the band an ordinary window").toBe(true);
   } finally {
     await page.evaluate(() => window.hangar.releaseDock()).catch(() => undefined);
     await app.close();

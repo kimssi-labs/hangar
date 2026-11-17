@@ -218,12 +218,6 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
   }, [language, locale, onLanguage]);
   useEffect(() => api.onWindowState(setWindowState), []);
 
-  // A docked band answers the mouse and leaves the keyboard with whatever the user was typing in
-  // (features/dock/main.ts). It asks for the keyboard only while this page has a field open.
-  useEffect(() => {
-    api.holdKeyboard(Boolean(editing) || screen === "settings" || dialog !== null || searching);
-  }, [editing, screen, dialog, searching]);
-
   useEffect(() => { void api.windowState().then(setWindowState); }, []);
 
   // How wide the right-hand panel is, whichever shape drew it, so the top bar can split where the

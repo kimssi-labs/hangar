@@ -140,7 +140,6 @@ describe("the surface the page can reach", () => {
       dragDock: "send dock:drag",
       releaseDock: "invoke dock:release",
       dockToggle: "invoke dock:toggle",
-      holdKeyboard: "send dock:keyboard",
       dockState: "invoke dock:state",
       onDockState: "event dock:state-push",
     });
