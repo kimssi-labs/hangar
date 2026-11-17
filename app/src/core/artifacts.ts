@@ -8,7 +8,14 @@
  * failure keeps the last list and says which kind of failure it was.
  */
 
-export const ARTIFACTS_ENDPOINT = "https://claude.ai/api/frame/frames?limit=200";
+const FRAME_API = "https://claude.ai/api/frame";
+export const ARTIFACTS_ENDPOINT = `${FRAME_API}/frames?limit=200`;
+/** Claude Code's own rename of an Artifact: `POST` with `{ title }`. Undocumented too. */
+export const retitleUrl = (slug: string): string => `${FRAME_API}/retitle/${encodeURIComponent(slug)}`;
+/** And its delete: `DELETE` on the Artifact itself. */
+export const frameUrl = (slug: string): string => `${FRAME_API}/${encodeURIComponent(slug)}`;
+/** The longest title claude.ai takes (Claude Code checks the same). */
+export const TITLE_MAX = 4000;
 /** The one header the endpoint insists on — Claude Code's own `du()` sends it with every frame call. */
 export const ARTIFACTS_HEADERS = { "X-Frame-CP": "go", Accept: "application/json" } as const;
 const ARTIFACT_PAGE = "https://claude.ai/code/artifact/";

@@ -655,7 +655,7 @@ function Window({ onLanguage }: { onLanguage: (next: { language: Language; local
       {activeTab === "skills" ? <SkillsPane groups={skills.groups} reload={skills.reload} open={paneOpen} notify={notify} askUser={askUser} />
         : activeTab === "artifacts" ? (
           <ArtifactsPane artifacts={artifacts} place={artifactPlace} scope={artifactScope ?? settings?.ui.artifactScope ?? "all"}
-            onScope={pickScope} open={paneOpen} notify={notify} />
+            onScope={pickScope} open={paneOpen} notify={notify} askUser={askUser} />
         )
           : filesCwd ? filesPane
             : <div className="flex-1 px-2 py-1 text-[11px] text-bone-500">{t("pane.noProject")}</div>}

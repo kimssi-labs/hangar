@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { enabledPlugins, parseSkill, pluginInstalls, sameDir, skillMatches } from "../skills.js";
+import { enabledPlugins, parseSkill, pluginInstalls, sameDir, SKILL_NAME, skillMatches, withSkillName } from "../skills.js";
 
 describe("parseSkill", () => {
   it("reads a plain name and description", () => {
@@ -53,5 +53,26 @@ describe("sameDir", () => {
     expect(sameDir("C:\\Users\\me\\.claude\\skills", "c:/users/me/.claude/skills/", true)).toBe(true);
     expect(sameDir("/home/me/.claude/skills", "/home/Me/.claude/skills", false)).toBe(false);
     expect(sameDir("C:/work/app/.claude/skills", "C:/Users/me/.claude/skills", true)).toBe(false);
+  });
+});
+
+describe("withSkillName", () => {
+  it("sets the name in the front matter and leaves the rest as it was", () => {
+    const text = "---\r\nname: deploy\r\ndescription: d\r\n---\r\nname: in the body\r\n";
+    const renamed = withSkillName(text, "ship")!;
+    expect(parseSkill(renamed)).toEqual({ name: "ship", description: "d" });
+    expect(renamed).toBe("---\r\nname: ship\r\ndescription: d\r\n---\r\nname: in the body\r\n");
+  });
+
+  it("replaces a quoted or folded old name whole, and refuses a file that names nothing", () => {
+    expect(withSkillName("---\nname: \"old one\"\n---\n", "new")).toBe("---\nname: new\n---\n");
+    expect(withSkillName("---\nname: >\n  old\n  one\ndescription: d\n---\n", "new")).toBe("---\nname: new\ndescription: d\n---\n");
+    expect(withSkillName("---\ndescription: d\n---\n", "new")).toBeNull();
+    expect(withSkillName("no front matter", "new")).toBeNull();
+  });
+
+  it("takes only what Claude Code takes as a name", () => {
+    expect(SKILL_NAME.test("ship-it-2")).toBe(true);
+    for (const bad of ["Ship", "ship it", "-ship", "", "a".repeat(65), "../x"]) expect(SKILL_NAME.test(bad)).toBe(false);
   });
 });

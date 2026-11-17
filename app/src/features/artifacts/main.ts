@@ -11,7 +11,10 @@ import { basename, join } from "node:path";
 import { net, shell } from "electron";
 
 import type { Wire } from "../../bridge/build.js";
-import { ARTIFACTS_ENDPOINT, ARTIFACTS_HEADERS, type ArtifactsState, EMPTY_ARTIFACTS, failureFor, isArtifactUrl, parseArtifacts } from "../../core/artifacts.js";
+import {
+  ARTIFACTS_ENDPOINT, ARTIFACTS_HEADERS, type ArtifactInfo, type ArtifactsState, EMPTY_ARTIFACTS, failureFor, frameUrl, isArtifactUrl,
+  parseArtifacts, retitleUrl, TITLE_MAX,
+} from "../../core/artifacts.js";
 import { type ArtifactOrigins, PUBLISH_MARK, publishedSlugs } from "../../core/artifactOrigins.js";
 import { readJson, writeJson } from "../../core/json.js";
 import { homePaths } from "../../core/paths.js";
@@ -57,6 +60,55 @@ async function refresh(): Promise<ArtifactsState> {
   const state: ArtifactsState = { items, fetchedAt: Date.now(), failure: null };
   keep(state);
   return state;
+}
+
+/**
+ * One change to an Artifact of this account, signed in as the list is; null when claude.ai took it.
+ * Only one the last list showed as this account's own: someone else's, shared here, is theirs.
+ */
+async function change(slug: string, url: string, init: RequestInit): Promise<string | null> {
+  if (!cached().items.some((item) => item.slug === slug && !item.shared)) return "That is not one of your Artifacts in the list.";
+  const token = accessTokenFrom(readJson<unknown>(homePaths().credentials, null));
+  if (!token) return "Sign in to Claude Code first.";
+  try {
+    const response = await net.fetch(url, {
+      ...init,
+      headers: { ...ARTIFACTS_HEADERS, ...init.headers, Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (response.ok) return null;
+    console.error(`[hangar] artifacts: ${init.method} HTTP ${response.status}`);
+    if (response.status === 404) return "claude.ai has no such Artifact of yours; it may be gone already.";
+    return `claude.ai answered HTTP ${response.status}.`;
+  } catch (error) {
+    return `claude.ai could not be reached: ${(error as Error).message}`;
+  }
+}
+
+/** The cached list with one Artifact changed or taken out, so the tab shows it without a refetch. */
+function keepEdited(slug: string, edit: (item: ArtifactInfo) => ArtifactInfo | null): void {
+  const last = cached();
+  const items = last.items.map((item) => (item.slug === slug ? edit(item) : item)).filter((item): item is ArtifactInfo => item !== null);
+  keep({ ...last, items });
+}
+
+async function renameArtifact(slug: string, title: string): Promise<ActionResult> {
+  if (!title || title.length > TITLE_MAX) return { ok: false, message: `A title is 1 to ${TITLE_MAX} characters.` };
+  const failed = await change(slug, retitleUrl(slug), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (failed) return { ok: false, message: `Could not rename it: ${failed}` };
+  keepEdited(slug, (item) => ({ ...item, title }));
+  return { ok: true };
+}
+
+async function deleteArtifact(slug: string): Promise<ActionResult> {
+  const failed = await change(slug, frameUrl(slug), { method: "DELETE" });
+  if (failed) return { ok: false, message: `Could not delete it: ${failed}` };
+  keepEdited(slug, () => null);
+  return { ok: true };
 }
 
 /** What one transcript published, as of its size and time — so an unchanged file is never read again. */
@@ -113,5 +165,7 @@ export function register(wire: Wire): void {
       await shell.openExternal(url);
       return { ok: true };
     },
+    renameArtifact: ({ slug, title }) => renameArtifact(slug, title.trim()),
+    deleteArtifact: (slug) => deleteArtifact(slug),
   });
 }
