@@ -3,6 +3,25 @@
 Every release is built from the tag by CI, which uses the matching section below as the release
 notes. Add the section **before** tagging.
 
+## v2.27.0
+
+- **Copy a session's ID** from its right-click menu.
+- **Skills can be renamed and deleted** from their menu in the Skills tab. A rename changes the
+  folder and the `name:` in its SKILL.md together, and refuses a name Claude Code would not take
+  or one already used; a skill linked in from elsewhere is not renamed. Delete asks first, sends the
+  folder to the Recycle Bin, and for a linked skill takes away only the link. Plugin skills have no
+  menu.
+- **Artifacts can be renamed and deleted** from their menu in the Artifacts tab, on claude.ai
+  itself. Delete asks first.
+- **A docked band takes the keyboard when clicked, as any window does.** Since 2.17.2 a band kept
+  the keyboard away from itself, after a report that Korean typed into the terminal went nowhere
+  once the band was clicked: the keys had gone to the band, which held the focus. Measured now,
+  coming back to the terminal by a click or Alt+Tab keeps the IME in Hangul mode and the Korean
+  reaches Claude Code. Clicking a session still brings its terminal forward with the keyboard.
+- **Copying works in a docked band.** A band that took no keyboard could not write to the clipboard
+  from the page, so Copy session ID and the other copies left the old clipboard (an image, say) in
+  place. Every copy now goes through the app itself.
+
 ## v2.26.0
 
 - **Hangar asks what to do with running sessions when it closes.** Closing the window while
